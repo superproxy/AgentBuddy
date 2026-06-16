@@ -1,5 +1,5 @@
 #!/bin/bash
-
+./init-env.sh
 python3 ./scripts/init-ide.py -f -i Agents
 
 python3 ./scripts/init-ide.py -f -i trae-cn

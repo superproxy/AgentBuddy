@@ -384,11 +384,58 @@ def convert_to_opencode_mcp(source_file: Path, target_file: Path, force: bool,
     if env_file and env_file.exists():
         with open(env_file, "r", encoding="utf-8-sig") as f:
             env_config = json.load(f)
-        for k, v in env_config.items():
-            if k == "_description":
+        active_provider = ""
+        active_protocols = ["openai"]
+        llm_section = env_config.get("llm", {})
+        if isinstance(llm_section, dict):
+            active_provider = llm_section.get("_active_provider", "")
+            raw = llm_section.get("_active_protocol", "openai")
+            active_protocols = [p.strip() for p in str(raw).split("|") if p.strip()]
+        protocol_env_map = {
+            "openai": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY"},
+            "anthropic": {"base_url": "ANTHROPIC_BASE_URL", "api_key": "ANTHROPIC_AUTH_TOKEN"},
+        }
+        for section_key, section_value in env_config.items():
+            if section_key == "_description":
                 continue
-            if v and str(v).strip():
-                env_map[k] = str(v)
+            if section_key == "llm" and isinstance(section_value, dict):
+                for provider_name, provider_value in section_value.items():
+                    if provider_name.startswith("_"):
+                        continue
+                    if not isinstance(provider_value, dict):
+                        continue
+                    is_active = provider_name == active_provider
+                    for protocol_name, protocol_value in provider_value.items():
+                        if protocol_name.startswith("_"):
+                            continue
+                        if not isinstance(protocol_value, dict):
+                            continue
+                        if is_active and protocol_name in active_protocols:
+                            mapping = protocol_env_map.get(protocol_name, {})
+                            for k, v in protocol_value.items():
+                                if k.startswith("_"):
+                                    continue
+                                std_key = mapping.get(k)
+                                if std_key:
+                                    env_map[std_key] = str(v)
+                                else:
+                                    env_map[k] = str(v)
+                            if protocol_name == "openai":
+                                env_map["OPENAI_API_KEY"] = str(protocol_value.get("api_key", ""))
+            elif isinstance(section_value, dict):
+                for k, v in section_value.items():
+                    if k.startswith("_"):
+                        continue
+                    if isinstance(v, dict):
+                        for k2, v2 in v.items():
+                            if k2.startswith("_"):
+                                continue
+                            if v2 and str(v2).strip():
+                                env_map[k2] = str(v2)
+                    elif v and str(v).strip():
+                        env_map[k] = str(v)
+            elif section_value and str(section_value).strip():
+                env_map[section_key] = str(section_value)
 
     if env_map:
         config, replaced = _resolve_placeholders(config, env_map)
