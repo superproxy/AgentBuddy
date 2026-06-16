@@ -14,3 +14,4 @@ temp_parse.py
 agents/skills/bid-to-tender-skills
 scripts/__pycache__/
 ide/codex/auth.json
+ide/codex/config.toml
