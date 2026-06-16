@@ -113,6 +113,18 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                     if protocol_name == "openai":
                         flat["OPENAI_API_KEY"] = protocol_value.get("api_key", "")
 
+                if is_active_protocol:
+                    for k, v in protocol_value.items():
+                        if k.startswith("_"):
+                            continue
+                        protocol_active_key = f"LLM_ACTIVE_{protocol_name.upper()}_{k.upper()}"
+                        flat[protocol_active_key] = v
+                        generic_active_key = f"LLM_ACTIVE_{k.upper()}"
+                        if generic_active_key not in flat:
+                            flat[generic_active_key] = v
+                    flat["LLM_ACTIVE_PROVIDER"] = provider_name
+                    flat.setdefault("LLM_ACTIVE_PROTOCOL", protocol_name)
+
     for section_key in ("mcp", "misc"):
         section_value = env_config.get(section_key, {})
         if not isinstance(section_value, dict):
@@ -513,6 +525,11 @@ def main():
         codex_auth_output = PROJECT_ROOT / "ide" / "codex" / "auth.json"
         if codex_auth_template.exists():
             invoke_generate_step(flat_config, codex_auth_template, codex_auth_output)
+
+        codex_config_template = PROJECT_ROOT / "ide" / "codex" / "config.template.toml"
+        codex_config_output = PROJECT_ROOT / "ide" / "codex" / "config.toml"
+        if codex_config_template.exists():
+            invoke_generate_step(flat_config, codex_config_template, codex_config_output)
 
     print(f"{COLOR_CYAN}========================================{COLOR_RESET}")
     print(f"{COLOR_CYAN}  Done.{COLOR_RESET}")
