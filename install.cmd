@@ -1,13 +1,9 @@
-./init-env.cmd
-python .\scripts\init-ide.py -f -i Agents
+python scripts/init-env.py -a Generate
 
-python .\scripts\init-ide.py -f -i trae-cn
-
-python .\scripts\init-ide.py -f -i Cursor
-
-
-python .\scripts\init-ide.py -f -i Codex
-
-
-
-python scripts/init-ide.py -i trae-solo-cn -f
+python scripts\init-ide.py -i All -f
+@REM python scripts\init-ide.py -i trae-cn -f
+@REM python scripts\init-ide.py -i Cursor -f
+@REM python scripts\init-ide.py -i Codex -f
+@REM python scripts\init-ide.py -i OpenCode -f
+@REM python scripts\init-ide.py -i IDEA -f
+@REM python scripts\init-ide.py -i trae-solo-cn -f

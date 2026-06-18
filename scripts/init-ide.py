@@ -1041,7 +1041,7 @@ def init_opencode(target_dir: Path, source_rules_dir: Path, source_mcp_file: Pat
                   source_skills_dir: Path, source_agents_md: Path, force: bool) -> str | None:
     print(f"\n{COLOR_MAGENTA}--- OpenCode IDE ---{COLOR_RESET}")
 
-    opencode_dir = target_dir / ".opencode"
+    opencode_dir = Path.home() / ".config" / "opencode"
     opencode_skills_dir = opencode_dir / "skills"
 
     opencode_dir.mkdir(parents=True, exist_ok=True)
@@ -1060,42 +1060,54 @@ def init_opencode(target_dir: Path, source_rules_dir: Path, source_mcp_file: Pat
 def _deploy_acp_to_jetbrains(acp_src: Path, force: bool) -> int:
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", "")) / "JetBrains"
-    elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support" / "JetBrains"
+        if not base.exists():
+            print(f"{COLOR_YELLOW}[!] JetBrains config dir not found: {base}{COLOR_RESET}")
+            return 0
+
+        ide_pattern = re.compile(
+            r"^(IntelliJIdea|WebStorm|PyCharm|PhpStorm|GoLand|Rider|CLion|"
+            r"DataGrip|RubyMine|AppCode|DataSpell|Fleet|Aqua|RustRover|Writerside)",
+            re.IGNORECASE,
+        )
+
+        copied = 0
+        for ide_dir in sorted(base.iterdir()):
+            if not ide_dir.is_dir():
+                continue
+            if not ide_pattern.match(ide_dir.name):
+                continue
+
+            target = ide_dir / "acp.json"
+            if target.exists() and not force:
+                print(f"{COLOR_DARKGRAY}[~] {ide_dir.name}: acp.json exists, skipping{COLOR_RESET}")
+                continue
+
+            try:
+                import shutil
+                shutil.copy2(str(acp_src), str(target))
+                print(f"{COLOR_GREEN}[OK] {ide_dir.name} -> {target}{COLOR_RESET}")
+                copied += 1
+            except Exception as e:
+                print(f"{COLOR_RED}[!] {ide_dir.name}: {e}{COLOR_RESET}")
+
+        return copied
     else:
-        base = Path.home() / ".local" / "share" / "JetBrains"
+        # macOS / Linux: single global ~/.jetbrains/acp.json
+        target = Path.home() / ".jetbrains" / "acp.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
 
-    if not base.exists():
-        print(f"{COLOR_YELLOW}[!] JetBrains config dir not found: {base}{COLOR_RESET}")
-        return 0
-
-    ide_pattern = re.compile(
-        r"^(IntelliJIdea|WebStorm|PyCharm|PhpStorm|GoLand|Rider|CLion|"
-        r"DataGrip|RubyMine|AppCode|DataSpell|Fleet|Aqua|RustRover|Writerside)",
-        re.IGNORECASE,
-    )
-
-    copied = 0
-    for ide_dir in sorted(base.iterdir()):
-        if not ide_dir.is_dir():
-            continue
-        if not ide_pattern.match(ide_dir.name):
-            continue
-
-        target = ide_dir / "acp.json"
         if target.exists() and not force:
-            print(f"{COLOR_DARKGRAY}[~] {ide_dir.name}: acp.json exists, skipping{COLOR_RESET}")
-            continue
+            print(f"{COLOR_DARKGRAY}[~] ~/.jetbrains/acp.json exists, skipping{COLOR_RESET}")
+            return 0
 
         try:
             import shutil
             shutil.copy2(str(acp_src), str(target))
-            print(f"{COLOR_GREEN}[OK] {ide_dir.name} -> {target}{COLOR_RESET}")
-            copied += 1
+            print(f"{COLOR_GREEN}[OK] -> {target}{COLOR_RESET}")
+            return 1
         except Exception as e:
-            print(f"{COLOR_RED}[!] {ide_dir.name}: {e}{COLOR_RESET}")
-
-    return copied
+            print(f"{COLOR_RED}[!] ~/.jetbrains/acp.json: {e}{COLOR_RESET}")
+            return 0
 
 
 def init_idea(target_dir: Path, source_rules_dir: Path, source_mcp_file: Path,

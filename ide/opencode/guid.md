@@ -23,6 +23,10 @@ https://opencode.ai/docs/zh-cn/cli/
 ## web
 https://opencode.ai/docs/zh-cn/web/
 
+
+OPENCODE_SERVER_PASSWORD=123456
+opencode web --hostname 0.0.0.0
+
 ## 规则
 https://opencode.ai/docs/zh-cn/rules/
 

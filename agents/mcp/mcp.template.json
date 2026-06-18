@@ -56,6 +56,15 @@
         "@langgpt/arxiv-paper-mcp@latest"
       ]
     },
+
+    "zread": {
+      "type": "streamableHttp",
+      "url": "https://open.bigmodel.cn/api/mcp/zread/mcp",
+      "headers": {
+        "Authorization": "Bearer ${ZREAD_API_KEY}"
+      }
+    },
+
     "yuque-mcp": {
       "command": "npx",
       "args": [

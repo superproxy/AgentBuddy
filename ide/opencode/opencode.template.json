@@ -70,5 +70,17 @@
   },
   "model": "${ANTHROPIC_MODEL:-anthropic/claude-sonnet-4}",
   "small_model": "openai/gpt-4o-mini",
-  "mcp": {}
+  "mcp": {},
+
+  "agent": {
+    "review": {
+      "description": "Reviews code for best practices and potential issues"
+    }
+  },
+  "permission":{
+    "*": "allow",
+    "bash": "allow",
+    "edit": "allow"
+  }
+
 }
