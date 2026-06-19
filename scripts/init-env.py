@@ -198,6 +198,12 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             for k, v in provider_value.items():
                 if k.startswith("_"):
                     continue
+                if k == "models" and isinstance(v, dict):
+                    model_keys = list(v.keys())
+                    if model_keys:
+                        flat.setdefault(f"{section_upper}_{provider_upper}_MODEL", model_keys[0])
+                    flat.setdefault(f"{section_upper}_{provider_upper}_MODELS", json.dumps(v, ensure_ascii=False))
+                    continue
                 if isinstance(v, dict):
                     for sub_k, sub_v in v.items():
                         if sub_k.startswith("_"):
