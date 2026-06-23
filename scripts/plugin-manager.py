@@ -117,13 +117,13 @@ def build_install_command(skill_config: dict or str) -> tuple[str, str]:
         
         if url:
             # 第三方市场 URL
-            install_command = f"npx skills add {url} --skill {skill_name} -g"
+            install_command = f"npx --yes skills add {url} --skill {skill_name} -y"
         elif source:
             # 普通格式
-            install_command = f"npx skills add {source} --skill {skill_name} -g"
+            install_command = f"npx --yes skills add {source} --skill {skill_name} -y"
         else:
             # 只有 skill name 的情况
-            install_command = f"npx skills add {skill_name} -g"
+            install_command = f"npx --yes skills add {skill_name} -y"
     elif isinstance(skill_config, str):
         # 字符串格式：可能是命令或名称
         if skill_config.startswith("npx"):
@@ -135,17 +135,17 @@ def build_install_command(skill_config: dict or str) -> tuple[str, str]:
             if match:
                 skill_name = match.group(1)
             else:
-                # 简单格式：npx skills add xxx -g
+                # 简单格式：npx skills add xxx -y
                 match = re.search(r'add\s+([^\s]+)', install_command)
                 if match:
                     skill_name = match.group(1)
         else:
             # 只是 skill name
             skill_name = skill_config
-            install_command = f"npx skills add {skill_name} -g"
+            install_command = f"npx skills add {skill_name} -y"
     else:
         skill_name = str(skill_config)
-        install_command = f"npx skills add {skill_name} -g"
+        install_command = f"npx skills add {skill_name} -y"
     
     return skill_name, install_command
 
@@ -172,7 +172,7 @@ def install_skill(skill_config: dict or str, source_dir: Path = None) -> None:
         # 检查 agents/skills 缓存
         cache_skill_dir = source_dir / "agents" / "skills" / skill_name
         if cache_skill_dir.exists():
-            print(f"{COLOR_MAGENTA}[\] Installing skill from cache: {skill_name}{COLOR_RESET}")
+            print(f"{COLOR_MAGENTA}[-] Installing skill from cache: {skill_name}{COLOR_RESET}")
             try:
                 import shutil
                 shutil.copytree(cache_skill_dir, target_skill_dir, ignore=shutil.ignore_patterns('.git'))
@@ -182,7 +182,7 @@ def install_skill(skill_config: dict or str, source_dir: Path = None) -> None:
                 print(f"{COLOR_YELLOW}[!] Cache copy failed, will download from remote: {e}{COLOR_RESET}")
     
     # 从远程安装
-    print(f"{COLOR_MAGENTA}[\] Installing skill: {install_command}{COLOR_RESET}")
+    print(f"{COLOR_MAGENTA}[-] Installing skill: {install_command}{COLOR_RESET}")
     
     try:
         result = subprocess.run(
@@ -449,7 +449,7 @@ def generate_plugin_from_csv(
             })
         else:
             # 构建完整的远程安装命令
-            plugin_skills.append(f"npx skills add {source} --skill {skill_name} -g")
+            plugin_skills.append(f"npx skills add {source} --skill {skill_name} -y")
     
     plugin_config = {
         "name": plugin_name,

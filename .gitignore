@@ -48,3 +48,6 @@ ide/codex/config.toml
 /ide/claude/settings.json
 /.idea/
 /.agents/
+/.claude/skills/open-browser-use/
+/.claude/skills/open-browser-use/
+/.claude/skills/open-browser-use/
