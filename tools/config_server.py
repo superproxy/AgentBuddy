@@ -260,6 +260,39 @@ def _stream_process(cmd: str, cwd: Optional[Path] = None):
     yield "data: [DONE]\n\n"
 
 
+def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
+    """类似 _stream_process，但返回 returncode（用于安装流程判断），不发 [DONE]。"""
+    yield f"data: [CMD] {cmd}\n\n"
+    rc = 1
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            shell=True,
+            cwd=str(cwd) if cwd else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            bufsize=1,
+        )
+        try:
+            for line in iter(proc.stdout.readline, ""):
+                if line:
+                    yield f"data: {line.rstrip()}\n\n"
+            proc.wait(timeout=300)
+            rc = proc.returncode
+            yield f"data: [EXIT] returncode={proc.returncode}\n\n"
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            yield "data: [TIMEOUT] 进程超时被终止（>300s）\n\n"
+            rc = -1
+    except Exception as e:
+        yield f"data: [ERROR] {e}\n\n"
+        rc = -1
+    return rc
+
+
 # ============================================================
 # 首页
 # ============================================================
@@ -1200,7 +1233,59 @@ def install_plugin_sse():
             for i, sk in enumerate(skills):
                 skill_name, cmd = build_install_command(sk, use_symlink=False)
                 yield f"data: [{i+1}/{len(skills)}] {skill_name}\n\n"
-                yield from _stream_process(cmd, cwd=PROJECT_ROOT)
+                # 判断 source 类型
+                is_whole_repo = (
+                    ' add ' in cmd and '/' in cmd.split(' add ', 1)[1].split(' ', 1)[0]
+                    and '--skill' not in cmd
+                )
+                has_explicit_source = (
+                    '--skill' in cmd or cmd.startswith('http')
+                    or (' add ' in cmd and '/' in cmd.split(' add ', 1)[1].split(' ', 1)[0])
+                )
+
+                # Step 1: 已存在则跳过（仅单技能）
+                if not is_whole_repo:
+                    target = PROJECT_ROOT / ".agents" / "skills" / skill_name
+                    if target.exists():
+                        yield f"data: [-] Skill already exists: {skill_name}, skipping\n\n"
+                        continue
+
+                # Step 2: source 有效 → 执行 source 命令
+                rc = None
+                if has_explicit_source:
+                    rc = yield from _stream_process_rc(cmd, cwd=PROJECT_ROOT)
+                    if rc == 0:
+                        # 验证（整仓库跳过目录验证）
+                        if is_whole_repo or (PROJECT_ROOT / ".agents" / "skills" / skill_name).exists():
+                            yield f"data: [OK] Skill installed via source: {skill_name}\n\n"
+                            continue
+                        yield f"data: [!] source 命令成功但目录未找到，尝试 find-skills\n\n"
+                    else:
+                        yield f"data: [!] source 安装失败(rc={rc})，尝试 find-skills\n\n"
+
+                # Step 3: find-skills 按名查找
+                find_cmd = f"npx skills add {skill_name} -y"
+                rc = yield from _stream_process_rc(find_cmd, cwd=PROJECT_ROOT)
+                if rc == 0 and (is_whole_repo or (PROJECT_ROOT / ".agents" / "skills" / skill_name).exists()):
+                    yield f"data: [OK] Skill installed from marketplace: {skill_name}\n\n"
+                    continue
+
+                # Step 4: 本地缓存（仅单技能）
+                if not is_whole_repo:
+                    cache = PROJECT_ROOT / "agents" / "skills" / skill_name
+                    if cache.exists():
+                        yield f"data: [-] Copying from local cache: {skill_name}\n\n"
+                        try:
+                            import shutil
+                            target = PROJECT_ROOT / ".agents" / "skills" / skill_name
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copytree(cache, target, ignore=shutil.ignore_patterns('.git'))
+                            yield f"data: [OK] Skill copied from cache: {skill_name}\n\n"
+                            continue
+                        except Exception as e:
+                            yield f"data: [ERROR] cache copy failed: {e}\n\n"
+
+                yield f"data: [FAIL] Skill installation failed: {skill_name}\n\n"
         except Exception as e:
             yield f"data: [ERROR] 技能安装失败: {e}\n\n"
 

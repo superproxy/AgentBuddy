@@ -33,3 +33,6 @@ skills:
     source: openai/skills
     skill: screenshot
     description: 截图
+  - name: playwright-master
+    source: modelscope.cn@playwright-master
+    description: Playwright 浏览器自动化

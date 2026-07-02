@@ -14,3 +14,6 @@ skills:
   - name: superpowers
     source: obra/superpowers
     description: Superpowers 完整技能组
+
+  - { name: restful-api-design-skill, source: restful-api-design-skill, description: RESTful API 设计与接口契约 }
+ 
