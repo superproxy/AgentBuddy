@@ -887,6 +887,154 @@ def uninstall_plugin_api():
     })
 
 
+@app.route("/api/plugin/import-from-ide", methods=["GET"])
+def import_from_ide():
+    """从本地所有 IDE 配置中扫描 MCP 和 skills，合并去重后返回，供填入插件构建表单。
+
+    扫描范围：
+      - MCP: 所有 IDE 的项目级 + 全局级配置文件（JSON / TOML）
+      - Skills: 所有 IDE 的全局 skills 目录 + 项目级 .agents/skills/
+    合并策略：同名 MCP/Skill 首次出现保留，记录来源 IDE。
+    """
+    home = Path.home()
+    # 各 IDE 的 MCP 配置文件（项目级 + 全局级），(路径, 格式, ide名)
+    mcp_files = [
+        # 项目级
+        (PROJECT_ROOT / ".mcp.json", "json", "Project(.mcp.json)"),
+        (PROJECT_ROOT / ".cursor" / "mcp.json", "json", "Cursor"),
+        (PROJECT_ROOT / ".claude" / "mcp.json", "json", "Claude"),
+        (PROJECT_ROOT / ".qoder" / "mcp.json", "json", "Qoder"),
+        (PROJECT_ROOT / ".openclaw" / "mcp.json", "json", "OpenClaw"),
+        (PROJECT_ROOT / ".workbuddy" / "mcp.json", "json", "WorkBuddy"),
+        (PROJECT_ROOT / "opencode.json", "json", "OpenCode"),
+        (PROJECT_ROOT / ".codex" / "config.toml", "toml", "Codex"),
+        # 全局级
+        (home / ".cursor" / "mcp.json", "json", "Cursor(global)"),
+        (home / ".claude" / "mcp.json", "json", "Claude(global)"),
+        (home / ".qoder" / "mcp.json", "json", "Qoder(global)"),
+        (home / ".openclaw" / "mcp.json", "json", "OpenClaw(global)"),
+        (home / ".workbuddy" / "mcp.json", "json", "WorkBuddy(global)"),
+        (home / ".codex" / "config.toml", "toml", "Codex(global)"),
+        (home / ".trae" / "mcp.json", "json", "Trae(global)"),
+        (home / ".traecn" / "mcp.json", "json", "TraeCN(global)"),
+        (home / ".traesolocn" / "mcp.json", "json", "TraeSoloCN(global)"),
+    ]
+    # Trae macOS Application Support 路径
+    if sys.platform == "darwin":
+        for ide_name in ("Trae", "Trae CN", "Trae Solo CN"):
+            user_dir = home / "Library" / "Application Support" / ide_name / "User"
+            mcp_files.append((user_dir / "mcp.json", "json", f"{ide_name}(app)"))
+
+    merged_mcp = {}  # name -> config
+    mcp_sources = {}  # name -> [ide名]
+    scanned_files = []
+
+    for path, fmt, ide_label in mcp_files:
+        if not path.exists():
+            continue
+        scanned_files.append(str(path))
+        try:
+            servers = {}
+            if fmt == "json":
+                data = json.loads(path.read_text(encoding="utf-8"))
+                # 兼容 {mcpServers:{}} 和顶层直接是 servers 的情况
+                if isinstance(data, dict):
+                    servers = data.get("mcpServers") or data.get("mcp_servers") or {}
+                    # opencode.json 的 mcp 在不同位置
+                    if not servers and isinstance(data.get("mcp"), dict):
+                        servers = data["mcp"]
+            elif fmt == "toml":
+                servers = _parse_codex_toml_mcp(path)
+            if not isinstance(servers, dict):
+                continue
+            for name, cfg in servers.items():
+                if name in merged_mcp:
+                    mcp_sources[name].append(ide_label)
+                else:
+                    merged_mcp[name] = cfg
+                    mcp_sources[name] = [ide_label]
+        except Exception:
+            continue
+
+    # Skills: 扫描所有 IDE 的全局 skills 目录
+    skills_dirs = [
+        (home / ".cursor" / "skills", "Cursor"),
+        (home / ".claude" / "skills", "Claude"),
+        (home / ".codex" / "skills", "Codex"),
+        (home / ".qoder" / "skills", "Qoder"),
+        (home / ".openclaw" / "skills", "OpenClaw"),
+        (home / ".workbuddy" / "skills", "WorkBuddy"),
+        (home / ".idea" / "skills", "IDEA"),
+        (home / ".config" / "opencode" / "skills", "OpenCode"),
+        (home / ".trae" / "skills", "Trae"),
+        (home / ".traecn" / "skills", "TraeCN"),
+        (home / ".traesolocn" / "skills", "TraeSoloCN"),
+        (DOT_AGENTS_SKILLS, "Project(.agents)"),
+    ]
+    merged_skills = []  # [{name, sources:[]}]
+    skill_name_sources = {}  # name -> [ide名]
+    scanned_dirs = []
+    for sdir, ide_label in skills_dirs:
+        if not sdir.exists():
+            continue
+        scanned_dirs.append(str(sdir))
+        try:
+            for d in sdir.iterdir():
+                if d.is_dir() and (d / "SKILL.md").exists():
+                    if d.name in skill_name_sources:
+                        skill_name_sources[d.name].append(ide_label)
+                    else:
+                        skill_name_sources[d.name] = [ide_label]
+        except Exception:
+            continue
+    merged_skills = [{"name": n, "sources": ss} for n, ss in skill_name_sources.items()]
+
+    return jsonify({
+        "ok": True,
+        "mcpServers": merged_mcp,
+        "mcp_sources": mcp_sources,
+        "skills": merged_skills,
+        "scanned_files": scanned_files,
+        "scanned_dirs": scanned_dirs,
+        "stats": {
+            "mcp_count": len(merged_mcp),
+            "skill_count": len(merged_skills),
+            "files_scanned": len(scanned_files),
+            "dirs_scanned": len(scanned_dirs),
+        }
+    })
+
+
+def _parse_codex_toml_mcp(path: Path) -> dict:
+    """解析 Codex config.toml 中的 [mcp_servers.xxx] 段，返回 {name: config}。"""
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib
+        except ImportError:
+            return {}
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        servers = data.get("mcp_servers", {})
+        # Codex 格式: {command, args, env}，需转为通用 {command, args, env}
+        result = {}
+        for name, cfg in servers.items():
+            if isinstance(cfg, dict):
+                entry = {}
+                if "command" in cfg:
+                    entry["command"] = cfg["command"]
+                if "args" in cfg:
+                    entry["args"] = list(cfg["args"]) if isinstance(cfg["args"], (list, tuple)) else [str(cfg["args"])]
+                if "env" in cfg and isinstance(cfg["env"], dict):
+                    entry["env"] = {k: str(v) for k, v in cfg["env"].items()}
+                if entry:
+                    result[name] = entry
+        return result
+    except Exception:
+        return {}
+
+
 @app.route("/api/plugin/install", methods=["GET"])
 def install_plugin_sse():
     """SSE: 流式安装插件。Query: file=xxx.plugin.yaml&ide=Codex"""

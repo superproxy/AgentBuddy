@@ -32,12 +32,12 @@ mcpServers:
       AMAP_MAPS_API_KEY: ''
     disabled: false
 skills:
-  - { name: usecase-prd-skill, description: 用例驱动的 PRD 编写 }
-  - { name: task-plan-skill, description: 任务拆解与排期 }
-  - { name: weekly-report-skill, description: 周报/月报生成 }
-  - { name: brainstorming, description: 头脑风暴与需求探索 }
-  - { name: openspec-explore, description: OpenSpec 探索模式 }
-  - { name: openspec-propose, description: OpenSpec 提案 }
-  - { name: openspec-apply-change, description: OpenSpec 实施变更 }
-  - { name: openspec-sync-specs, description: OpenSpec 同步规范 }
-  - { name: bid-to-tender-skill, description: 投标书生成 }
+  - { name: usecase-prd-skill, source: superproxy/skills, description: 用例驱动的 PRD 编写 }
+  - { name: task-plan-skill, source: superproxy/skills, description: 任务拆解与排期 }
+  - { name: weekly-report-skill, source: superproxy/skills, description: 周报/月报生成 }
+  - { name: brainstorming, source: superproxy/skills, description: 头脑风暴与需求探索 }
+  - { name: openspec-explore, source: superproxy/skills, description: OpenSpec 探索模式 }
+  - { name: openspec-propose, source: superproxy/skills, description: OpenSpec 提案 }
+  - { name: openspec-apply-change, source: superproxy/skills, description: OpenSpec 实施变更 }
+  - { name: openspec-sync-specs, source: superproxy/skills, description: OpenSpec 同步规范 }
+  - { name: bid-to-tender-skill, source: superproxy/skills, description: 投标书生成 }

@@ -294,7 +294,12 @@
       </div>
       <!-- 插件定义 -->
       <div class="bg-white rounded-xl shadow-card p-3 max-h-[75vh] overflow-y-auto">
-        <h3 class="text-xs font-semibold mb-2 pb-2 border-b border-gray-100">插件定义</h3>
+        <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
+          <h3 class="text-xs font-semibold">插件定义</h3>
+          <button @click="importFromIde" :disabled="importing" class="text-[11px] text-brand-600 hover:underline disabled:opacity-50">
+            {{ importing ? '导入中...' : '从 IDE 导入' }}
+          </button>
+        </div>
         <div class="flex gap-1.5 mb-3">
           <select v-model="selectedPluginFile" class="flex-1 px-2 py-1 text-[11px] border border-ink-300 rounded">
             <option value="">-- 加载已有插件 --</option>
@@ -590,6 +595,7 @@ createApp({
     const plugins = ref([]);
     const selectedPluginFile = ref('');
     const installingPlugin = ref('');  // 正在安装的插件名
+    const importing = ref(false);  // 从 IDE 导入中
     const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'MyAgentPlugin' });
 
     const mcpTab = ref('market');  // MCP 添加方式子 tab：market / manual
@@ -886,6 +892,45 @@ createApp({
           p.installed = true;
           toast('卸载失败: ' + (r.error || '未知错误'), 'err');
         }
+      }
+    }
+
+    // ===== 从 IDE 导入（扫描本地所有 IDE 的 MCP + skills，填入插件构建表单）=====
+    async function importFromIde() {
+      if (importing.value) return;
+      importing.value = true;
+      try {
+        const r = await api('/api/plugin/import-from-ide');
+        if (!r.ok) { toast('导入失败: ' + (r.error || '未知错误'), 'err'); return; }
+        const stats = r.stats || {};
+        // 1. MCP: 合并到 mcpTemplate.mcpServers，并全选
+        const existing = mcpTemplate.value.mcpServers || {};
+        let newMcpCount = 0;
+        for (const [name, cfg] of Object.entries(r.mcpServers || {})) {
+          if (!(name in existing)) {
+            existing[name] = cfg;
+            newMcpCount++;
+          }
+        }
+        mcpTemplate.value.mcpServers = existing;
+        // 全选所有 MCP（包括导入的）
+        selectedMcp.value = Object.keys(existing);
+        // 2. Skills: 合并到 selectedSkills
+        const skillSet = new Set(selectedSkills.value);
+        let newSkillCount = 0;
+        for (const s of (r.skills || [])) {
+          if (!skillSet.has(s.name)) {
+            skillSet.add(s.name);
+            newSkillCount++;
+          }
+        }
+        selectedSkills.value = Array.from(skillSet);
+        // 3. 提示
+        toast(`已导入 ${stats.mcp_count || 0} 个 MCP（新增 ${newMcpCount}）、${stats.skill_count || 0} 个 skill（新增 ${newSkillCount}），扫描 ${stats.files_scanned || 0} 文件/${stats.dirs_scanned || 0} 目录`);
+      } catch (e) {
+        toast('导入失败: ' + e.message, 'err');
+      } finally {
+        importing.value = false;
       }
     }
 
@@ -1261,7 +1306,7 @@ createApp({
       generateProxyConfig, startProxyServer,
       toggleSkill, toggleMcp, refreshPluginList, loadExistingPlugin, deleteExistingPlugin,
       newPlugin, previewPlugin, savePluginFile, installPluginFile,
-      onTogglePlugin, installingPlugin,
+      onTogglePlugin, installingPlugin, importing, importFromIde,
       searchMcpMarket, getMcpDetail, addMarketMcpToTemplate,
       toggleMcpDisabled, deleteMcpEntry, saveMcpTemplate, generateMcpRuntime,
       parsePastedMcp, addManualMcp, toggleAllMcp, saveMcpAll, syncMcpFull,

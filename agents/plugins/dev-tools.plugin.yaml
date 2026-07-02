@@ -21,12 +21,12 @@ mcpServers:
     url: https://developers.openai.com/mcp
     disabled: true
 skills:
-  - { name: restful-api-design-skill, description: RESTful API 设计与接口契约 }
-  - { name: systematic-debugging, description: 系统化调试方法论 }
-  - { name: test-driven-development, description: 测试驱动开发 }
-  - { name: receiving-code-review, description: 接收代码审查反馈 }
-  - { name: requesting-code-review, description: 请求代码审查 }
-  - { name: verification-before-completion, description: 完成前验证 }
-  - { name: playwright-master, description: Playwright 浏览器自动化 }
-  - { name: pptx, description: PowerPoint 文件操作 }
-  - { name: screenshot, description: 截图能力 }
+  - { name: restful-api-design-skill, source: superproxy/skills, description: RESTful API 设计与接口契约 }
+  - { name: systematic-debugging, source: superproxy/skills, description: 系统化调试方法论 }
+  - { name: test-driven-development, source: superproxy/skills, description: 测试驱动开发 }
+  - { name: receiving-code-review, source: superproxy/skills, description: 接收代码审查反馈 }
+  - { name: requesting-code-review, source: superproxy/skills, description: 请求代码审查 }
+  - { name: verification-before-completion, source: superproxy/skills, description: 完成前验证 }
+  - { name: playwright-master, source: superproxy/skills, description: Playwright 浏览器自动化 }
+  - { name: pptx, source: superproxy/skills, description: PowerPoint 文件操作 }
+  - { name: screenshot, source: superproxy/skills, description: 截图能力 }
