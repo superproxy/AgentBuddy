@@ -20,14 +20,23 @@ class OpenCodeTarget(IdeTarget):
         pass
 
     def init_mcp(self, source_mcp_file: Path):
-        # OpenCode 的 mcp 和 llm 合并生成 opencode.json
+        # 优先从 .agents/ide/opencode/opencode.json 复制（由 generate 生成）
         source_dir = self.root
+        generated = source_dir / ".agents" / "ide" / "opencode" / "opencode.json"
         opencode_template = source_dir / "ide" / "opencode" / "opencode.template.json"
         opencode_dir = Path.home() / ".config" / "opencode"
         opencode_dir.mkdir(parents=True, exist_ok=True)
-        env_config = load_split_env_config(source_dir, silent=True)
-        convert_to_opencode_mcp(source_mcp_file, opencode_dir / "opencode.json",
-                                self.force, opencode_template, env_config)
+
+        if generated.exists():
+            # 从 generate 产物复制
+            from lib.mcp import copy_file_safe
+            copy_file_safe(generated, opencode_dir / "opencode.json",
+                           "~/.config/opencode/opencode.json", self.force)
+        else:
+            # 回退：直接从模板生成
+            env_config = load_split_env_config(source_dir, silent=True)
+            convert_to_opencode_mcp(source_mcp_file, opencode_dir / "opencode.json",
+                                    self.force, opencode_template, env_config)
 
     def init_llm(self, source_rules_dir: Path):
         # OpenCode 的 LLM 配置已在 init_mcp 中合并生成（opencode.json 含 models）

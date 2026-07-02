@@ -119,11 +119,18 @@ class ClaudeTarget(IdeTarget):
     def init_llm(self, source_rules_dir: Path):
         # source_rules_dir 是 agents/rules，其 parent.parent 是项目根
         source_dir = source_rules_dir.parent.parent
-        claude_settings_template = source_dir / "ide" / "claude" / "settings.template.json"
-        env_config = load_split_env_config(source_dir, silent=True)
-        _generate_claude_settings(claude_settings_template,
-                                  self.root / ".claude" / "settings.json",
-                                  env_config, self.force)
+        # 优先从 .agents/ide/claude/settings.json 复制（由 generate 生成）
+        generated = source_dir / ".agents" / "ide" / "claude" / "settings.json"
+        target = self.root / ".claude" / "settings.json"
+
+        if generated.exists():
+            copy_file_safe(generated, target, ".claude/settings.json", self.force)
+        else:
+            # 回退：直接从模板生成
+            claude_settings_template = source_dir / "ide" / "claude" / "settings.template.json"
+            env_config = load_split_env_config(source_dir, silent=True)
+            _generate_claude_settings(claude_settings_template, target,
+                                      env_config, self.force)
 
     def init_skills(self, source_skills_dir: Path):
         claude_skills_dir = self.root / ".claude" / "skills"

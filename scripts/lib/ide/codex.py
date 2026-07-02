@@ -26,11 +26,11 @@ class CodexTarget(IdeTarget):
         codex_dir = self.root / ".codex"
         codex_dir.mkdir(parents=True, exist_ok=True)
 
-        # Codex TOML 模板：source_dir 是项目根（source_rules.parent.parent = agents/ 的父目录）
+        # Codex 生成产物在 .agents/ide/codex/（由 agentctl generate 生成）
         source_dir = self.root
-        codex_template = source_dir / "ide" / "codex" / "config.toml"
+        codex_template = source_dir / ".agents" / "ide" / "codex" / "config.toml"
 
-        # 项目级 .codex/config.toml：用项目模板作为 base（含 model_provider 等）
+        # 项目级 .codex/config.toml：用项目生成产物作为 base（含 model_provider 等）
         convert_to_codex_mcp(source_mcp_file, codex_dir / "config.toml",
                              self.force, codex_template)
 
@@ -41,8 +41,8 @@ class CodexTarget(IdeTarget):
         convert_to_codex_mcp(source_mcp_file, global_codex_dir / "config.toml",
                              self.force, codex_template)
 
-        # 复制 auth.json
-        codex_auth_src = source_dir / "ide" / "codex" / "auth.json"
+        # 复制 auth.json（从 .agents/ide/codex/ 生成产物）
+        codex_auth_src = source_dir / ".agents" / "ide" / "codex" / "auth.json"
         copy_file_safe(codex_auth_src, codex_dir / "auth.json",
                        ".codex/auth.json", self.force)
 

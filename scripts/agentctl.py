@@ -82,28 +82,32 @@ def cmd_generate(args):
     mcp.invoke_mcp_generate_step(flat_config, mcp_yaml_file, mcp_output,
                                   plugins_dir=plugins_dir, installed_names=installed)
 
-    # 2. 生成 opencode.json（从模板 + 注入模型）
+    # 2. 生成 opencode.json（从模板 + 注入模型）→ .agents/ide/opencode/
     opencode_template = PROJECT_ROOT / "ide" / "opencode" / "opencode.template.json"
-    opencode_output = PROJECT_ROOT / "ide" / "opencode" / "opencode.json"
+    opencode_output = PROJECT_ROOT / ".agents" / "ide" / "opencode" / "opencode.json"
     if opencode_template.exists():
+        opencode_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, opencode_template, opencode_output)
         mcp._inject_opencode_models(opencode_output, env_config)
 
-    # 3. 生成 codex auth.json + config.toml（从模板）
+    # 3. 生成 codex auth.json + config.toml（从模板）→ .agents/ide/codex/
     codex_auth_template = PROJECT_ROOT / "ide" / "codex" / "auth.template.json"
-    codex_auth_output = PROJECT_ROOT / "ide" / "codex" / "auth.json"
+    codex_auth_output = PROJECT_ROOT / ".agents" / "ide" / "codex" / "auth.json"
     if codex_auth_template.exists():
+        codex_auth_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, codex_auth_template, codex_auth_output)
 
     codex_config_template = PROJECT_ROOT / "ide" / "codex" / "config.template.toml"
-    codex_config_output = PROJECT_ROOT / "ide" / "codex" / "config.toml"
+    codex_config_output = PROJECT_ROOT / ".agents" / "ide" / "codex" / "config.toml"
     if codex_config_template.exists():
+        codex_config_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, codex_config_template, codex_config_output)
 
-    # 4. 生成 claude settings.json（从模板）
+    # 4. 生成 claude settings.json（从模板）→ .agents/ide/claude/
     claude_template = PROJECT_ROOT / "ide" / "claude" / "settings.template.json"
-    claude_output = PROJECT_ROOT / "ide" / "claude" / "settings.json"
+    claude_output = PROJECT_ROOT / ".agents" / "ide" / "claude" / "settings.json"
     if claude_template.exists():
+        claude_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, claude_template, claude_output)
 
     # 5. 生成 proxy config.yaml（从模板，不剪枝）
