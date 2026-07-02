@@ -76,6 +76,9 @@
             <span class="text-[10px] text-ink-500 font-normal">llm.yaml</span>
           </h2>
           <div class="flex gap-2 items-center">
+            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
+              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
+            </label>
             <span class="text-[10px] text-brand-600">同步到</span>
             <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
               <option value="All">全部 IDE</option>
@@ -85,7 +88,7 @@
               {{ syncing ? '同步中...' : '同步到 IDE' }}
             </button>
             <button @click="addProvider" class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium">+ 添加 Provider</button>
-            <button @click="saveEnv" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded-md hover:bg-ink-900 font-medium">保存 llm.yaml</button>
+            <button @click="saveEnv()" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded-md hover:bg-ink-900 font-medium">保存 llm.yaml</button>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-4">
@@ -402,6 +405,9 @@
             <span class="text-[10px] text-ink-500 font-normal">{{ Object.keys(mcpTemplate.mcpServers || {}).length }} 个 · 启用 {{ mcpEnabledCount }} · 密钥 {{ Object.keys(mcpConfigData.mcp || {}).length }} 个</span>
           </h2>
           <div class="flex gap-2 items-center">
+            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
+              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
+            </label>
             <span class="text-[10px] text-brand-600">同步到</span>
             <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
               <option value="All">全部 IDE</option>
@@ -412,7 +418,7 @@
             </button>
             <button @click="toggleAllMcp(true)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全选</button>
             <button @click="toggleAllMcp(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
-            <button @click="saveMcpAll" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded hover:bg-ink-900 font-medium">保存 mcp.yaml</button>
+            <button @click="saveMcpAll()" class="px-3 py-1.5 text-xs bg-ink-700 text-white rounded hover:bg-ink-900 font-medium">保存 mcp.yaml</button>
           </div>
         </div>
         <div class="space-y-2 mb-4">
@@ -480,6 +486,9 @@
             <button @click="skillTab='manual'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', skillTab==='manual' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">手动安装</button>
           </div>
           <div class="flex gap-2 items-center">
+            <label class="flex items-center gap-1 text-[10px] text-ink-600 cursor-pointer select-none">
+              <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
+            </label>
             <span class="text-[10px] text-brand-600">同步到</span>
             <select v-model="syncTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
               <option value="All">全部 IDE</option>
@@ -639,7 +648,7 @@
 </div>
 
 <script>
-const { createApp, reactive, ref, computed, onMounted } = Vue;
+const { createApp, reactive, ref, computed, onMounted, watch } = Vue;
 
 createApp({
   setup() {
@@ -709,6 +718,10 @@ createApp({
     const syncTargetIde = ref('Codex');
     // 当前是否正在同步
     const syncing = ref(false);
+    // 自动同步开关：开启后配置变更 debounce 自动保存+同步
+    const autoSync = ref(false);
+    let _autoSyncTimer = null;
+    let _isLoading = true; // 加载阶段不触发自动同步
 
     // 日志/Modal/Toast
     const logVisible = ref(false);
@@ -804,9 +817,10 @@ createApp({
       const m = envData.llm[pn][proto].models;
       m[newKey] = m[oldKey]; delete m[oldKey];
     }
-    async function saveEnv() {
+    async function saveEnv(silent = false) {
       const r = await api('/api/llm', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ data: envData }) });
-      r.ok ? toast('llm.yaml 已保存') : toast('保存失败: ' + r.error, 'err');
+      if (!silent) r.ok ? toast('llm.yaml 已保存') : toast('保存失败: ' + r.error, 'err');
+      return r.ok;
     }
     async function loadMcpConfig() {
       const r = await api('/api/mcp-config');
@@ -1042,10 +1056,11 @@ createApp({
       toast(enabled ? '已全部启用' : '已全部禁用');
     }
     // 同时保存 mcpServers + mcp 密钥到 mcp.yaml
-    async function saveMcpAll() {
+    async function saveMcpAll(silent = false) {
       const r1 = await api('/api/mcp/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ data: mcpTemplate }) });
       const r2 = await api('/api/mcp-config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ data: mcpConfigData }) });
-      (r1.ok && r2.ok) ? toast('mcp.yaml 已保存') : toast('保存失败', 'err');
+      if (!silent) (r1.ok && r2.ok) ? toast('mcp.yaml 已保存') : toast('保存失败', 'err');
+      return r1.ok && r2.ok;
     }
     // 一键：保存 mcp.yaml → 生成 mcp.json → 同步到 IDE
     async function syncMcpFull() {
@@ -1177,6 +1192,8 @@ createApp({
       if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
       const skills = scope === 'skill' ? getSelectedInstalledSkills() : null;
       if (scope === 'skill' && skills && !skills.length) { toast('请先勾选要同步的技能', 'warn'); return; }
+      // 同步前自动保存对应配置（静默）
+      if (scope === 'llm') await saveEnv(true);
       await runSync(syncTargetIde.value, [scope], skills);
     }
     // 通用同步执行（skills 可选：仅同步勾选的技能）
@@ -1210,6 +1227,26 @@ createApp({
     const mcpEnabledCount = computed(() => Object.values(mcpTemplate.mcpServers || {}).filter(c => !(c.disabled === true || c.disabled === 'true')).length);
 
     // ===== Bootstrap =====
+    // 自动同步：监听配置变化，debounce 2s 后自动保存+同步
+    watch(
+      [envData, mcpTemplate, mcpConfigData],
+      () => {
+        if (_isLoading || !autoSync.value || syncing.value) return;
+        clearTimeout(_autoSyncTimer);
+        _autoSyncTimer = setTimeout(async () => {
+          // 自动保存 llm + mcp
+          await saveEnv(true);
+          await saveMcpAll(true);
+          // 自动同步到选定 IDE（llm + mcp）
+          if (!syncing.value) {
+            toast('自动同步中...');
+            await runSync(syncTargetIde.value, ['llm', 'mcp']);
+          }
+        }, 2000);
+      },
+      { deep: true }
+    );
+
     onMounted(async () => {
       const [llmR, mcpCfgR, skillsR, mcpR, installedR, pluginsR] = await Promise.all([
         api('/api/llm').catch(e => ({ ok: false })),
@@ -1233,6 +1270,8 @@ createApp({
       if (mcpR.ok) Object.assign(mcpTemplate, mcpR.data);
       if (installedR.ok) installedSkills.value = installedR.data || [];
       if (pluginsR.ok) plugins.value = pluginsR.data || [];
+      // 加载完成，启用自动同步监听
+      _isLoading = false;
     });
 
     return {
@@ -1244,7 +1283,7 @@ createApp({
       mcpTab, mcpMarketQ, mcpMarketResults, mcpSearched, mcpForm, editingMcp, editMcpForm,
       skillTab, skillSources, skillSearchQ, skillSearchResults, skillSearchHint, skillSearched,
       manualSkillInput, installedSkills, selectedInstalledSkills, selectedInstalledCount,
-      ideList, ideLog, ideLogEl, syncScopes, syncTargetIde, syncing,
+      ideList, ideLog, ideLogEl, syncScopes, syncTargetIde, syncing, autoSync,
       logVisible, logText, logEl, modalVisible, modalTitle, modalContent, toasts,
       toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
       addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
