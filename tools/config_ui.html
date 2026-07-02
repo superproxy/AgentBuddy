@@ -212,39 +212,35 @@
 
     <!-- ===================== 插件组装 ===================== -->
     <div v-show="tab === 'plugin'" class="space-y-3">
-      <!-- 预定义插件 -->
+      <!-- 预定义插件（列表方式，勾选即安装+同步） -->
       <div class="bg-white rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
           <h3 class="text-sm font-semibold flex items-center gap-2">
             <span class="w-1 h-4 bg-brand-500 rounded"></span>预定义插件
             <span class="text-[10px] text-ink-500 font-normal">{{ plugins.length }} 个</span>
-            <span v-if="selectedPlugins.length" class="text-[10px] text-brand-600 font-normal">已选 {{ selectedPlugins.length }}</span>
+            <span v-if="installingPlugin" class="text-[10px] text-brand-600 font-normal">安装中: {{ installingPlugin }}</span>
           </h3>
-          <div class="flex gap-2 items-center">
-            <button @click="selectedPlugins = []" v-if="selectedPlugins.length" class="text-[11px] text-ink-500 hover:text-ink-700">清空选择</button>
-            <button @click="refreshPluginList" class="text-[11px] text-brand-600 hover:underline">刷新</button>
-          </div>
+          <button @click="refreshPluginList" class="text-[11px] text-brand-600 hover:underline">刷新</button>
         </div>
-        <div class="grid grid-cols-4 gap-2">
+        <div class="space-y-1.5">
           <div v-for="p in plugins" :key="p.file"
-               @click="togglePlugin(p.file)"
-               :class="['border rounded-lg p-2.5 hover:shadow-card transition cursor-pointer flex flex-col', selectedPlugins.includes(p.file) ? 'border-brand-500 bg-brand-50/40' : 'border-ink-300 hover:border-brand-500']">
-            <div class="flex items-center gap-1.5 mb-1">
-              <input type="checkbox" :checked="selectedPlugins.includes(p.file)" @click.stop="togglePlugin(p.file)" class="accent-brand-500">
-              <div class="font-medium text-xs text-ink-900 truncate flex-1" :title="p.name">{{ p.name }}</div>
-              <span class="text-[10px] text-ink-500 ml-1">v{{ p.version }}</span>
+               :class="['flex items-center gap-3 border rounded-lg px-3 py-2 transition', p.installed ? 'border-green-400 bg-green-50/30' : 'border-ink-300 hover:border-brand-500']">
+            <input type="checkbox" :checked="p.installed" @change="onTogglePlugin(p, $event.target.checked)" :disabled="installingPlugin === p.file" class="w-4 h-4 accent-brand-500 cursor-pointer flex-shrink-0">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-medium text-xs text-ink-900 truncate">{{ p.name }}</span>
+                <span class="text-[10px] text-ink-500">v{{ p.version }}</span>
+                <span v-if="p.installed" class="text-[10px] text-green-600">✓ 已安装</span>
+              </div>
+              <div class="text-[11px] text-ink-500 truncate">{{ p.description }}</div>
             </div>
-            <div class="text-[11px] text-ink-500 mb-1.5 line-clamp-2 flex-1">{{ p.description }}</div>
-            <div class="flex gap-1.5 mb-1.5 text-[10px]">
+            <div class="flex gap-1.5 text-[10px] flex-shrink-0">
               <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.skills_count }} skills</span>
               <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.mcp_count }} mcp</span>
             </div>
-            <div class="flex gap-1" @click.stop>
-              <button @click="selectedPluginFile = p.file; loadExistingPlugin()" class="flex-1 px-2 py-1 text-[10px] bg-ink-100 text-ink-700 rounded hover:bg-ink-300">加载</button>
-              <button @click="installPredefinedPlugin(p.file)" class="flex-1 px-2 py-1 text-[10px] bg-green-500 text-white rounded hover:bg-green-600">下载</button>
-            </div>
+            <button @click="selectedPluginFile = p.file; loadExistingPlugin(); tab='plugin-build'" class="text-[10px] text-brand-600 hover:underline flex-shrink-0">编辑</button>
           </div>
-          <div v-if="!plugins.length" class="col-span-4 text-center text-ink-500 text-xs py-6">暂无预定义插件</div>
+          <div v-if="!plugins.length" class="text-center text-ink-500 text-xs py-6">暂无预定义插件</div>
         </div>
       </div>
     </div>
@@ -520,21 +516,19 @@
             <button @click="toggleAllInstalled(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
           </div>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div v-for="s in installedSkills" :key="s.name" :class="['border rounded-md p-2.5 transition', s.enabled ? 'border-brand-400 bg-brand-50/30' : 'border-ink-300']">
-            <div class="flex justify-between items-center">
-              <div class="flex items-center gap-2">
-                <input type="checkbox" :checked="s.enabled" @change="onToggleSkill(s, $event.target.checked)" class="w-4 h-4 accent-brand-500 cursor-pointer">
-                <div class="font-medium text-sm">{{ s.name }}</div>
-              </div>
-              <div class="flex gap-1">
-                <button @click="viewSkillMd(s.name)" class="text-[11px] text-brand-600 hover:underline">查看</button>
-                <button @click="uninstallSkill(s.name)" class="text-[11px] text-red-500 hover:underline">卸载</button>
-              </div>
+        <div class="space-y-1.5">
+          <div v-for="s in installedSkills" :key="s.name" :class="['flex items-center gap-3 border rounded-lg px-3 py-2 transition', s.enabled ? 'border-brand-400 bg-brand-50/30' : 'border-ink-300']">
+            <input type="checkbox" :checked="s.enabled" @change="onToggleSkill(s, $event.target.checked)" class="w-4 h-4 accent-brand-500 cursor-pointer flex-shrink-0">
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-sm">{{ s.name }}</div>
+              <div class="text-[11px] text-ink-500 truncate">{{ s.path }}</div>
             </div>
-            <div class="text-[11px] text-ink-500 mt-0.5">{{ s.path }}</div>
+            <div class="flex gap-2 flex-shrink-0">
+              <button @click="viewSkillMd(s.name)" class="text-[11px] text-brand-600 hover:underline">查看</button>
+              <button @click="uninstallSkill(s.name)" class="text-[11px] text-red-500 hover:underline">卸载</button>
+            </div>
           </div>
-          <div v-if="!installedSkills.length" class="col-span-2 text-center text-ink-500 py-6 text-xs">暂无本地可用技能</div>
+          <div v-if="!installedSkills.length" class="text-center text-ink-500 py-6 text-xs">暂无本地可用技能</div>
         </div>
       </div>
     </div>
@@ -595,9 +589,8 @@ createApp({
 
     const plugins = ref([]);
     const selectedPluginFile = ref('');
-    const selectedPlugins = ref([]);  // 勾选的预定义插件 file 列表（默认不勾选）
+    const installingPlugin = ref('');  // 正在安装的插件名
     const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'MyAgentPlugin' });
-    const pluginTargetIde = ref('Codex');  // 插件生成配置后同步的目标 IDE
 
     const mcpTab = ref('market');  // MCP 添加方式子 tab：market / manual
     const mcpMarketQ = ref('');
@@ -863,27 +856,36 @@ createApp({
       const sr = await api('/api/plugin/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
       if (!sr.ok) { toast('保存失败', 'err'); return; }
       const safe = cfg.name.replace(/[^a-zA-Z0-9_-]/g, '');
-      await runSse('/api/plugin/install?file=' + encodeURIComponent(safe + '.plugin.yaml') + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
+      const ides = syncTargetIdes.value.join(',');
+      await runSse('/api/plugin/install?file=' + encodeURIComponent(safe + '.plugin.yaml') + '&ide=' + encodeURIComponent(ides), () => { loadInstalledSkills(); refreshPluginList(); });
     }
-    async function installPredefinedPlugin(file) {
-      // 一键安装预定义插件：直接调用 /api/plugin/install，按选定 IDE 同步
-      if (!file) { toast('缺少插件文件', 'warn'); return; }
-      await runSse('/api/plugin/install?file=' + encodeURIComponent(file) + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
-    }
-    function togglePlugin(file) {
-      const i = selectedPlugins.value.indexOf(file);
-      if (i >= 0) selectedPlugins.value.splice(i, 1);
-      else selectedPlugins.value.push(file);
-    }
-    async function syncPluginToIde() {
-      // 按勾选的预定义插件批量安装：安装后自动 generate + sync 到选定 IDE
-      // 后端 /api/plugin/install 已内置注册清单 + generate + sync
-      if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
-      const list = selectedPlugins.value.slice();
-      if (!list.length) { toast('请先勾选要同步的预定义插件', 'warn'); return; }
-      for (const file of list) {
-        toast(`安装并同步到 ${pluginTargetIde.value}: ${file}`);
-        await runSse('/api/plugin/install?file=' + encodeURIComponent(file) + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
+    // 勾选/取消勾选预定义插件：勾选=安装+同步，取消=卸载
+    async function onTogglePlugin(p, checked) {
+      if (installingPlugin.value) { toast('正在安装其他插件，请稍候', 'warn'); return; }
+      if (checked) {
+        // 安装前检查是否选了目标 IDE
+        if (!syncTargetIdes.value.length) {
+          toast('请先在顶部选择目标 IDE', 'warn');
+          p.installed = false;  // 回滚
+          return;
+        }
+        installingPlugin.value = p.name;
+        p.installed = true;  // 乐观更新
+        const ides = syncTargetIdes.value.join(',');
+        await runSse('/api/plugin/install?file=' + encodeURIComponent(p.file) + '&ide=' + encodeURIComponent(ides), () => { loadInstalledSkills(); refreshPluginList(); });
+        installingPlugin.value = '';
+      } else {
+        // 卸载
+        if (!confirm('卸载插件 ' + p.name + '?')) { p.installed = true; return; }
+        const r = await api('/api/plugin/uninstall', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: p.name }) });
+        if (r.ok) {
+          p.installed = false;
+          toast('已卸载: ' + p.name);
+          refreshPluginList();
+        } else {
+          p.installed = true;
+          toast('卸载失败: ' + (r.error || '未知错误'), 'err');
+        }
       }
     }
 
@@ -1259,7 +1261,7 @@ createApp({
       generateProxyConfig, startProxyServer,
       toggleSkill, toggleMcp, refreshPluginList, loadExistingPlugin, deleteExistingPlugin,
       newPlugin, previewPlugin, savePluginFile, installPluginFile,
-      installPredefinedPlugin, syncPluginToIde, pluginTargetIde, selectedPlugins, togglePlugin,
+      onTogglePlugin, installingPlugin,
       searchMcpMarket, getMcpDetail, addMarketMcpToTemplate,
       toggleMcpDisabled, deleteMcpEntry, saveMcpTemplate, generateMcpRuntime,
       parsePastedMcp, addManualMcp, toggleAllMcp, saveMcpAll, syncMcpFull,

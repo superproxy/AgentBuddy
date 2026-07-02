@@ -711,6 +711,8 @@ def mcp_detail():
 # ============================================================
 @app.route("/api/plugins", methods=["GET"])
 def list_plugins():
+    from lib.plugins import read_installed_plugins
+    installed_names = set(read_installed_plugins(PROJECT_ROOT))
     plugins = []
     if PLUGINS_DIR.exists():
         # 支持 .plugin.yaml / .plugin.yml / .plugin.json
@@ -728,6 +730,7 @@ def list_plugins():
                         "description": cfg.get("description", ""),
                         "skills_count": len(cfg.get("skills", [])),
                         "mcp_count": len(cfg.get("mcpServers", {})),
+                        "installed": cfg.get("name") in installed_names,
                     })
             except Exception:
                 continue
@@ -797,6 +800,91 @@ def delete_plugin():
         return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/plugin/uninstall", methods=["POST"])
+def uninstall_plugin_api():
+    """卸载插件：从清单移除 + 删除已安装 skill + generate + sync。
+    Body: { name: "plugin-name", ides: ["Codex", "Claude"] }
+    """
+    from lib.plugins import remove_from_installed
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "缺少 name 参数"}), 400
+    ides = body.get("ides") or []
+    allowed_ides = {"Agents", "Claude", "Codex", "Cursor", "IDEA", "OpenClaw",
+                    "OpenCode", "Qoder", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy", "All"}
+    safe_ides = [i for i in ides if i in allowed_ides]
+
+    # 1. 从已安装清单移除
+    try:
+        remove_from_installed(PROJECT_ROOT, name)
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"移除清单失败: {e}"}), 500
+
+    # 2. 删除 .agents/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
+    # 查找对应的 plugin.yaml
+    plugin_file = None
+    if PLUGINS_DIR.exists():
+        for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
+            for f in PLUGINS_DIR.glob(pat):
+                try:
+                    cfg = load_env_config_file(f)
+                    if isinstance(cfg, dict) and cfg.get("name") == name:
+                        plugin_file = f
+                        break
+                except Exception:
+                    continue
+            if plugin_file:
+                break
+
+    deleted_skills = []
+    if plugin_file:
+        try:
+            cfg = load_env_config_file(plugin_file)
+            skills_list = cfg.get("skills", []) or []
+            for s in skills_list:
+                skill_name = s.get("skill") or s.get("name") if isinstance(s, dict) else str(s)
+                if skill_name:
+                    skill_dir = DOT_AGENTS_SKILLS / skill_name
+                    if skill_dir.exists():
+                        import shutil
+                        shutil.rmtree(skill_dir, ignore_errors=True)
+                        deleted_skills.append(skill_name)
+        except Exception:
+            pass
+
+    # 3. generate 刷新 mcp.json（移除已卸载插件的 mcpServers）
+    try:
+        subprocess.run(
+            _script_run_cmd("agentctl", ["generate"]),
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+            encoding="utf-8", errors="ignore", timeout=60,
+        )
+    except Exception:
+        pass
+
+    # 4. sync 到选定 IDE
+    sync_logs = []
+    if safe_ides:
+        ide_list = safe_ides if "All" not in safe_ides else ["All"]
+        for ide_arg in ide_list:
+            try:
+                subprocess.run(
+                    _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force"]),
+                    cwd=str(PROJECT_ROOT), capture_output=True, text=True,
+                    encoding="utf-8", errors="ignore", timeout=120,
+                )
+            except Exception as e:
+                sync_logs.append(f"[ERROR] {ide_arg} sync: {e}")
+
+    return jsonify({
+        "ok": True,
+        "name": name,
+        "deleted_skills": deleted_skills,
+        "synced_ides": safe_ides,
+    })
 
 
 @app.route("/api/plugin/install", methods=["GET"])
@@ -879,27 +967,28 @@ def install_plugin_sse():
         except Exception as e:
             yield f"data: [ERROR] generate 失败: {e}\n\n"
 
-        # 自动 sync（按 target_ide 或所有 IDE）
-        ide_arg = target_ide if target_ide else "All"
-        yield f"data: [STEP] 同步到 IDE: {ide_arg}\n\n"
-        try:
-            result = subprocess.run(
-                _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force"]),
-                cwd=str(PROJECT_ROOT),
-                capture_output=True, text=True,
-                encoding="utf-8", errors="ignore",
-                timeout=120,
-            )
-            if result.returncode == 0:
-                # 提取关键输出行
-                for line in result.stdout.splitlines():
-                    if "[OK]" in line or "[DONE]" in line or "Synced" in line:
-                        yield f"data:   {line.strip()}\n\n"
-                yield f"data:   sync 完成\n\n"
-            else:
-                yield f"data: [WARN] sync 有警告: {result.stderr[-500:]}\n\n"
-        except Exception as e:
-            yield f"data: [ERROR] sync 失败: {e}\n\n"
+        # 自动 sync（按 target_ide 或所有 IDE；支持逗号分隔多 IDE）
+        ide_list = [i.strip() for i in target_ide.split(",") if i.strip()] if target_ide else ["All"]
+        for ide_arg in ide_list:
+            yield f"data: [STEP] 同步到 IDE: {ide_arg}\n\n"
+            try:
+                result = subprocess.run(
+                    _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force"]),
+                    cwd=str(PROJECT_ROOT),
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="ignore",
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    # 提取关键输出行
+                    for line in result.stdout.splitlines():
+                        if "[OK]" in line or "[DONE]" in line or "Synced" in line:
+                            yield f"data:   {line.strip()}\n\n"
+                    yield f"data:   {ide_arg} sync 完成\n\n"
+                else:
+                    yield f"data: [WARN] {ide_arg} sync 有警告: {result.stderr[-500:]}\n\n"
+            except Exception as e:
+                yield f"data: [ERROR] {ide_arg} sync 失败: {e}\n\n"
 
         yield "data: [DONE] 插件安装并同步完成\n\n"
 
