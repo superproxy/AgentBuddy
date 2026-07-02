@@ -545,7 +545,7 @@
       </div>
       <div class="bg-white rounded-xl shadow-card p-5">
         <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold">已安装技能 ({{ installedSkills.length }} · 选中 {{ selectedInstalledCount }})</h2>
+          <h2 class="text-sm font-semibold">本地可用技能 ({{ installedSkills.length }} · 选中 {{ selectedInstalledCount }})</h2>
           <div class="flex gap-2">
             <button @click="toggleAllInstalled(true)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全选</button>
             <button @click="toggleAllInstalled(false)" class="px-2 py-1.5 text-[11px] bg-ink-100 rounded hover:bg-ink-300">全不选</button>
@@ -568,7 +568,7 @@
             </div>
             <div class="text-[11px] text-ink-500 mt-0.5">{{ s.path }}</div>
           </div>
-          <div v-if="!installedSkills.length" class="col-span-2 text-center text-ink-500 py-6 text-xs">未安装任何技能</div>
+          <div v-if="!installedSkills.length" class="col-span-2 text-center text-ink-500 py-6 text-xs">暂无本地可用技能</div>
         </div>
       </div>
     </div>
@@ -942,12 +942,12 @@ createApp({
       const sr = await api('/api/plugin/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
       if (!sr.ok) { toast('保存失败', 'err'); return; }
       const safe = cfg.name.replace(/[^a-zA-Z0-9_-]/g, '');
-      await runSse('/api/plugin/install?file=' + encodeURIComponent(safe + '.plugin.yaml'), loadInstalledSkills);
+      await runSse('/api/plugin/install?file=' + encodeURIComponent(safe + '.plugin.yaml') + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
     }
     async function installPredefinedPlugin(file) {
-      // 一键安装预定义插件：直接调用 /api/plugin/install
+      // 一键安装预定义插件：直接调用 /api/plugin/install，按选定 IDE 同步
       if (!file) { toast('缺少插件文件', 'warn'); return; }
-      await runSse('/api/plugin/install?file=' + encodeURIComponent(file), loadInstalledSkills);
+      await runSse('/api/plugin/install?file=' + encodeURIComponent(file) + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
     }
     function togglePlugin(file) {
       const i = selectedPlugins.value.indexOf(file);
@@ -955,14 +955,14 @@ createApp({
       else selectedPlugins.value.push(file);
     }
     async function syncPluginToIde() {
-      // 按勾选的预定义插件批量安装：安装后自动 generate + sync 到所有 IDE
-      // 后端 /api/plugin/install 已内置注册清单 + generate + sync，无需前端再跳转
+      // 按勾选的预定义插件批量安装：安装后自动 generate + sync 到选定 IDE
+      // 后端 /api/plugin/install 已内置注册清单 + generate + sync
       if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
       const list = selectedPlugins.value.slice();
       if (!list.length) { toast('请先勾选要同步的预定义插件', 'warn'); return; }
       for (const file of list) {
-        toast(`安装并同步: ${file}`);
-        await runSse('/api/plugin/install?file=' + encodeURIComponent(file), loadInstalledSkills);
+        toast(`安装并同步到 ${pluginTargetIde.value}: ${file}`);
+        await runSse('/api/plugin/install?file=' + encodeURIComponent(file) + '&ide=' + encodeURIComponent(pluginTargetIde.value), loadInstalledSkills);
       }
     }
 
@@ -1218,7 +1218,7 @@ createApp({
       const ic = installedSkills.value.length;
       const plc = plugins.value.length;
       const mkc = Object.keys(mcpConfigData.mcp || {}).length;
-      return `LLM: <b>${ap}</b> | Providers: ${pc} | MCP模板: ${em}/${mc} | MCP密钥: ${mkc} | 已装 Skills: ${ic} | Plugins: ${plc}`;
+      return `LLM: <b>${ap}</b> | Providers: ${pc} | MCP模板: ${em}/${mc} | MCP密钥: ${mkc} | 本地 Skills: ${ic} | Plugins: ${plc}`;
     });
     const mcpEnabledCount = computed(() => Object.values(mcpTemplate.mcpServers || {}).filter(c => !(c.disabled === true || c.disabled === 'true')).length);
 

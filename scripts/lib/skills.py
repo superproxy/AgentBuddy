@@ -357,9 +357,12 @@ def parse_shorthand(source_str: str) -> tuple:
 
 
 def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
-    """构建安装命令，返回 (skill_name, install_command)。"""
+    """构建安装命令，返回 (skill_name, install_command)。
+
+    use_symlink 参数保留以兼容调用方，但不再生成 --copy/symlink 标志
+    （统一使用 npx skills add 默认行为）。
+    """
     skill_name = ""
-    copy_flag = "" if use_symlink else "--copy"
 
     if isinstance(skill_config, dict):
         explicit_skill = skill_config.get("skill", "")
@@ -368,7 +371,7 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
         url = skill_config.get("url", "")
 
         if url:
-            install_command = f"npx skills add {url} --skill {skill_name} {copy_flag} -y".strip()
+            install_command = f"npx skills add {url} --skill {skill_name} -y".strip()
         elif source:
             parsed_source, parsed_skill = parse_shorthand(source)
             if not explicit_skill and parsed_skill:
@@ -380,11 +383,11 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
                 effective_skill = explicit_skill
 
             if effective_skill:
-                install_command = f"npx skills add {effective_source} --skill {effective_skill} {copy_flag} -y".strip()
+                install_command = f"npx skills add {effective_source} --skill {effective_skill} -y".strip()
             else:
-                install_command = f"npx skills add {effective_source} {copy_flag} -y".strip()
+                install_command = f"npx skills add {effective_source} -y".strip()
         else:
-            install_command = f"npx skills add {skill_name} {copy_flag} -y".strip()
+            install_command = f"npx skills add {skill_name} -y".strip()
     elif isinstance(skill_config, str):
         if skill_config.startswith("npx"):
             install_command = skill_config
@@ -401,16 +404,16 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
             parsed_source, parsed_skill = parse_shorthand(skill_config)
             if parsed_source and parsed_skill:
                 skill_name = parsed_skill
-                install_command = f"npx skills add {parsed_source} --skill {parsed_skill} {copy_flag} -y".strip()
+                install_command = f"npx skills add {parsed_source} --skill {parsed_skill} -y".strip()
             elif parsed_source:
                 skill_name = parsed_source
-                install_command = f"npx skills add {parsed_source} {copy_flag} -y".strip()
+                install_command = f"npx skills add {parsed_source} -y".strip()
             else:
                 skill_name = parsed_skill
-                install_command = f"npx skills add {parsed_skill} {copy_flag} -y".strip()
+                install_command = f"npx skills add {parsed_skill} -y".strip()
     else:
         skill_name = str(skill_config)
-        install_command = f"npx skills add {skill_name} {copy_flag} -y".strip()
+        install_command = f"npx skills add {skill_name} -y".strip()
 
     install_command = re.sub(r'\s+', ' ', install_command).strip()
     return skill_name, install_command

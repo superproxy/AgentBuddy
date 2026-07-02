@@ -748,10 +748,11 @@ def delete_plugin():
 
 @app.route("/api/plugin/install", methods=["GET"])
 def install_plugin_sse():
-    """SSE: 流式安装插件。Query: file=xxx.plugin.yaml"""
+    """SSE: 流式安装插件。Query: file=xxx.plugin.yaml&ide=Codex"""
     fname = request.args.get("file", "").strip()
     if not fname:
         return Response("data: [ERROR] 缺少 file 参数\n\n", mimetype="text/event-stream")
+    target_ide = request.args.get("ide", "").strip()  # 空=所有 IDE
     plugin_path = (PLUGINS_DIR / fname).resolve()
     try:
         plugin_path.relative_to(PLUGINS_DIR.resolve())
@@ -825,11 +826,12 @@ def install_plugin_sse():
         except Exception as e:
             yield f"data: [ERROR] generate 失败: {e}\n\n"
 
-        # 自动 sync 到所有 IDE（同步 mcp + skill 到各 IDE + 全局）
-        yield f"data: [STEP] 同步到所有 IDE\n\n"
+        # 自动 sync（按 target_ide 或所有 IDE）
+        ide_arg = target_ide if target_ide else "All"
+        yield f"data: [STEP] 同步到 IDE: {ide_arg}\n\n"
         try:
             result = subprocess.run(
-                _script_run_cmd("agentctl", ["sync", "--ide", "All", "--force"]),
+                _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force"]),
                 cwd=str(PROJECT_ROOT),
                 capture_output=True, text=True,
                 encoding="utf-8", errors="ignore",

@@ -434,7 +434,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_ins.add_argument("--env-file", default="agents/llm/llm.yaml", help="环境变量文件（默认 agents/llm/llm.yaml）")
     p_ins.add_argument("--dry-run", action="store_true", help="模拟运行")
     p_ins.add_argument("--symlink", action="store_true",
-                       help="使用 symlink 安装 skill（默认 --copy）")
+                       help="已弃用（保留兼容性，不再生效）")
     p_ins.set_defaults(func=cmd_plugin_install)
 
     p_lst = p_plugin_sub.add_parser("list", help="列出可用插件")
