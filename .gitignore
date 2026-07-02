@@ -63,3 +63,10 @@ ide/codex/config.toml
 /.claude/skills/open-browser-use/
 /.claude/skills/open-browser-use/
 /proxy/config.yaml
+
+# npx skills add 全局安装的远程技能缓存（项目根 skills/，非 agents/skills）
+/skills/
+
+# PyInstaller 构建产物
+/build/
+

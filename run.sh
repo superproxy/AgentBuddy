@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# MyAgentPlugin 配置工具 Web UI 启动脚本 (Linux/macOS)
-# 用法: ./run.sh [port]
+# MyAgentPlugin 配置工具桌面启动器 (Linux/macOS, pywebview 优先)
+# 用法: ./run.sh [port] [--no-webview]
 
 set -e
 PORT="${1:-5000}"
@@ -19,7 +19,7 @@ else
     PY=python3
 fi
 
-# 检查依赖（缺失则提示安装）
+# 检查核心依赖（缺失则安装）
 if ! $PY -c "import flask, yaml, requests" >/dev/null 2>&1; then
     echo "[INFO] 缺少依赖，正在安装 flask pyyaml requests ..."
     $PY -m pip install flask pyyaml requests || {
@@ -28,5 +28,11 @@ if ! $PY -c "import flask, yaml, requests" >/dev/null 2>&1; then
     }
 fi
 
-echo "[INFO] 启动配置工具: http://127.0.0.1:${PORT}"
-exec $PY tools/config_server.py --port "$PORT"
+# 尝试安装 pywebview（缺失则安装，可选依赖）
+if ! $PY -c "import webview" >/dev/null 2>&1; then
+    echo "[INFO] 未安装 pywebview，正在安装（可选，用于桌面窗口）..."
+    $PY -m pip install pywebview || echo "[WARN] pywebview 安装失败，将回退到系统浏览器"
+fi
+
+echo "[INFO] 启动配置工具 (pywebview 优先): http://127.0.0.1:${PORT}"
+exec $PY app.py --port "$PORT" ${2:-} ${3:-} ${4:-}

@@ -20,8 +20,35 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def _resolve_project_root() -> Path:
+    """Frozen-aware 项目根定位。
+    - dev: 仓库根（tools/config_server.py 的上两级）
+    - frozen (PyInstaller onedir): exe 所在目录（_MEIPASS == exe dir，可写）
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent.parent
+
+
+PROJECT_ROOT = _resolve_project_root()
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+
+
+def _script_run_cmd(script_name: str, args: list) -> list:
+    """构建运行 scripts/ 下脚本的命令列表（frozen-aware）。
+    - dev: [python, scripts/<name>.py, *args]
+    - frozen: [exe, --run, <name>, *args]（由 app.py 的 --run 派发器执行）
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--run", script_name, *args]
+    return [sys.executable, str(SCRIPTS_DIR / f"{script_name}.py"), *args]
+
+
+def _script_run_shell_cmd(script_name: str, args: list) -> str:
+    """构建 shell 字符串形式的脚本运行命令（frozen-aware），用于 _stream_process。"""
+    parts = _script_run_cmd(script_name, args)
+    # 给含空格/特殊字符的路径加引号
+    return " ".join(f'"{p}"' if (" " in p or '"' in p) else p for p in parts)
 
 try:
     from flask import Flask, Response, jsonify, request, send_file, stream_with_context
@@ -785,7 +812,7 @@ def trigger_init_env():
     """触发 init-env.py -a Generate"""
     try:
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "init-env.py"), "-a", "Generate"],
+            _script_run_cmd("init-env", ["-a", "Generate"]),
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
@@ -814,7 +841,7 @@ def trigger_init_ide_sse():
     if not scopes:
         scopes = ["llm", "mcp", "skill", "plugin"]
     scope_arg = ",".join(scopes)
-    cmd = f'"{sys.executable}" "{SCRIPTS_DIR / "init-ide.py"}" --ide {ide} --force --scope {scope_arg}'
+    cmd = _script_run_shell_cmd("init-ide", ["--ide", ide, "--force", "--scope", scope_arg])
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
         mimetype="text/event-stream",
