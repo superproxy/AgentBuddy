@@ -955,20 +955,15 @@ createApp({
       else selectedPlugins.value.push(file);
     }
     async function syncPluginToIde() {
-      // 按勾选的预定义插件批量同步：逐个安装 + 统一同步到选定 IDE
+      // 按勾选的预定义插件批量安装：安装后自动 generate + sync 到所有 IDE
+      // 后端 /api/plugin/install 已内置注册清单 + generate + sync，无需前端再跳转
       if (syncing.value) { toast('正在同步中，请稍候', 'warn'); return; }
       const list = selectedPlugins.value.slice();
       if (!list.length) { toast('请先勾选要同步的预定义插件', 'warn'); return; }
-      // 1. 逐个安装勾选的插件（安装技能到 .agents/skills）
       for (const file of list) {
-        toast(`安装中: ${file}`);
+        toast(`安装并同步: ${file}`);
         await runSse('/api/plugin/install?file=' + encodeURIComponent(file), loadInstalledSkills);
       }
-      // 2. 同步到选定 IDE（插件涉及 rules+mcp+skill 三类）
-      toast(`同步到 ${pluginTargetIde.value}...`);
-      await runSync(pluginTargetIde.value, ['rules', 'mcp', 'skill']);
-      // 切换到 IDE 同步 tab 让用户看到日志
-      tab.value = 'ide';
     }
 
     // ===== MCP =====

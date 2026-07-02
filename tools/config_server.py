@@ -84,7 +84,7 @@ def _load_script_module(module_name: str, file_path: Path):
 sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
 from lib.skills import build_install_command, parse_shorthand
-from lib.plugins import install_plugin, update_env_file
+from lib.plugins import install_plugin, update_env_file, add_to_installed
 
 app = Flask(__name__, static_folder=None)
 
@@ -800,7 +800,53 @@ def install_plugin_sse():
         except Exception as e:
             yield f"data: [ERROR] 技能安装失败: {e}\n\n"
 
-        yield "data: [DONE] 插件安装完成\n\n"
+        # 注册到已安装清单（让 generate 合并该插件的 mcpServers）
+        yield f"data: [STEP] 注册到已安装清单\n\n"
+        try:
+            add_to_installed(PROJECT_ROOT, cfg.get("name", ""))
+            yield f"data:   已注册: {cfg.get('name', '')}\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] 注册失败: {e}\n\n"
+
+        # 自动 generate（刷新 mcp.json + .agents/ide/ 产物）
+        yield f"data: [STEP] 生成配置 (generate)\n\n"
+        try:
+            result = subprocess.run(
+                _script_run_cmd("agentctl", ["generate"]),
+                cwd=str(PROJECT_ROOT),
+                capture_output=True, text=True,
+                encoding="utf-8", errors="ignore",
+                timeout=60,
+            )
+            if result.returncode == 0:
+                yield f"data:   generate 完成\n\n"
+            else:
+                yield f"data: [WARN] generate 有警告: {result.stderr[-500:]}\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] generate 失败: {e}\n\n"
+
+        # 自动 sync 到所有 IDE（同步 mcp + skill 到各 IDE + 全局）
+        yield f"data: [STEP] 同步到所有 IDE\n\n"
+        try:
+            result = subprocess.run(
+                _script_run_cmd("agentctl", ["sync", "--ide", "All", "--force"]),
+                cwd=str(PROJECT_ROOT),
+                capture_output=True, text=True,
+                encoding="utf-8", errors="ignore",
+                timeout=120,
+            )
+            if result.returncode == 0:
+                # 提取关键输出行
+                for line in result.stdout.splitlines():
+                    if "[OK]" in line or "[DONE]" in line or "Synced" in line:
+                        yield f"data:   {line.strip()}\n\n"
+                yield f"data:   sync 完成\n\n"
+            else:
+                yield f"data: [WARN] sync 有警告: {result.stderr[-500:]}\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] sync 失败: {e}\n\n"
+
+        yield "data: [DONE] 插件安装并同步完成\n\n"
 
     return Response(stream_with_context(gen()), mimetype="text/event-stream")
 
