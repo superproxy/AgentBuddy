@@ -212,18 +212,6 @@
 
     <!-- ===================== 插件组装 ===================== -->
     <div v-show="tab === 'plugin'" class="space-y-3">
-      <!-- 同步到 IDE 工具条（插件一次性同步 rules+mcp+skill） -->
-      <div class="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
-        <span class="text-xs font-medium text-brand-700">同步插件配置到</span>
-        <select v-model="pluginTargetIde" class="px-2 py-1 text-xs border border-brand-300 rounded bg-white">
-          <option value="All">全部 IDE</option>
-          <option v-for="ide in ideList" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
-        </select>
-        <button @click="syncPluginToIde" :disabled="syncing" class="px-3 py-1 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-50">
-          {{ syncing ? '同步中...' : '同步到 IDE' }}
-        </button>
-        <span class="text-[10px] text-brand-600 ml-1">按勾选的预定义插件批量安装技能 + 同步 rules/mcp/skill 到 IDE</span>
-      </div>
       <!-- 预定义插件 -->
       <div class="bg-white rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-100">
@@ -259,7 +247,10 @@
           <div v-if="!plugins.length" class="col-span-4 text-center text-ink-500 text-xs py-6">暂无预定义插件</div>
         </div>
       </div>
+    </div>
 
+    <!-- ===================== 插件构建 ===================== -->
+    <div v-show="tab === 'plugin-build'" class="space-y-3">
       <div class="grid grid-cols-[40%_28%_32%] gap-3">
       <!-- 技能目录 -->
       <div class="bg-white rounded-xl shadow-card p-3 max-h-[75vh] overflow-y-auto">
@@ -551,57 +542,7 @@
       </div>
     </div>
 
-    <!-- ===================== IDE 同步 ===================== -->
-    <div v-show="tab === 'ide'" class="space-y-4">
-      <div class="bg-white rounded-xl shadow-card p-5">
-        <div class="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold flex items-center gap-2"><span class="w-1 h-4 bg-brand-500 rounded"></span>IDE 同步</h2>
-          <button @click="syncIde('All')" class="px-4 py-1.5 text-xs bg-brand-500 text-white rounded-md hover:bg-brand-600 font-medium">同步全部 IDE</button>
-        </div>
-        <p class="text-[11px] text-ink-500 mb-4 leading-relaxed">基于共享源 <code class="bg-ink-100 px-1 rounded">agents/</code>（rules + skills + mcp）+ <code class="bg-ink-100 px-1 rounded">llm.yaml</code> / <code class="bg-ink-100 px-1 rounded">mcp.yaml</code> 生成各 IDE 的运行态配置：rules 用 Junction 链接，MCP 按各 IDE 格式转换，LLM 配置从 llm.yaml 注入。</p>
-
-        <!-- 同步范围勾选 -->
-        <div class="mb-4 p-3 bg-gray-50 rounded-md">
-          <div class="text-xs font-semibold text-ink-700 mb-2">同步范围（勾选要同步的配置类型）</div>
-          <div class="flex flex-wrap gap-4">
-            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" v-model="syncScopes.llm" class="rounded text-brand-500">
-              <span>LLM 配置 <span class="text-ink-500">(llm.yaml → IDE settings)</span></span>
-            </label>
-            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" v-model="syncScopes.mcp" class="rounded text-brand-500">
-              <span>MCP 配置 <span class="text-ink-500">(mcp.yaml → mcp.json → IDE)</span></span>
-            </label>
-            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" v-model="syncScopes.skill" class="rounded text-brand-500">
-              <span>Skill 配置 <span class="text-ink-500">(agents/skills → IDE skills/)</span></span>
-            </label>
-            <label class="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" v-model="syncScopes.rules" class="rounded text-brand-500">
-              <span>Rules <span class="text-ink-500">(agents/rules → IDE rules/)</span></span>
-            </label>
-          </div>
-          <div class="text-[10px] text-ink-500 mt-1.5">提示：插件配置不在同步范围，请在「插件组装」tab 内单独同步</div>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2">
-          <div v-for="ide in ideList" :key="ide.key"
-               class="border border-ink-300 rounded-lg p-3 hover:border-brand-500 hover:shadow-sm transition cursor-pointer"
-               @click="syncIde(ide.key)">
-            <div class="flex justify-between items-center mb-1">
-              <div class="font-medium text-sm">{{ ide.label }}</div>
-              <span class="text-[10px] text-ink-500">{{ ide.key }}</span>
-            </div>
-            <div class="text-[11px] text-ink-500 mb-2">{{ ide.desc }}</div>
-            <button class="w-full px-2 py-1 text-[11px] bg-brand-50 text-brand-600 rounded hover:bg-brand-100">单独同步</button>
-          </div>
-        </div>
-      </div>
-      <div class="bg-white rounded-xl shadow-card p-5">
-        <h2 class="text-sm font-semibold mb-2">同步日志</h2>
-        <div class="log-panel bg-ink-900 text-gray-200 p-3 rounded-md text-xs max-h-[400px] overflow-y-auto whitespace-pre-wrap" ref="ideLogEl">{{ ideLog }}</div>
-      </div>
-    </div>
+    <!-- ===================== IDE 同步（已移除，使用顶部全局同步条） ===================== -->
   </main>
 
   <!-- 全局日志面板 -->
@@ -640,8 +581,8 @@ createApp({
       { key: 'env', label: 'LLM 配置' },
       { key: 'mcp', label: 'MCP 配置' },
       { key: 'skill', label: 'Skills 配置' },
-      { key: 'plugin', label: '插件组装' },
-      { key: 'ide', label: 'IDE 同步' },
+      { key: 'plugin', label: '插件配置' },
+      { key: 'plugin-build', label: '插件构建' },
     ];
     const envData = reactive({ llm: {}, mcp: {}, proxy: {} });
     const mcpConfigData = reactive({ mcp: {} });  // 新：mcp.yaml 独立文件
