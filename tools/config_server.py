@@ -989,16 +989,50 @@ def import_from_ide():
             continue
     merged_skills = [{"name": n, "sources": ss} for n, ss in skill_name_sources.items()]
 
+    # LLM 配置：从项目 llm.yaml 读取已配置的 provider（有 api_key 的算已配置）
+    llm_providers = []
+    try:
+        llm_path = PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
+        if llm_path.exists():
+            llm_data = load_env_config_file(llm_path)
+            if isinstance(llm_data, dict):
+                llm_section = llm_data.get("llm", {})
+                active = llm_section.get("_active_provider", "")
+                for prov_name, prov_cfg in llm_section.items():
+                    if prov_name.startswith("_") or not isinstance(prov_cfg, dict):
+                        continue
+                    # 每个 provider 下有 openai/anthropic 等协议
+                    for proto, proto_cfg in prov_cfg.items():
+                        if not isinstance(proto_cfg, dict):
+                            continue
+                        api_key = proto_cfg.get("api_key", "")
+                        base_url = proto_cfg.get("base_url", "")
+                        models = proto_cfg.get("models", {})
+                        model_names = list(models.keys()) if isinstance(models, dict) else []
+                        llm_providers.append({
+                            "provider": prov_name,
+                            "protocol": proto,
+                            "base_url": base_url,
+                            "has_key": bool(api_key),
+                            "active": prov_name == active,
+                            "models": model_names[:5],  # 最多展示5个
+                            "model_count": len(model_names),
+                        })
+    except Exception:
+        pass
+
     return jsonify({
         "ok": True,
         "mcpServers": merged_mcp,
         "mcp_sources": mcp_sources,
         "skills": merged_skills,
+        "llm_providers": llm_providers,
         "scanned_files": scanned_files,
         "scanned_dirs": scanned_dirs,
         "stats": {
             "mcp_count": len(merged_mcp),
             "skill_count": len(merged_skills),
+            "llm_count": len(llm_providers),
             "files_scanned": len(scanned_files),
             "dirs_scanned": len(scanned_dirs),
         }

@@ -254,7 +254,76 @@
 
     <!-- ===================== 插件构建 ===================== -->
     <div v-show="tab === 'plugin-build'" class="space-y-3">
-      <div class="grid grid-cols-[40%_28%_32%] gap-3">
+      <div class="grid grid-cols-[18%_28%_24%_30%] gap-3">
+      <!-- 左侧：从 IDE 导入 -->
+      <div class="bg-white rounded-xl shadow-card p-3 max-h-[75vh] overflow-y-auto">
+        <h3 class="text-xs font-semibold mb-2 pb-2 border-b border-gray-100">从 IDE 导入</h3>
+        <button @click="importFromIde" :disabled="importing"
+                class="w-full px-3 py-2 mb-3 text-xs font-medium text-white rounded-lg bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 shadow-sm">
+          {{ importing ? '扫描中...' : (ideImportStats ? '重新扫描' : '开始扫描 IDE') }}
+        </button>
+        <div v-if="ideImportStats" class="text-[10px] text-ink-500 mb-2">
+          扫描 {{ ideImportStats.files_scanned }} 文件 / {{ ideImportStats.dirs_scanned }} 目录
+        </div>
+        <div v-if="!ideImportStats" class="text-center text-ink-400 text-[11px] py-4">
+          点击上方按钮扫描本地所有 IDE 的 MCP、Skills、LLM 配置
+        </div>
+        <!-- LLM 配置（仅展示） -->
+        <div v-if="ideImport.llm_providers && ideImport.llm_providers.length">
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-[11px] font-semibold text-ink-700">LLM ({{ ideImport.llm_providers.length }})</h4>
+            <span class="text-[10px] text-ink-400">仅展示</span>
+          </div>
+          <div class="space-y-1 mb-3">
+            <div v-for="llm in ideImport.llm_providers" :key="llm.provider + llm.protocol"
+                 :class="['p-1.5 border rounded text-[11px]', llm.active ? 'border-green-400 bg-green-50/30' : 'border-ink-200']">
+              <div class="flex items-center gap-1">
+                <span class="font-medium">{{ llm.provider }}</span>
+                <span class="text-[9px] text-ink-500">{{ llm.protocol }}</span>
+                <span v-if="llm.active" class="text-[9px] text-green-600">active</span>
+                <span v-if="llm.has_key" class="text-[9px] text-green-600 ml-auto">✓ key</span>
+                <span v-else class="text-[9px] text-ink-400 ml-auto">无key</span>
+              </div>
+              <div class="text-[10px] text-ink-500 truncate">{{ llm.base_url }}</div>
+              <div class="text-[9px] text-ink-400">{{ llm.model_count }} 模型</div>
+            </div>
+          </div>
+        </div>
+        <!-- MCP（可勾选导入） -->
+        <div v-if="ideImport.mcpServers">
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-[11px] font-semibold text-ink-700">MCP ({{ ideImportStats.mcp_count }})</h4>
+            <button @click="importAllIdeMcp" class="text-[10px] text-brand-600 hover:underline">全选导入</button>
+          </div>
+          <div class="space-y-1 mb-3">
+            <label v-for="(cfg, name) in ideImport.mcpServers" :key="name"
+                   :class="['flex items-center gap-1 p-1 border rounded text-[11px] cursor-pointer', importedIdeMcp.includes(name) ? 'border-brand-400 bg-brand-50/30' : 'border-ink-200 hover:border-brand-300']">
+              <input type="checkbox" :value="name" v-model="importedIdeMcp" class="w-3 h-3 accent-brand-500">
+              <span class="truncate flex-1">{{ name }}</span>
+            </label>
+          </div>
+          <button v-if="importedIdeMcp.length" @click="applyImportedMcp" class="w-full px-2 py-1 text-[11px] bg-brand-500 text-white rounded hover:bg-brand-600 mb-2">
+            导入 {{ importedIdeMcp.length }} 个 MCP →
+          </button>
+        </div>
+        <!-- Skills（可勾选导入） -->
+        <div v-if="ideImport.skills">
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-[11px] font-semibold text-ink-700">Skills ({{ ideImportStats.skill_count }})</h4>
+            <button @click="importAllIdeSkills" class="text-[10px] text-brand-600 hover:underline">全选导入</button>
+          </div>
+          <div class="space-y-1">
+            <label v-for="s in ideImport.skills" :key="s.name"
+                   :class="['flex items-center gap-1 p-1 border rounded text-[11px] cursor-pointer', importedIdeSkills.includes(s.name) ? 'border-brand-400 bg-brand-50/30' : 'border-ink-200 hover:border-brand-300']">
+              <input type="checkbox" :value="s.name" v-model="importedIdeSkills" class="w-3 h-3 accent-brand-500">
+              <span class="truncate flex-1" :title="s.sources && s.sources.join(', ')">{{ s.name }}</span>
+            </label>
+          </div>
+          <button v-if="importedIdeSkills.length" @click="applyImportedSkills" class="w-full px-2 py-1 text-[11px] bg-brand-500 text-white rounded hover:bg-brand-600 mt-2">
+            导入 {{ importedIdeSkills.length }} 个 Skill →
+          </button>
+        </div>
+      </div>
       <!-- 技能目录 -->
       <div class="bg-white rounded-xl shadow-card p-3 max-h-[75vh] overflow-y-auto">
         <h3 class="text-xs font-semibold mb-2 pb-2 border-b border-gray-100">技能目录</h3>
@@ -301,12 +370,7 @@
       </div>
       <!-- 插件定义 -->
       <div class="bg-white rounded-xl shadow-card p-3 max-h-[75vh] overflow-y-auto">
-        <div class="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
-          <h3 class="text-xs font-semibold">插件定义</h3>
-          <button @click="importFromIde" :disabled="importing" class="text-[11px] text-brand-600 hover:underline disabled:opacity-50">
-            {{ importing ? '导入中...' : '从 IDE 导入' }}
-          </button>
-        </div>
+        <h3 class="text-xs font-semibold mb-2 pb-2 border-b border-gray-100">插件定义</h3>
         <div class="flex gap-1.5 mb-3">
           <select v-model="selectedPluginFile" class="flex-1 px-2 py-1 text-[11px] border border-ink-300 rounded">
             <option value="">-- 加载已有插件 --</option>
@@ -603,6 +667,10 @@ createApp({
     const selectedPluginFile = ref('');
     const installingPlugin = ref('');  // 正在安装的插件名
     const importing = ref(false);  // 从 IDE 导入中
+    const ideImport = ref({});  // IDE 导入扫描结果
+    const ideImportStats = ref(null);  // IDE 导入统计
+    const importedIdeMcp = ref([]);  // 导入栏勾选的 MCP
+    const importedIdeSkills = ref([]);  // 导入栏勾选的 Skills
     const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'MyAgentPlugin' });
 
     const mcpTab = ref('market');  // MCP 添加方式子 tab：market / manual
@@ -953,43 +1021,55 @@ createApp({
       }
     }
 
-    // ===== 从 IDE 导入（扫描本地所有 IDE 的 MCP + skills，填入插件构建表单）=====
+    // ===== 从 IDE 导入（扫描本地所有 IDE 的 MCP + skills + LLM，左侧栏展示）=====
     async function importFromIde() {
       if (importing.value) return;
       importing.value = true;
       try {
         const r = await api('/api/plugin/import-from-ide');
-        if (!r.ok) { toast('导入失败: ' + (r.error || '未知错误'), 'err'); return; }
-        const stats = r.stats || {};
-        // 1. MCP: 合并到 mcpTemplate.mcpServers，并全选
-        const existing = mcpTemplate.value.mcpServers || {};
-        let newMcpCount = 0;
-        for (const [name, cfg] of Object.entries(r.mcpServers || {})) {
-          if (!(name in existing)) {
-            existing[name] = cfg;
-            newMcpCount++;
-          }
-        }
-        mcpTemplate.value.mcpServers = existing;
-        // 全选所有 MCP（包括导入的）
-        selectedMcp.value = Object.keys(existing);
-        // 2. Skills: 合并到 selectedSkills
-        const skillSet = new Set(selectedSkills.value);
-        let newSkillCount = 0;
-        for (const s of (r.skills || [])) {
-          if (!skillSet.has(s.name)) {
-            skillSet.add(s.name);
-            newSkillCount++;
-          }
-        }
-        selectedSkills.value = Array.from(skillSet);
-        // 3. 提示
-        toast(`已导入 ${stats.mcp_count || 0} 个 MCP（新增 ${newMcpCount}）、${stats.skill_count || 0} 个 skill（新增 ${newSkillCount}），扫描 ${stats.files_scanned || 0} 文件/${stats.dirs_scanned || 0} 目录`);
+        if (!r.ok) { toast('扫描失败: ' + (r.error || '未知错误'), 'err'); return; }
+        ideImport.value = r;
+        ideImportStats.value = r.stats || {};
+        importedIdeMcp.value = [];
+        importedIdeSkills.value = [];
+        toast(`扫描完成: ${ideImportStats.value.mcp_count || 0} MCP、${ideImportStats.value.skill_count || 0} skill、${ideImportStats.value.llm_count || 0} LLM`);
       } catch (e) {
-        toast('导入失败: ' + e.message, 'err');
+        toast('扫描失败: ' + e.message, 'err');
       } finally {
         importing.value = false;
       }
+    }
+    function importAllIdeMcp() {
+      const all = Object.keys(ideImport.value.mcpServers || {});
+      importedIdeMcp.value = importedIdeMcp.value.length === all.length ? [] : all;
+    }
+    function importAllIdeSkills() {
+      const all = (ideImport.value.skills || []).map(s => s.name);
+      importedIdeSkills.value = importedIdeSkills.value.length === all.length ? [] : all;
+    }
+    function applyImportedMcp() {
+      const existing = mcpTemplate.value.mcpServers || {};
+      const ideMcp = ideImport.value.mcpServers || {};
+      let added = 0;
+      for (const name of importedIdeMcp.value) {
+        if (!(name in existing)) {
+          existing[name] = ideMcp[name];
+          added++;
+        }
+      }
+      mcpTemplate.value.mcpServers = existing;
+      // 全选所有 MCP
+      selectedMcp.value = Object.keys(existing);
+      toast(`已导入 ${importedIdeMcp.value.length} 个 MCP（新增 ${added}）`);
+    }
+    function applyImportedSkills() {
+      const set = new Set(selectedSkills.value);
+      let added = 0;
+      for (const name of importedIdeSkills.value) {
+        if (!set.has(name)) { set.add(name); added++; }
+      }
+      selectedSkills.value = Array.from(set);
+      toast(`已导入 ${importedIdeSkills.value.length} 个 Skill（新增 ${added}）`);
     }
 
     // ===== MCP =====
@@ -1366,6 +1446,8 @@ createApp({
       toggleSkill, toggleMcp, refreshPluginList, loadExistingPlugin, deleteExistingPlugin,
       newPlugin, previewPlugin, savePluginFile, installPluginFile,
       onTogglePlugin, installingPlugin, importing, importFromIde,
+      ideImport, ideImportStats, importedIdeMcp, importedIdeSkills,
+      importAllIdeMcp, importAllIdeSkills, applyImportedMcp, applyImportedSkills,
       searchMcpMarket, getMcpDetail, addMarketMcpToTemplate,
       toggleMcpDisabled, deleteMcpEntry, saveMcpTemplate, generateMcpRuntime,
       parsePastedMcp, addManualMcp, toggleAllMcp, saveMcpAll, syncMcpFull,
