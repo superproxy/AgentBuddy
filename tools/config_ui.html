@@ -638,8 +638,8 @@ createApp({
     const syncTargetIdes = ref(['Codex']);
     // 当前是否正在同步
     const syncing = ref(false);
-    // 自动同步开关：默认开启，配置变更 debounce 自动保存+同步
-    const autoSync = ref(true);
+    // 自动同步开关：默认关闭，配置变更 debounce 自动保存+同步
+    const autoSync = ref(false);
     let _autoSyncTimer = null;
     let _isLoading = true; // 加载阶段不触发自动同步
 
