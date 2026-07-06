@@ -729,7 +729,137 @@
     </div>
 
     <!-- ===================== IDE 同步（已移除，使用顶部全局同步条） ===================== -->
+
+    <!-- ===================== IDE 管理 tab ===================== -->
+    <div v-show="tab === 'ide'" class="space-y-4">
+      <!-- 顶部统计 + 刷新按钮 -->
+      <div class="bg-white rounded-xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold flex items-center gap-2">
+            <span class="w-1 h-4 bg-brand-500 rounded"></span>IDE 检测与会话管理
+            <span class="text-[10px] text-ink-500 font-normal">detect + launch + sessions</span>
+          </h2>
+          <button @click="loadIdeDetect" :disabled="ideDetecting"
+                  class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium disabled:opacity-40">
+            {{ ideDetecting ? '检测中...' : '重新检测' }}
+          </button>
+        </div>
+        <div class="flex gap-4 text-xs text-ink-600">
+          <span>总计: <b class="text-ink-900">{{ ideDetectStats.total }}</b></span>
+          <span class="text-green-600">已安装: <b>{{ ideDetectStats.installed }}</b></span>
+          <span class="text-ink-400">未安装: <b>{{ ideDetectStats.not_installed }}</b></span>
+        </div>
+      </div>
+
+      <!-- IDE 卡片列表 -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div v-for="ide in ideDetects" :key="ide.key"
+             class="border rounded-lg overflow-hidden transition"
+             :class="ide.installed ? 'border-ink-300 hover:border-brand-500 bg-white' : 'border-ink-200 bg-ink-100/50 opacity-60'">
+          <!-- Header -->
+          <div class="px-3 py-2 flex items-center justify-between"
+               :class="ide.installed ? 'bg-ink-100' : 'bg-ink-200/50'">
+            <div class="flex items-center gap-2">
+              <span class="font-medium text-sm">{{ ide.label }}</span>
+              <span v-if="ide.installed" class="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded">installed</span>
+              <span v-else class="px-1.5 py-0.5 text-[10px] bg-ink-200 text-ink-500 rounded">未安装</span>
+              <span v-if="ide.mode === 'cli' || ide.exe_path" class="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded">CLI</span>
+              <span v-if="ide.app_path" class="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded">App</span>
+            </div>
+            <div class="flex gap-1" v-if="ide.installed">
+              <button @click="toggleIdeSessions(ide.key)"
+                      v-if="ide.sessions_dir"
+                      :disabled="ideLoadingSessions === ide.key"
+                      class="px-2 py-1 text-[11px] text-ink-600 hover:bg-ink-200 rounded disabled:opacity-40">
+                {{ ideLoadingSessions === ide.key ? '加载中...' : (expandedIde === ide.key ? '收起' : '会话') }}
+                <span v-if="ideSessionsStatsMap[ide.key]" class="text-[10px] text-ink-400">({{ ideSessionsStatsMap[ide.key].total }})</span>
+              </button>
+              <button @click="launchIde(ide.key)"
+                      :disabled="ideLaunching === ide.key || ideResuming !== ''"
+                      class="px-2 py-1 text-[11px] text-brand-600 hover:bg-brand-50 rounded disabled:opacity-40">
+                {{ ideLaunching === ide.key ? '启动中...' : '打开' }}
+              </button>
+            </div>
+          </div>
+          <!-- 详情 -->
+          <div class="p-3 text-xs space-y-1">
+            <div v-if="ide.version" class="text-ink-600 truncate"><span class="text-ink-400">版本:</span> {{ ide.version }}</div>
+            <div v-if="ide.exe_path" class="text-ink-600 truncate"><span class="text-ink-400">CLI:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.exe_path }}</code></div>
+            <div v-if="ide.app_path" class="text-ink-600 truncate"><span class="text-ink-400">App:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.app_path }}</code></div>
+            <div v-if="ide.sessions_dir" class="text-ink-600 truncate"><span class="text-ink-400">会话:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.sessions_dir }}</code></div>
+            <div v-if="ide.config_paths.length" class="text-ink-600 truncate"><span class="text-ink-400">配置:</span> {{ ide.config_paths.join(', ') }}</div>
+            <div v-if="!ide.installed" class="text-ink-400 italic">未检测到安装路径</div>
+          </div>
+          <!-- 会话列表（展开时） -->
+          <div v-if="expandedIde === ide.key && ideSessionsMap[ide.key]"
+               class="border-t border-ink-200 bg-ink-50/50">
+            <div v-if="ideSessionsMap[ide.key].length === 0" class="p-3 text-xs text-ink-400 italic">暂无会话</div>
+            <div v-else class="max-h-[300px] overflow-y-auto divide-y divide-ink-200">
+              <div v-for="s in ideSessionsMap[ide.key]" :key="s.id"
+                   class="px-3 py-2 hover:bg-white transition">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-xs font-medium truncate">{{ s.title || s.id.slice(0, 8) }}</div>
+                    <div class="text-[10px] text-ink-400 truncate">
+                      {{ s.id.slice(0, 12) }} · {{ s.messages_count }} 条 · {{ s.size_bytes }} bytes
+                    </div>
+                    <div v-if="s.cwd" class="text-[10px] text-ink-400 truncate"><code>{{ s.cwd }}</code></div>
+                    <div class="text-[10px] text-ink-400">{{ s.updated_at }}</div>
+                  </div>
+                  <div class="flex flex-col gap-1 shrink-0">
+                    <button @click="launchIde(ide.key, s)"
+                            :disabled="ideResuming === (ide.key + ':' + s.id) || ideLaunching !== ''"
+                            class="px-2 py-1 text-[10px] text-green-600 hover:bg-green-50 rounded disabled:opacity-40">
+                      {{ ideResuming === (ide.key + ':' + s.id) ? '恢复中...' : '继续' }}
+                    </button>
+                    <button @click="exportSession(ide.key, s)"
+                            :disabled="exportingSession === s.id"
+                            class="px-2 py-1 text-[10px] text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40">
+                      {{ exportingSession === s.id ? '导出中...' : '导出' }}
+                    </button>
+                    <button @click="openShareModal(ide.key, s)"
+                            class="px-2 py-1 text-[10px] text-purple-600 hover:bg-purple-50 rounded">
+                      共享
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
+
+  <!-- 共享会话 Modal -->
+  <div v-if="shareModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="shareModalOpen = false">
+    <div class="bg-white rounded-lg p-5 w-[500px] max-w-[90vw]">
+      <h3 class="text-sm font-semibold mb-3">共享会话到其他 IDE</h3>
+      <div v-if="shareModalSession" class="text-xs space-y-2 mb-3">
+        <div><span class="text-ink-400">源 IDE:</span> {{ shareModalSession._source_ide }}</div>
+        <div><span class="text-ink-400">会话:</span> {{ shareModalSession.title || shareModalSession.id.slice(0, 12) }}</div>
+        <div><span class="text-ink-400">消息数:</span> {{ shareModalSession.messages_count }}</div>
+      </div>
+      <div class="mb-3">
+        <label class="text-xs text-ink-500 block mb-1">选择目标 IDE</label>
+        <select v-model="shareTargetIde" class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-md">
+          <option value="">-- 选择 --</option>
+          <option v-for="ide in shareTargetIdes" :key="ide.key" :value="ide.key">{{ ide.label }}</option>
+        </select>
+        <div v-if="shareTargetIdes.length === 0" class="text-[10px] text-orange-500 mt-1">无可用目标 IDE（需已安装且有会话目录）</div>
+      </div>
+      <div class="text-[10px] text-ink-400 mb-3">
+        共享策略：将会话导出为 markdown 摘要文件，写入目标 IDE 的 sessions/imported/ 目录，可在新会话中作为上下文引用。
+      </div>
+      <div class="text-right">
+        <button @click="shareModalOpen = false" class="px-3 py-1.5 text-xs bg-ink-100 rounded hover:bg-ink-300 mr-2">取消</button>
+        <button @click="importSession" :disabled="!shareTargetIde || shareImporting"
+                class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded hover:bg-brand-600 disabled:opacity-40">
+          {{ shareImporting ? '共享中...' : '确认共享' }}
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- 全局日志面板 -->
   <div v-if="logVisible" class="fixed bottom-4 right-4 w-[600px] max-w-[90vw] bg-ink-900 text-gray-200 rounded-lg shadow-2xl z-40">
@@ -769,6 +899,7 @@ createApp({
       { key: 'skill', label: 'Skills 配置' },
       { key: 'plugin', label: '插件配置' },
       { key: 'plugin-build', label: '插件构建' },
+      { key: 'ide', label: 'IDE 管理' },
     ];
     const envData = reactive({ llm: {}, mcp: {}, proxy: {} });
     const mcpConfigData = reactive({ mcp: {} });  // 新：mcp.yaml 独立文件
@@ -1648,14 +1779,140 @@ createApp({
       try { localStorage.setItem(IDE_AUTOSYNC_KEY, v ? '1' : '0'); } catch (e) {}
     });
 
+    // ===== IDE 管理状态 =====
+    const ideDetects = ref([]);          // /api/ide/detect 结果
+    const ideDetectStats = ref({ total: 0, installed: 0, not_installed: 0 });
+    const ideDetecting = ref(false);
+    const ideSessionsMap = reactive({});  // {ide_key: [session, ...]}
+    const ideSessionsStatsMap = reactive({});  // {ide_key: {total, truncated}}
+    const ideLoadingSessions = ref('');   // 正在加载会话的 IDE key
+    const ideLaunching = ref('');         // 正在启动的 IDE key
+    const ideResuming = ref('');          // 正在恢复会话的 id
+    const expandedIde = ref('');          // 当前展开会话列表的 IDE key
+    // 共享会话：导出/导入
+    const exportingSession = ref('');     // 正在导出的 session id
+    const shareModalOpen = ref(false);
+    const shareModalSession = ref(null);  // 待共享的会话对象
+    const shareTargetIde = ref('');       // 共享目标 IDE
+    const shareImporting = ref(false);
+
+    async function loadIdeDetect() {
+      if (ideDetecting.value) return;
+      ideDetecting.value = true;
+      try {
+        const r = await api('/api/ide/detect');
+        if (!r.ok) { toast('IDE 检测失败: ' + (r.error || ''), 'err'); return; }
+        ideDetects.value = r.ides || [];
+        ideDetectStats.value = r.stats || {};
+        toast(`检测完成: ${ideDetectStats.value.installed}/${ideDetectStats.value.total} 已安装`, 'ok');
+      } finally { ideDetecting.value = false; }
+    }
+
+    async function loadIdeSessions(ideKey) {
+      if (ideLoadingSessions.value) return;
+      ideLoadingSessions.value = ideKey;
+      try {
+        const r = await api(`/api/ide/sessions?ide=${encodeURIComponent(ideKey)}&limit=50`);
+        if (!r.ok) { toast(`加载 ${ideKey} 会话失败: ` + (r.error || ''), 'err'); return; }
+        ideSessionsMap[ideKey] = r.sessions || [];
+        ideSessionsStatsMap[ideKey] = r.stats || {};
+      } finally { ideLoadingSessions.value = ''; }
+    }
+
+    function toggleIdeSessions(ideKey) {
+      if (expandedIde.value === ideKey) {
+        expandedIde.value = '';
+      } else {
+        expandedIde.value = ideKey;
+        if (!ideSessionsMap[ideKey]) loadIdeSessions(ideKey);
+      }
+    }
+
+    async function launchIde(ideKey, session = null) {
+      const key = session ? `${ideKey}:${session.id}` : ideKey;
+      if (ideLaunching.value || ideResuming.value) return;
+      if (session) ideResuming.value = key; else ideLaunching.value = ideKey;
+      try {
+        const body = session
+          ? { ide: ideKey, session_id: session.id, cwd: session.cwd || '' }
+          : { ide: ideKey };
+        const r = await api('/api/ide/launch', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          toast(`${session ? '恢复会话' : '启动'} ${ideKey} 失败: ` + (r.error || ''), 'err');
+          return;
+        }
+        const mode = r.mode === 'cli' ? 'CLI' : (r.mode === 'app' ? 'App' : '');
+        toast(`${session ? '恢复会话' : '启动'} ${ideKey} ${mode} (pid=${r.pid})`, 'ok');
+      } finally {
+        ideLaunching.value = '';
+        ideResuming.value = '';
+      }
+    }
+
+    async function exportSession(ideKey, session) {
+      if (exportingSession.value) return;
+      exportingSession.value = session.id;
+      try {
+        const r = await api(`/api/ide/session/export?ide=${encodeURIComponent(ideKey)}&session_id=${encodeURIComponent(session.id)}`);
+        if (!r.ok) { toast('导出会话失败: ' + (r.error || ''), 'err'); return; }
+        // 触发下载
+        const blob = new Blob([JSON.stringify(r.session, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = r.download_filename || `session-${ideKey}-${session.id.slice(0,8)}.json`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast(`已导出 ${r.session.messages_count || 0} 条消息`, 'ok');
+      } finally { exportingSession.value = ''; }
+    }
+
+    function openShareModal(ideKey, session) {
+      shareModalSession.value = { ...session, _source_ide: ideKey };
+      shareTargetIde.value = '';
+      shareModalOpen.value = true;
+    }
+
+    async function importSession() {
+      if (!shareModalSession.value || !shareTargetIde.value) {
+        toast('请选择目标 IDE', 'warn'); return;
+      }
+      if (shareImporting.value) return;
+      shareImporting.value = true;
+      try {
+        // 先导出（拿到完整 session data）
+        const sourceIde = shareModalSession.value._source_ide;
+        const sid = shareModalSession.value.id;
+        const exp = await api(`/api/ide/session/export?ide=${encodeURIComponent(sourceIde)}&session_id=${encodeURIComponent(sid)}`);
+        if (!exp.ok) { toast('导出失败: ' + (exp.error || ''), 'err'); return; }
+        // 再导入到目标 IDE
+        const r = await api('/api/ide/session/import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session: exp.session, target_ide: shareTargetIde.value }),
+        });
+        if (!r.ok) { toast('共享失败: ' + (r.error || ''), 'err'); return; }
+        toast(`已共享 ${r.messages_count} 条消息到 ${shareTargetIde.value}`, 'ok');
+        shareModalOpen.value = false;
+      } finally { shareImporting.value = false; }
+    }
+
+    // 共享目标 IDE 列表（排除源 IDE）
+    const shareTargetIdes = computed(() => {
+      const source = shareModalSession.value?._source_ide;
+      return ideDetects.value.filter(i => i.installed && i.sessions_dir && i.key !== source);
+    });
+
     onMounted(async () => {
-      const [llmR, mcpCfgR, skillsR, mcpR, installedR, pluginsR] = await Promise.all([
+      const [llmR, mcpCfgR, skillsR, mcpR, installedR, pluginsR, ideR] = await Promise.all([
         api('/api/llm').catch(e => ({ ok: false })),
         api('/api/mcp-config').catch(e => ({ ok: false })),
         api('/api/skills/local').catch(e => ({ ok: false })),
         api('/api/mcp/list').catch(e => ({ ok: false })),
         api('/api/skills/installed').catch(e => ({ ok: false })),
         api('/api/plugins').catch(e => ({ ok: false })),
+        api('/api/ide/detect').catch(e => ({ ok: false })),
       ]);
       if (llmR.ok) {
         Object.assign(envData, llmR.data);
@@ -1671,6 +1928,10 @@ createApp({
       if (mcpR.ok) Object.assign(mcpTemplate, mcpR.data);
       if (installedR.ok) installedSkills.value = installedR.data || [];
       if (pluginsR.ok) plugins.value = pluginsR.data || [];
+      if (ideR.ok) {
+        ideDetects.value = ideR.ides || [];
+        ideDetectStats.value = ideR.stats || {};
+      }
       // 加载完成，启用自动同步监听
       _isLoading = false;
     });
@@ -1706,6 +1967,13 @@ createApp({
       searchSkills, installFromSearch, installManualSkill,
       viewSkillMd, uninstallSkill, syncToIde, syncIde, syncScopeToIde,
       toggleAllInstalled,
+      // IDE 管理
+      ideDetects, ideDetectStats, ideDetecting, ideSessionsMap, ideSessionsStatsMap,
+      ideLoadingSessions, ideLaunching, ideResuming, expandedIde,
+      exportingSession, shareModalOpen, shareModalSession, shareTargetIde, shareImporting,
+      shareTargetIdes,
+      loadIdeDetect, loadIdeSessions, toggleIdeSessions, launchIde,
+      exportSession, openShareModal, importSession,
     };
   }
 }).mount('#app');

@@ -85,6 +85,9 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
 from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills
 from lib.plugins import install_plugin, update_env_file, add_to_installed
+from lib.ide.detect import detect_ide, detect_all
+from lib.ide.session import list_sessions, export_session, import_session_to_ide
+from lib.ide.launch import launch_ide, launch_ide_resume_session
 
 app = Flask(__name__, static_folder=None)
 
@@ -1407,6 +1410,153 @@ def start_proxy_sse():
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
         mimetype="text/event-stream",
     )
+
+
+# ============================================================
+# IDE 管理 API：检测 / 启动 / 会话扫描 / 会话恢复 / 会话共享
+# ============================================================
+
+@app.route("/api/ide/detect", methods=["GET"])
+def api_ide_detect():
+    """检测所有 IDE 安装状态。
+
+    Returns:
+        {ok, ides: [{key, label, installed, exe_path, app_path, version, config_paths, sessions_dir}], stats}
+    """
+    try:
+        ides = detect_all()
+        installed_count = sum(1 for i in ides if i["installed"])
+        return jsonify({
+            "ok": True,
+            "ides": ides,
+            "stats": {
+                "total": len(ides),
+                "installed": installed_count,
+                "not_installed": len(ides) - installed_count,
+            },
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/sessions", methods=["GET"])
+def api_ide_sessions():
+    """列出指定 IDE 的会话。
+
+    Query: ide=<IDE key>&limit=<N, 默认 50>
+    """
+    ide_key = request.args.get("ide", "").strip()
+    if not ide_key:
+        return jsonify({"ok": False, "error": "missing ide parameter"}), 400
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except ValueError:
+        limit = 50
+    try:
+        info = detect_ide(ide_key)
+        if not info["installed"]:
+            return jsonify({"ok": False, "error": f"IDE {ide_key} not installed"}), 404
+        sessions_dir = info.get("sessions_dir", "")
+        if not sessions_dir:
+            return jsonify({"ok": True, "sessions": [], "ide": ide_key, "sessions_dir": "",
+                            "stats": {"total": 0}})
+        sessions = list_sessions(ide_key, sessions_dir)
+        # 应用 limit
+        truncated = len(sessions) > limit
+        sessions = sessions[:limit]
+        return jsonify({
+            "ok": True,
+            "ide": ide_key,
+            "sessions_dir": sessions_dir,
+            "sessions": sessions,
+            "stats": {
+                "total": len(sessions),
+                "truncated": truncated,
+            },
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/launch", methods=["POST"])
+def api_ide_launch():
+    """启动 IDE。
+
+    Body: {ide: <IDE key>, cwd?: <工作目录>, session_id?: <会话 ID>}
+    """
+    body = request.get_json(silent=True) or {}
+    ide_key = (body.get("ide") or "").strip()
+    if not ide_key:
+        return jsonify({"ok": False, "error": "missing ide"}), 400
+    cwd = (body.get("cwd") or "").strip()
+    session_id = (body.get("session_id") or "").strip()
+    try:
+        if session_id:
+            result = launch_ide_resume_session(ide_key, session_id, cwd)
+        else:
+            result = launch_ide(ide_key, cwd)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/session/export", methods=["GET"])
+def api_ide_session_export():
+    """导出会话为通用 JSON 格式（用于跨 IDE 共享）。
+
+    Query: ide=<IDE key>&session_id=<会话 ID>
+    """
+    ide_key = request.args.get("ide", "").strip()
+    session_id = request.args.get("session_id", "").strip()
+    if not ide_key or not session_id:
+        return jsonify({"ok": False, "error": "missing ide or session_id"}), 400
+    try:
+        info = detect_ide(ide_key)
+        if not info["installed"]:
+            return jsonify({"ok": False, "error": f"IDE {ide_key} not installed"}), 404
+        sessions = list_sessions(ide_key, info.get("sessions_dir", ""))
+        target = next((s for s in sessions if s["id"] == session_id), None)
+        if not target:
+            return jsonify({"ok": False, "error": "session not found"}), 404
+        exported = export_session(target)
+        return jsonify({
+            "ok": True,
+            "session": exported,
+            "download_filename": f"session-{ide_key}-{session_id[:8]}.json",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/session/import", methods=["POST"])
+def api_ide_session_import():
+    """将通用会话格式导入到目标 IDE（写为 markdown 摘要）。
+
+    Body: {session: <exported session dict>, target_ide: <IDE key>}
+    """
+    body = request.get_json(silent=True) or {}
+    session_data = body.get("session")
+    target_ide = (body.get("target_ide") or "").strip()
+    if not session_data or not target_ide:
+        return jsonify({"ok": False, "error": "missing session or target_ide"}), 400
+    try:
+        info = detect_ide(target_ide)
+        if not info["installed"]:
+            return jsonify({"ok": False, "error": f"IDE {target_ide} not installed"}), 404
+        # 写入目标 IDE 的 sessions 目录下的 imported 子目录
+        sessions_dir = info.get("sessions_dir", "")
+        if not sessions_dir:
+            return jsonify({"ok": False, "error": f"IDE {target_ide} has no sessions_dir"}), 400
+        target_dir = Path(sessions_dir) / "imported"
+        out_file = import_session_to_ide(session_data, target_ide, str(target_dir))
+        return jsonify({
+            "ok": True,
+            "file": out_file,
+            "target_ide": target_ide,
+            "messages_count": len(session_data.get("messages", [])),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ============================================================
