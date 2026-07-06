@@ -1,0 +1,41 @@
+name: standard-dev
+type: triage-route
+description: 日常开发工作流 — triage → route → implement → review → fix → deploy → retro
+
+steps:
+  - id: triage
+    role: orchestrator
+    skill: null
+    action: "识别工作类型，判定路由目标角色"
+    output: "工作类型 + 路由角色"
+  - id: route
+    role: orchestrator
+    skill: writing-plans
+    action: "分解任务，输出 WBS，交接给 executor"
+    output: "WBS 任务清单"
+  - id: implement
+    role: executor
+    skill: subagent-driven-development
+    action: "TDD 红绿重构实施"
+    output: "代码 + 测试报告"
+  - id: review
+    role: reviewer
+    skill: requesting-code-review
+    action: "多维度审查（≥4/5），DoD 验收"
+    output: "评审报告 + DoD 信号"
+  - id: fix
+    role: executor
+    skill: receiving-code-review
+    action: "按评审报告修复，回归测试"
+    output: "修复后的代码"
+    condition: "review.DoD == false"
+  - id: deploy
+    role: devops
+    skill: null
+    action: "演进式部署，回滚验证"
+    output: "部署状态"
+  - id: retro
+    role: retro-optimizer
+    skill: null
+    action: "Sprint 回顾，武器库同步"
+    output: "RETRO 报告 + 武器库增量"

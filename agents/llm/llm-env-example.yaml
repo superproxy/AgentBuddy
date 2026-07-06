@@ -1,6 +1,6 @@
 _description: LLM Provider 配置模板 - 复制为 llm.yaml 并填入真实密钥。此文件可安全提交到版本控制。
 llm:
-  _active_provider: openicu
+  _active_provider: bigmodelCoding
   _active_protocol: openai|anthropic
   proxy:
     enable: false
@@ -31,6 +31,65 @@ llm:
           name: Claude Sonnet 4
         claude-haiku-4-5:
           name: Claude Haiku 4-5
+  # BigModel（国内）/ Z.ai（海外）四渠道：
+  #   bigmodel       — BigModel 资源包/余额（OpenAI + Anthropic 协议）
+  #   bigmodelCoding — BigModel GLM Coding Plan 套餐（仅 OpenAI 协议，专用端点）
+  #   zai            — Z.ai 资源包/余额（OpenAI + Anthropic 协议，美元计价）
+  #   zaiCoding      — Z.ai GLM Coding Plan 套餐（仅 OpenAI 协议，专用端点）
+  # 约束：Coding 端点（/api/coding/paas/v4）≠ 通用端点（/api/paas/v4），不可互换；
+  #       资源包/余额场景下 Anthropic 端点仅对从未购买过 Coding Plan 的账号有效。
+  bigmodel:
+    openai:
+      base_url: https://open.bigmodel.cn/api/paas/v4
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
+    anthropic:
+      base_url: https://open.bigmodel.cn/api/anthropic
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
+  bigmodelCoding:
+    openai:
+      base_url: https://open.bigmodel.cn/api/coding/paas/v4
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
+  zai:
+    openai:
+      base_url: https://api.z.ai/api/paas/v4
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
+    anthropic:
+      base_url: https://api.z.ai/api/anthropic
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
+  zaiCoding:
+    openai:
+      base_url: https://api.z.ai/api/coding/paas/v4
+      api_key: ''
+      models:
+        glm-5.2:
+          name: GLM 5.2
+        glm-5-turbo:
+          name: GLM 5 Turbo
   openrouter:
     openai:
       base_url: https://openrouter.ai/api/v1

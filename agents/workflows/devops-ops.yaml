@@ -1,0 +1,15 @@
+name: devops-ops
+type: sequential
+description: 运维工作流 — create-scripts → setup-monitoring
+
+steps:
+  - id: create-scripts
+    role: devops
+    skill: null
+    action: "启停脚本产出（基于自审视清单）"
+    output: "启停脚本 + 回滚脚本"
+  - id: setup-monitoring
+    role: devops
+    skill: null
+    action: "监控设置，健康检查"
+    output: "监控配置 + 健康检查端点"

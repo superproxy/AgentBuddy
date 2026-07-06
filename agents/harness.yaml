@@ -1,0 +1,75 @@
+# AgentBuddy Harness 总配置
+# 由 init-dev-harness-agents 生成，已初始化后走合并增强（不覆盖）
+version: "1.0"
+project:
+  name: "AgentBuddy"
+  goal: "把 agents/ 共享配置（LLM/MCP/Skills/Rules）一键映射到多 IDE 的桌面工具"
+  tech_stack: "Python 3 + Flask + pywebview + PyInstaller（桌面应用）"
+  main_flow: "配置编辑 → 生成 → 同步多 IDE"
+
+agents:
+  - name: architect
+    emoji: "🏛️"
+    color: "#1E40AF"
+    capabilities: [architecture-design, module-split, interface-definition, tech-decision, risk-assessment, evolution-point-identification]
+    role_file: "agents/roles/architect.md"
+  - name: orchestrator
+    emoji: "🎖️"
+    color: "#DC2626"
+    capabilities: [task-decomposition, work-triage, context-management, agent-routing, backlog-management, phase-gatekeeping]
+    role_file: "agents/roles/orchestrator.md"
+  - name: executor
+    emoji: "⚔️"
+    color: "#EA580C"
+    capabilities: [code-generation, file-operation, command-execution, tdd-red-green-refactor, yagni-check]
+    role_file: "agents/roles/executor.md"
+  - name: reviewer
+    emoji: "🔍"
+    color: "#7C3AED"
+    capabilities: [code-review, security-scan, quality-check, dod-verification, tdd-coverage-check]
+    role_file: "agents/roles/reviewer.md"
+  - name: devops
+    emoji: "🚚"
+    color: "#0891B2"
+    capabilities: [start-stop-scripts, monitoring-setup, deployment, infra-automation, evolution-deployment, rollback-verification]
+    role_file: "agents/roles/devops.md"
+  - name: retro-optimizer
+    emoji: "📜"
+    color: "#8B5CF6"
+    capabilities: [sprint-retrospective, strangler-fig-evaluation, role-knowledge-sync, pattern-extraction, big-cycle-sink]
+    role_file: "agents/roles/retro-optimizer.md"
+
+workflows:
+  - name: standard-dev
+    file: "agents/workflows/standard-dev.yaml"
+    type: triage-route
+    steps: [triage, route, implement, review, fix, deploy, retro]
+  - name: architecture-first
+    file: "agents/workflows/architecture-first.yaml"
+    type: sequential
+    steps: [architect-design, orchestrator-decompose, executor-implement, reviewer-review]
+  - name: code-review
+    file: "agents/workflows/code-review.yaml"
+    type: review
+    steps: [requesting-code-review, receiving-code-review]
+  - name: prd-to-code
+    file: "agents/workflows/prd-to-code.yaml"
+    type: sequential
+    steps: [clarify, plan, implement, review, verify]
+  - name: debug-flow
+    file: "agents/workflows/debug-flow.yaml"
+    type: triage-route
+    steps: [triage, diagnose, fix, review]
+  - name: devops-ops
+    file: "agents/workflows/devops-ops.yaml"
+    type: sequential
+    steps: [create-scripts, setup-monitoring]
+  - name: dual-phase-dev
+    file: "agents/workflows/dual-phase-dev.yaml"
+    type: condition+loop
+    enabled: false                      # 大决策项，默认不启用（重型工作流）
+    ref: "patterns/dual-phase-engineering/agents/dual-phase-workflow.yaml"
+    fallback: inline                    # ref 找不到时 orchestrator 自动内联标准步骤
+    steps: [wf_scope, wf_milestone, wf_wbs, wf_risk, wf_freeze, sprint_plan, sprint_implement, sprint_review, sprint_devops, sprint_retro, sprint_loop, big_cycle_sink]
+
+# 命名一致性约束：workflows[].name 必须与 agents/workflows/{name}.yaml 文件名严格一致

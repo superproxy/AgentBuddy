@@ -1,0 +1,78 @@
+# 自我迭代与沉淀机制
+version: "1.0"
+project: "AgentBuddy"
+
+iteration:
+  small_step:
+    trigger: "every-user-interaction"
+    scope: "本轮交互问题"
+    change_granularity: "minimal"
+    participants: "all-roles"           # 每个角色独立执行 collect → analyze → sink → iterate
+    flow: [collect, analyze, sink, iterate]
+    outputs: [faq-entry, best-practice-entry, node-skill-tweak]
+  big_cycle:
+    trigger: "every-n-interactions | /harness-evolve"
+    n: 10                                # 大决策项，默认 10
+    scope: "汇总小步快跑期间所有沉淀"
+    change_granularity: "heavy"
+    lead: "orchestrator"
+    flow: [collect, analyze, sink, iterate]
+    outputs: [pattern-fixation, role-definition-upgrade, workflow-restructure]
+
+role_practice:
+  architect:
+    collect: "本轮架构决策与演进点触发情况"
+    analyze: "决策是否被推翻、演进点是否生效"
+    sink: "faq/architect | best-practices/architect | evolution/lessons-learned"
+    iterate: "调整演进点清单模板或风险评估维度"
+  orchestrator:
+    collect: "本轮路由判断与阶段切换"
+    analyze: "路由误判、backlog 超载、阶段切换是否合规"
+    sink: "faq/orchestrator | best-practices/orchestrator | evolution/lessons-learned"
+    iterate: "调整 triage 规则或 backlog 容量"
+  executor:
+    collect: "本轮 TDD 实施与 YAGNI 检查"
+    analyze: "红绿重构是否完整、YAGNI 是否过度/不足"
+    sink: "faq/executor | best-practices/executor | evolution/lessons-learned"
+    iterate: "调整测试策略或 YAGNI 判断边界"
+  reviewer:
+    collect: "本轮审查覆盖与阻塞"
+    analyze: "审查维度遗漏、DoD 不可验证、阻塞反复"
+    sink: "faq/reviewer | best-practices/reviewer | evolution/lessons-learned"
+    iterate: "调整审查清单或 DoD 模板"
+  devops:
+    collect: "本轮部署与启停脚本自审视"
+    analyze: "部署是否可回滚、脚本是否失效、监控是否缺失"
+    sink: "faq/devops | best-practices/devops | evolution/lessons-learned"
+    iterate: "调整部署策略或自审视清单"
+  retro-optimizer:
+    collect: "本轮角色能力同步检查"
+    analyze: "武器库增量、strangler fig 触发、新工作类型"
+    sink: "各角色文件武器库待积累段 | evolution/role-changes | evolution/patterns"
+    iterate: "升级种子条目或触发角色定义升级"
+
+sinks:
+  faq: "agents/faq/{role}.faq.md"                    # 单次错误，可规避，小步快跑
+  best-practices: "agents/best-practices/{role}.best-practices.md"  # 单次成功经验，可复用，小步快跑
+  lessons: "agents/evolution/lessons-learned.md"     # 跨角色可迁移洞察，小步快跑
+  patterns: "agents/evolution/patterns.md"           # 高频工作类型稳定后（≥3 次引用），大周期
+  role-delta: "agents/evolution/role-changes.md"     # 角色提示词调整 diff，大周期
+  workflow-delta: "agents/evolution/workflow-changes.md"  # 节点/skill 映射调整，大周期
+
+feedback_loop:
+  small_to_big: "小步快跑沉淀积累到大周期时汇总分析"
+  big_to_small: "大周期升级的角色定义/工作流反哺到小步快跑执行"
+  threshold_upgrade:
+    role_definition: "FAQ 同类错误 ≥3 次 → 升级到角色行为准则"
+    seed_entry: "同类经验 ≥3 条 → 升级为武器库种子条目"
+    pattern_fixation: "被引用 ≥3 次无调整 → 固化为可复用模式"
+
+merge_policy:
+  harness_yaml: "diff merge（保留已有 agents/workflows，追加新增）"
+  roles: "append capabilities（保留已有武器库，追加新种子）"
+  workflows: "append or update（按 name 匹配，存在则更新 steps，不存在则追加）"
+  faq: "append entries（按日期+序号追加，不覆盖）"
+  best_practices: "append entries"
+  sync: "append entries"
+  evolution: "append history"
+  pre_merge: "必须向用户展示 diff，确认后合并"

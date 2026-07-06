@@ -1,0 +1,56 @@
+# Agent 间通信协议
+version: "1.0"
+format: json
+transport: file-based        # 基于 agents/sync/ 文件交换
+timeout_seconds: 30          # 大决策项，默认 30s
+retry:
+  max_attempts: 3            # 大决策项，默认 3 次
+  backoff: exponential
+
+message_schema:
+  required_fields:
+    - from: "{role}"
+    - to: "{role}"
+    - type: "handoff | query | report | alert"
+    - workflow_id: "{workflow-name}-{timestamp}"
+    - timestamp: "ISO-8601"
+    - payload: {}
+  optional_fields:
+    - priority: "P0 | P1 | P2"
+    - reply_to: "{message-id}"
+    - artifacts: []          # 产出物路径列表
+
+message_types:
+  handoff:
+    description: "角色间任务交接"
+    payload_schema:
+      summary: "本轮工作摘要"
+      decisions: []
+      artifacts: []
+      next_action: "下一节点建议"
+  query:
+    description: "向其他角色询问"
+    payload_schema:
+      question: ""
+      context: ""
+      deadline: ""
+  report:
+    description: "向上汇报产出"
+    payload_schema:
+      outcome: ""
+      evidence: []
+      blockers: []
+  alert:
+    description: "阻塞或风险告警"
+    payload_schema:
+      severity: "P0 | P1 | P2"
+      issue: ""
+      affected_roles: []
+
+routing:
+  - condition: "type == alert && severity == P0"
+    action: "broadcast to all roles + notify orchestrator"
+  - condition: "type == handoff"
+    action: "write to agents/sync/handoffs/{from}-to-{to}-{timestamp}.yaml"
+  - condition: "timeout_exceeded"
+    action: "retry per retry policy; exhausted → escalate to orchestrator"

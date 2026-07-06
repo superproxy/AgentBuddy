@@ -1,0 +1,25 @@
+name: architecture-first
+type: sequential
+description: 架构优先工作流 — architect(design) → orchestrator(decompose) → executor(implement) → reviewer(review)
+
+steps:
+  - id: architect-design
+    role: architect
+    skill: codebase-design
+    action: "应用边界、模块拆分、接口契约、演进点清单"
+    output: "ADR + 演进点清单"
+  - id: orchestrator-decompose
+    role: orchestrator
+    skill: writing-plans
+    action: "按架构决策分解 WBS"
+    output: "WBS 任务清单"
+  - id: executor-implement
+    role: executor
+    skill: test-driven-development
+    action: "TDD 实施架构骨架"
+    output: "代码 + 测试报告"
+  - id: reviewer-review
+    role: reviewer
+    skill: review
+    action: "架构一致性 + DoD 验收"
+    output: "评审报告 + DoD 信号"

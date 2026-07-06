@@ -1,0 +1,29 @@
+# 协同进度看板
+version: "1.0"
+project: "AgentBuddy"
+updated_at: "2026-07-06T00:00:00Z"
+
+active_workflows: []
+
+agent_queues:
+  architect: { pending: [], in_progress: null, blocked: false }
+  orchestrator: { pending: [], in_progress: null, blocked: false }
+  executor: { pending: [], in_progress: null, blocked: false }
+  reviewer: { pending: [], in_progress: null, blocked: false }
+  devops: { pending: [], in_progress: null, blocked: false }
+  retro-optimizer: { pending: [], in_progress: null, blocked: false }
+
+blockers: []
+
+milestones:
+  - name: "Harness 初始化"
+    target_date: "2026-07-06"
+    progress: 100
+    status: "done"
+
+stats:
+  total_workflows: 0
+  completed_workflows: 0
+  total_sprints: 0
+  faq_entries: 0
+  best_practice_entries: 0

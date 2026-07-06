@@ -1,0 +1,25 @@
+name: debug-flow
+type: triage-route
+description: 调试工作流 — triage → diagnose → fix → review
+
+steps:
+  - id: triage
+    role: orchestrator
+    skill: null
+    action: "识别问题类型，路由到 executor 调试"
+    output: "问题分类 + 路由"
+  - id: diagnose
+    role: executor
+    skill: systematic-debugging
+    action: "系统化诊断，定位根因"
+    output: "根因分析"
+  - id: fix
+    role: executor
+    skill: test-driven-development
+    action: "TDD 修复，先写复现测试"
+    output: "修复代码 + 回归测试"
+  - id: review
+    role: reviewer
+    skill: review
+    action: "修复验证，DoD 验收"
+    output: "评审报告"

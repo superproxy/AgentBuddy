@@ -1,0 +1,30 @@
+name: prd-to-code
+type: sequential
+description: PRD 到代码工作流 — clarify → plan → implement → review → verify
+
+steps:
+  - id: clarify
+    role: architect
+    skill: brainstorming
+    action: "需求澄清，范围边界确认"
+    output: "澄清后的需求"
+  - id: plan
+    role: orchestrator
+    skill: writing-plans
+    action: "实施计划与 WBS"
+    output: "WBS 任务清单"
+  - id: implement
+    role: executor
+    skill: subagent-driven-development
+    action: "TDD 实施"
+    output: "代码 + 测试报告"
+  - id: review
+    role: reviewer
+    skill: review
+    action: "DoD 验收"
+    output: "评审报告"
+  - id: verify
+    role: reviewer
+    skill: verification-before-completion
+    action: "完成前验证"
+    output: "验证证据"

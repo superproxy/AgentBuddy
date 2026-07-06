@@ -1,0 +1,19 @@
+# 角色间交接记录模板（复制使用，重命名为 {from}-to-{to}-{timestamp}.yaml）
+handoff_id: "HO-{seq}"
+from: "{role}"
+to: "{role}"
+workflow_id: "{name}-{timestamp}"
+node_from: "{node-id}"
+node_to: "{node-id}"
+timestamp: "ISO-8601"
+
+summary: "本轮工作摘要"
+decisions:
+  - "决策 1"
+  - "决策 2"
+artifacts:
+  - "path/to/artifact"
+next_action: "下一节点建议"
+open_questions:
+  - "待接收方确认的问题"
+acknowledged: false        # 接收方确认后置 true，未确认阻塞后续节点

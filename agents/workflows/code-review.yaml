@@ -1,0 +1,16 @@
+name: code-review
+type: review
+description: 代码审查工作流 — requesting-code-review → receiving-code-review
+
+steps:
+  - id: requesting-code-review
+    role: reviewer
+    skill: requesting-code-review
+    action: "发起审查，多维度覆盖（≥4/5）"
+    output: "评审报告"
+  - id: receiving-code-review
+    role: executor
+    skill: receiving-code-review
+    action: "接收反馈，修复并回归测试"
+    output: "修复后的代码"
+    feedback_to: requesting-code-review  # 修复后可触发复审
