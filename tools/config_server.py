@@ -88,6 +88,7 @@ from lib.plugins import install_plugin, update_env_file, add_to_installed
 from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
 from lib.ide.launch import launch_ide, launch_ide_resume_session
+from lib.ide.install import install_ide, uninstall_ide, reinstall_ide, get_install_info, IDE_INSTALL_META
 
 app = Flask(__name__, static_folder=None)
 
@@ -488,7 +489,8 @@ def toggle_skill_enabled(name):
         ides = []
     # 安全校验 IDE 名
     allowed_ides = {"Agents", "Claude", "Codex", "Cursor", "IDEA", "OpenClaw",
-                    "OpenCode", "Qoder", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy", "All"}
+                    "OpenCode", "Qoder", "QoderCN", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy",
+                    "ZCode", "All"}
     safe_ides = [i for i in ides if i in allowed_ides]
 
     try:
@@ -930,7 +932,8 @@ def uninstall_plugin_api():
         return jsonify({"ok": False, "error": "缺少 name 参数"}), 400
     ides = body.get("ides") or []
     allowed_ides = {"Agents", "Claude", "Codex", "Cursor", "IDEA", "OpenClaw",
-                    "OpenCode", "Qoder", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy", "All"}
+                    "OpenCode", "Qoder", "QoderCN", "Trae", "TraeCN", "TraeSoloCN", "WorkBuddy",
+                    "ZCode", "All"}
     safe_ides = [i for i in ides if i in allowed_ides]
 
     # 1. 从已安装清单移除
@@ -1496,6 +1499,89 @@ def api_ide_launch():
         else:
             result = launch_ide(ide_key, cwd)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/install", methods=["POST"])
+def api_ide_install():
+    """安装 IDE（CLI 或 App）。
+
+    Body: {ide: <IDE key>, mode: "cli" | "app"}
+    Returns: {ok, ide, mode, method, message, cmd, stdout, stderr, url?}
+    """
+    body = request.get_json(silent=True) or {}
+    ide_key = (body.get("ide") or "").strip()
+    mode = (body.get("mode") or "cli").strip()
+    if not ide_key:
+        return jsonify({"ok": False, "error": "missing ide"}), 400
+    if mode not in ("cli", "app"):
+        return jsonify({"ok": False, "error": "mode must be 'cli' or 'app'"}), 400
+    if ide_key not in IDE_INSTALL_META:
+        return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
+    try:
+        result = install_ide(ide_key, mode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/uninstall", methods=["POST"])
+def api_ide_uninstall():
+    """卸载 IDE（CLI 或 App）。
+
+    Body: {ide: <IDE key>, mode: "cli" | "app"}
+    """
+    body = request.get_json(silent=True) or {}
+    ide_key = (body.get("ide") or "").strip()
+    mode = (body.get("mode") or "cli").strip()
+    if not ide_key:
+        return jsonify({"ok": False, "error": "missing ide"}), 400
+    if mode not in ("cli", "app"):
+        return jsonify({"ok": False, "error": "mode must be 'cli' or 'app'"}), 400
+    if ide_key not in IDE_INSTALL_META:
+        return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
+    try:
+        result = uninstall_ide(ide_key, mode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/reinstall", methods=["POST"])
+def api_ide_reinstall():
+    """重装 IDE（先卸载再安装）。
+
+    Body: {ide: <IDE key>, mode: "cli" | "app"}
+    """
+    body = request.get_json(silent=True) or {}
+    ide_key = (body.get("ide") or "").strip()
+    mode = (body.get("mode") or "cli").strip()
+    if not ide_key:
+        return jsonify({"ok": False, "error": "missing ide"}), 400
+    if mode not in ("cli", "app"):
+        return jsonify({"ok": False, "error": "mode must be 'cli' or 'app'"}), 400
+    if ide_key not in IDE_INSTALL_META:
+        return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
+    try:
+        result = reinstall_ide(ide_key, mode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/install-info", methods=["GET"])
+def api_ide_install_info():
+    """获取所有 IDE 的安装元信息。
+
+    Query: ide=<IDE key>（可选，不传返回全部）
+    """
+    ide_key = request.args.get("ide", "").strip()
+    try:
+        if ide_key:
+            return jsonify({"ok": True, "info": get_install_info(ide_key)})
+        infos = [{"ide": k, **get_install_info(k)} for k in IDE_INSTALL_META.keys()]
+        return jsonify({"ok": True, "infos": infos})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

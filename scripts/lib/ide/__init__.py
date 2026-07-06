@@ -13,9 +13,11 @@ from .trae import TraeTarget, TraeCNTarget, TraeSoloCNTarget
 from .claude import ClaudeTarget
 from .workbuddy import WorkBuddyTarget
 from .qoder import QoderTarget
+from .qodercn import QoderCNTarget
 from .openclaw import OpenClawTarget
 from .idea import IdeATarget
 from .agents import AgentsTarget
+from .zcode import ZCodeTarget
 
 
 # IDE 注册表：名称 → 类（按字母顺序排列）
@@ -28,10 +30,12 @@ IDE_REGISTRY = {
     "OpenClaw": OpenClawTarget,
     "OpenCode": OpenCodeTarget,
     "Qoder": QoderTarget,
+    "QoderCN": QoderCNTarget,
     "Trae": TraeTarget,
     "TraeCN": TraeCNTarget,
     "TraeSoloCN": TraeSoloCNTarget,
     "WorkBuddy": WorkBuddyTarget,
+    "ZCode": ZCodeTarget,
 }
 
 
@@ -63,6 +67,6 @@ __all__ = [
     "IDE_REGISTRY", "get_ide",
     "CursorTarget", "CodexTarget", "OpenCodeTarget",
     "TraeTarget", "TraeCNTarget", "TraeSoloCNTarget",
-    "ClaudeTarget", "WorkBuddyTarget", "QoderTarget",
-    "OpenClawTarget", "IdeATarget", "AgentsTarget",
+    "ClaudeTarget", "WorkBuddyTarget", "QoderTarget", "QoderCNTarget",
+    "OpenClawTarget", "IdeATarget", "AgentsTarget", "ZCodeTarget",
 ]

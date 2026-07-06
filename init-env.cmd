@@ -1,1 +1,0 @@
-python scripts/init-env.py -a Generate

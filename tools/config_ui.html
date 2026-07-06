@@ -63,8 +63,8 @@
         {{ t.label }}
       </button>
     </nav>
-    <!-- 全局同步工具条（共享：自动同步 + IDE 多选 + 同步按钮；插件构建 tab 隐藏） -->
-    <div v-show="tab !== 'plugin-build'" class="bg-white/10 border-t border-white/10">
+    <!-- 全局同步工具条（共享：自动同步 + IDE 多选 + 同步按钮；插件构建/IDE 管理 tab 隐藏） -->
+    <div v-show="tab !== 'plugin-build' && tab !== 'ide'" class="bg-white/10 border-t border-white/10">
       <div class="max-w-[1600px] mx-auto px-6 py-1.5 flex items-center gap-3 text-xs flex-wrap">
         <label class="flex items-center gap-1 cursor-pointer select-none text-white/90">
           <input type="checkbox" v-model="autoSync" class="w-3 h-3"> 自动同步
@@ -751,46 +751,185 @@
         </div>
       </div>
 
-      <!-- IDE 卡片列表 -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <!-- IDE 卡片列表：品牌（左）+ Tab 操作（右） -->
+      <div v-if="ideDetecting || !ideInstallInfoLoaded"
+           class="flex items-center justify-center py-12 gap-3 text-ink-500">
+        <svg class="animate-spin h-5 w-5 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span class="text-sm">{{ ideDetecting ? '检测 IDE 安装状态...' : '加载安装信息...' }}</span>
+      </div>
+      <div v-else class="grid grid-cols-1 gap-3">
         <div v-for="ide in ideDetects" :key="ide.key"
-             class="border rounded-lg overflow-hidden transition"
-             :class="ide.installed ? 'border-ink-300 hover:border-brand-500 bg-white' : 'border-ink-200 bg-ink-100/50 opacity-60'">
-          <!-- Header -->
-          <div class="px-3 py-2 flex items-center justify-between"
-               :class="ide.installed ? 'bg-ink-100' : 'bg-ink-200/50'">
-            <div class="flex items-center gap-2">
-              <span class="font-medium text-sm">{{ ide.label }}</span>
-              <span v-if="ide.installed" class="px-1.5 py-0.5 text-[10px] bg-green-100 text-green-700 rounded">installed</span>
-              <span v-else class="px-1.5 py-0.5 text-[10px] bg-ink-200 text-ink-500 rounded">未安装</span>
-              <span v-if="ide.mode === 'cli' || ide.exe_path" class="px-1.5 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded">CLI</span>
-              <span v-if="ide.app_path" class="px-1.5 py-0.5 text-[10px] bg-purple-100 text-purple-700 rounded">App</span>
+             class="border rounded-lg overflow-hidden transition flex flex-col"
+             :class="ide.installed ? 'border-ink-300 hover:border-brand-400 bg-white hover:shadow-sm' : 'border-dashed border-ink-300 bg-ink-100/30'">
+          <div class="flex flex-row">
+          <!-- 左：品牌信息（紧凑竖排） -->
+          <div class="w-40 shrink-0 px-4 py-3 flex flex-col justify-center gap-1.5 border-r border-ink-200"
+               :class="ide.installed ? 'bg-ink-50/60' : 'bg-ink-100/40'">
+            <div class="flex items-center gap-1.5">
+              <span class="font-bold text-base truncate" :title="ide.label">{{ ide.label }}</span>
             </div>
-            <div class="flex gap-1" v-if="ide.installed">
-              <button @click="toggleIdeSessions(ide.key)"
-                      v-if="ide.sessions_dir"
-                      :disabled="ideLoadingSessions === ide.key"
-                      class="px-2 py-1 text-[11px] text-ink-600 hover:bg-ink-200 rounded disabled:opacity-40">
-                {{ ideLoadingSessions === ide.key ? '加载中...' : (expandedIde === ide.key ? '收起' : '会话') }}
-                <span v-if="ideSessionsStatsMap[ide.key]" class="text-[10px] text-ink-400">({{ ideSessionsStatsMap[ide.key].total }})</span>
-              </button>
-              <button @click="launchIde(ide.key)"
-                      :disabled="ideLaunching === ide.key || ideResuming !== ''"
-                      class="px-2 py-1 text-[11px] text-brand-600 hover:bg-brand-50 rounded disabled:opacity-40">
-                {{ ideLaunching === ide.key ? '启动中...' : '打开' }}
-              </button>
+            <div class="flex items-center gap-1 flex-wrap">
+              <span v-if="ide.installed" class="w-2 h-2 rounded-full bg-green-500" title="已安装"></span>
+              <span v-else class="w-2 h-2 rounded-full bg-ink-300" title="未安装"></span>
+              <button v-if="ideInstallInfo[ide.key] && ideInstallInfo[ide.key].cli"
+                      @click="setIdeCardTab(ide.key, 'cli')"
+                      :class="['px-1.5 py-0.5 text-[9px] rounded leading-none font-medium cursor-pointer transition',
+                        (ideCardTab[ide.key] || 'cli') === 'cli' ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200']"
+                      title="切换到 CLI Tab">CLI</button>
+              <button v-if="ideInstallInfo[ide.key] && ideInstallInfo[ide.key].app"
+                      @click="setIdeCardTab(ide.key, 'app')"
+                      :class="['px-1.5 py-0.5 text-[9px] rounded leading-none font-medium cursor-pointer transition',
+                        (ideCardTab[ide.key] || 'cli') === 'app' ? 'bg-purple-500 text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200']"
+                      title="切换到 App Tab">App</button>
             </div>
+            <div v-if="ide.version" class="text-[10px] text-ink-500 truncate leading-tight" :title="ide.version">{{ ide.version }}</div>
           </div>
-          <!-- 详情 -->
-          <div class="p-3 text-xs space-y-1">
-            <div v-if="ide.version" class="text-ink-600 truncate"><span class="text-ink-400">版本:</span> {{ ide.version }}</div>
-            <div v-if="ide.exe_path" class="text-ink-600 truncate"><span class="text-ink-400">CLI:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.exe_path }}</code></div>
-            <div v-if="ide.app_path" class="text-ink-600 truncate"><span class="text-ink-400">App:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.app_path }}</code></div>
-            <div v-if="ide.sessions_dir" class="text-ink-600 truncate"><span class="text-ink-400">会话:</span> <code class="text-[10px] bg-ink-100 px-1 rounded">{{ ide.sessions_dir }}</code></div>
-            <div v-if="ide.config_paths.length" class="text-ink-600 truncate"><span class="text-ink-400">配置:</span> {{ ide.config_paths.join(', ') }}</div>
-            <div v-if="!ide.installed" class="text-ink-400 italic">未检测到安装路径</div>
+
+          <!-- 右：Tab 操作区 -->
+          <div class="flex-1 min-w-0 flex flex-col">
+            <!-- Tab 条（紧贴顶部） -->
+            <div class="flex items-center gap-0 px-3 pt-1.5 border-b border-ink-200 bg-white/40">
+              <button v-for="t in [
+                        {k:'cli', label:'CLI', show: ideInstallInfo[ide.key] && ideInstallInfo[ide.key].cli, color:'blue'},
+                        {k:'app', label:'App', show: ideInstallInfo[ide.key] && ideInstallInfo[ide.key].app, color:'purple'}
+                      ]" :key="t.k"
+                      v-show="t.show"
+                      @click="setIdeCardTab(ide.key, t.k)"
+                      :class="['px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition rounded-t',
+                        (ideCardTab[ide.key] || 'cli') === t.k
+                          ? (t.color === 'blue' ? 'border-blue-500 text-blue-600 bg-blue-50/40' : 'border-purple-500 text-purple-600 bg-purple-50/40')
+                          : 'border-transparent text-ink-500 hover:text-ink-700']">
+                {{ t.label }}
+              </button>
+            </div>
+
+            <!-- CLI Tab -->
+            <div v-if="(ideCardTab[ide.key] || 'cli') === 'cli' && ideInstallInfo[ide.key] && ideInstallInfo[ide.key].cli"
+                 class="px-2.5 py-1.5 flex flex-col gap-1 text-xs">
+              <!-- 信息行：状态 + 方法 + 路径 -->
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span v-if="ide.exe_path" class="text-[10px] text-green-600 shrink-0">●</span>
+                <span v-else class="text-[10px] text-ink-400 shrink-0">○</span>
+                <code class="text-[10px] bg-ink-100 px-1 rounded text-ink-600 shrink-0">{{ ideInstallInfo[ide.key].cli.method }}</code>
+                <span v-if="ideInstallInfo[ide.key].cli.package" class="text-[10px] text-ink-500 shrink-0">{{ ideInstallInfo[ide.key].cli.package }}</span>
+                <span v-if="ide.exe_path" class="text-[10px] text-ink-400 truncate flex-1 min-w-0" :title="ide.exe_path">{{ ide.exe_path }}</span>
+              </div>
+              <!-- 按钮行 -->
+              <div class="flex gap-1 flex-wrap">
+                <!-- 未安装 + 非 manual：安装 -->
+                <button v-if="!ide.exe_path && ideInstallInfo[ide.key].cli.method !== 'manual'"
+                        @click="installIde(ide.key, 'cli')"
+                        :disabled="ideInstalling === ide.key + ':cli' || ideReinstalling === ide.key + ':cli' || ideUninstalling === ide.key + ':cli'"
+                        class="px-2 py-0.5 text-[10px] text-white bg-blue-500 hover:bg-blue-600 rounded disabled:opacity-40">
+                  {{ ideInstalling === ide.key + ':cli' ? '...' : '安装' }}
+                </button>
+                <!-- 未安装 + manual：下载（官网链接） -->
+                <a v-else-if="!ide.exe_path && ideInstallInfo[ide.key].cli.method === 'manual' && ideInstallInfo[ide.key].cli.url"
+                   :href="ideInstallInfo[ide.key].cli.url" target="_blank"
+                   class="px-2 py-0.5 text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 rounded">下载</a>
+                <!-- 已安装 + 非 manual：重装 -->
+                <button v-if="ide.exe_path && ideInstallInfo[ide.key].cli.method !== 'manual'"
+                        @click="reinstallIde(ide.key, 'cli')"
+                        :disabled="ideReinstalling === ide.key + ':cli' || ideInstalling === ide.key + ':cli' || ideUninstalling === ide.key + ':cli'"
+                        class="px-2 py-0.5 text-[10px] text-amber-600 bg-amber-50 hover:bg-amber-100 rounded disabled:opacity-40">
+                  {{ ideReinstalling === ide.key + ':cli' ? '...' : '重装' }}
+                </button>
+                <!-- 卸载（仅已安装 + 非 manual） -->
+                <button v-if="ide.exe_path && ideInstallInfo[ide.key].cli.method !== 'manual'"
+                        @click="uninstallIde(ide.key, 'cli')"
+                        :disabled="ideUninstalling === ide.key + ':cli' || ideReinstalling === ide.key + ':cli' || ideInstalling === ide.key + ':cli'"
+                        class="px-2 py-0.5 text-[10px] text-red-500 bg-red-50 hover:bg-red-100 rounded disabled:opacity-40">
+                  {{ ideUninstalling === ide.key + ':cli' ? '...' : '卸载' }}
+                </button>
+                <button v-if="ide.exe_path" @click="launchIde(ide.key)"
+                        :disabled="ideLaunching === ide.key || ideResuming !== ''"
+                        class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">
+                  {{ ideLaunching === ide.key ? '...' : '打开' }}
+                </button>
+                <button @click="syncIdeConfig(ide.key)"
+                        :disabled="ideSyncing === ide.key"
+                        class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">
+                  {{ ideSyncing === ide.key ? '...' : '配置' }}
+                </button>
+                <button v-if="ide.sessions_dir" @click="toggleIdeSessions(ide.key)"
+                        :disabled="ideLoadingSessions === ide.key"
+                        class="px-2 py-0.5 text-[10px] text-ink-600 hover:bg-ink-200 rounded disabled:opacity-40">
+                  {{ ideLoadingSessions === ide.key ? '...' : (expandedIde === ide.key ? '收起' : '会话') }}
+                  <span v-if="ideSessionsStatsMap[ide.key]" class="text-[9px] text-ink-400">({{ ideSessionsStatsMap[ide.key].total }})</span>
+                </button>
+                <!-- 官网（只要 homepage 存在就显示） -->
+                <a v-if="ideInstallInfo[ide.key].homepage"
+                   :href="ideInstallInfo[ide.key].homepage" target="_blank"
+                   class="px-2 py-0.5 text-[10px] text-ink-500 bg-ink-100 hover:bg-ink-200 rounded">官网</a>
+              </div>
+            </div>
+
+            <!-- App Tab -->
+            <div v-if="(ideCardTab[ide.key] || 'cli') === 'app' && ideInstallInfo[ide.key] && ideInstallInfo[ide.key].app"
+                 class="px-2.5 py-1.5 flex flex-col gap-1 text-xs">
+              <!-- 信息行 -->
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span v-if="ide.app_path" class="text-[10px] text-green-600 shrink-0">●</span>
+                <span v-else class="text-[10px] text-ink-400 shrink-0">○</span>
+                <code class="text-[10px] bg-ink-100 px-1 rounded text-ink-600 shrink-0">{{ ideInstallInfo[ide.key].app.method }}</code>
+                <span v-if="ideInstallInfo[ide.key].app.package" class="text-[10px] text-ink-500 shrink-0">{{ ideInstallInfo[ide.key].app.package }}</span>
+                <span v-if="ide.app_path" class="text-[10px] text-ink-400 truncate flex-1 min-w-0" :title="ide.app_path">{{ ide.app_path }}</span>
+              </div>
+              <!-- 按钮行 -->
+              <div class="flex gap-1 flex-wrap">
+                <!-- 未安装 + 非 manual：安装 -->
+                <button v-if="!ide.app_path && ideInstallInfo[ide.key].app.method !== 'manual'"
+                        @click="installIde(ide.key, 'app')"
+                        :disabled="ideInstalling === ide.key + ':app' || ideReinstalling === ide.key + ':app' || ideUninstalling === ide.key + ':app'"
+                        class="px-2 py-0.5 text-[10px] text-white bg-purple-500 hover:bg-purple-600 rounded disabled:opacity-40">
+                  {{ ideInstalling === ide.key + ':app' ? '...' : '安装' }}
+                </button>
+                <!-- 未安装 + manual：下载 -->
+                <a v-else-if="!ide.app_path && ideInstallInfo[ide.key].app.method === 'manual' && ideInstallInfo[ide.key].app.url"
+                   :href="ideInstallInfo[ide.key].app.url" target="_blank"
+                   class="px-2 py-0.5 text-[10px] text-purple-600 bg-purple-50 hover:bg-purple-100 rounded">下载</a>
+                <!-- 已安装 + 非 manual：重装 -->
+                <button v-if="ide.app_path && ideInstallInfo[ide.key].app.method !== 'manual'"
+                        @click="reinstallIde(ide.key, 'app')"
+                        :disabled="ideReinstalling === ide.key + ':app' || ideInstalling === ide.key + ':app' || ideUninstalling === ide.key + ':app'"
+                        class="px-2 py-0.5 text-[10px] text-amber-600 bg-amber-50 hover:bg-amber-100 rounded disabled:opacity-40">
+                  {{ ideReinstalling === ide.key + ':app' ? '...' : '重装' }}
+                </button>
+                <!-- 卸载（仅已安装 + 非 manual） -->
+                <button v-if="ide.app_path && ideInstallInfo[ide.key].app.method !== 'manual'"
+                        @click="uninstallIde(ide.key, 'app')"
+                        :disabled="ideUninstalling === ide.key + ':app' || ideReinstalling === ide.key + ':app' || ideInstalling === ide.key + ':app'"
+                        class="px-2 py-0.5 text-[10px] text-red-500 bg-red-50 hover:bg-red-100 rounded disabled:opacity-40">
+                  {{ ideUninstalling === ide.key + ':app' ? '...' : '卸载' }}
+                </button>
+                <button v-if="ide.app_path" @click="launchIde(ide.key)"
+                        :disabled="ideLaunching === ide.key || ideResuming !== ''"
+                        class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">
+                  {{ ideLaunching === ide.key ? '...' : '打开' }}
+                </button>
+                <button @click="syncIdeConfig(ide.key)"
+                        :disabled="ideSyncing === ide.key"
+                        class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">
+                  {{ ideSyncing === ide.key ? '...' : '配置' }}
+                </button>
+                <button v-if="ide.sessions_dir" @click="toggleIdeSessions(ide.key)"
+                        :disabled="ideLoadingSessions === ide.key"
+                        class="px-2 py-0.5 text-[10px] text-ink-600 hover:bg-ink-200 rounded disabled:opacity-40">
+                  {{ ideLoadingSessions === ide.key ? '...' : (expandedIde === ide.key ? '收起' : '会话') }}
+                  <span v-if="ideSessionsStatsMap[ide.key]" class="text-[9px] text-ink-400">({{ ideSessionsStatsMap[ide.key].total }})</span>
+                </button>
+                <!-- 官网（只要 homepage 存在就显示） -->
+                <a v-if="ideInstallInfo[ide.key].homepage"
+                   :href="ideInstallInfo[ide.key].homepage" target="_blank"
+                   class="px-2 py-0.5 text-[10px] text-ink-500 bg-ink-100 hover:bg-ink-200 rounded">官网</a>
+              </div>
+            </div>
           </div>
           <!-- 会话列表（展开时） -->
+          </div>
           <div v-if="expandedIde === ide.key && ideSessionsMap[ide.key]"
                class="border-t border-ink-200 bg-ink-50/50">
             <div v-if="ideSessionsMap[ide.key].length === 0" class="p-3 text-xs text-ink-400 italic">暂无会话</div>
@@ -822,8 +961,6 @@
                       共享
                     </button>
                   </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -892,14 +1029,14 @@ const { createApp, reactive, ref, computed, onMounted, watch } = Vue;
 createApp({
   setup() {
     // ===== 状态 =====
-    const tab = ref('env');
+    const tab = ref('ide');
     const tabs = [
+      { key: 'ide', label: 'IDE 管理' },
       { key: 'env', label: 'LLM 配置' },
       { key: 'mcp', label: 'MCP 配置' },
       { key: 'skill', label: 'Skills 配置' },
       { key: 'plugin', label: '插件配置' },
       { key: 'plugin-build', label: '插件构建' },
-      { key: 'ide', label: 'IDE 管理' },
     ];
     const envData = reactive({ llm: {}, mcp: {}, proxy: {} });
     const mcpConfigData = reactive({ mcp: {} });  // 新：mcp.yaml 独立文件
@@ -974,10 +1111,12 @@ createApp({
       { key: 'OpenClaw', label: 'OpenClaw', desc: '.openclaw/rules' },
       { key: 'OpenCode', label: 'OpenCode', desc: 'opencode.json' },
       { key: 'Qoder', label: 'Qoder', desc: '.qoder/rules' },
+      { key: 'QoderCN', label: 'Qoder CN', desc: '.qoder-cn/rules' },
       { key: 'Trae', label: 'Trae', desc: '.trae/rules + .trae/mcp.json' },
       { key: 'trae-cn', label: 'Trae CN', desc: '.trae-cn/rules + mcp' },
-      { key: 'trae-solo-cn', label: 'Trae Solo CN', desc: '.trae-solo-cn/rules' },
+      { key: 'trae-solo-cn', label: 'Trae Work CN', desc: '.trae-solo-cn/rules' },
       { key: 'WorkBuddy', label: 'WorkBuddy', desc: '.workbuddy/rules + models.json' },
+      { key: 'ZCode', label: 'ZCode', desc: '.zcode/zcode.json' },
     ]);
     // IDE 拖拽排序
     const dragIdeKey = ref('');
@@ -1795,6 +1934,14 @@ createApp({
     const shareModalSession = ref(null);  // 待共享的会话对象
     const shareTargetIde = ref('');       // 共享目标 IDE
     const shareImporting = ref(false);
+    // 安装/卸载
+    const ideInstallInfo = reactive({});  // {ide_key: {cli: {method, package, url}, app: {...}, homepage}}
+    const ideInstallInfoLoaded = ref(false);  // install-info 是否加载完成
+    const ideInstalling = ref('');        // 正在安装的 "<ide>:<mode>"
+    const ideUninstalling = ref('');      // 正在卸载的 "<ide>:<mode>"
+    const ideReinstalling = ref('');      // 正在重装的 "<ide>:<mode>"
+    const ideSyncing = ref('');           // 正在同步配置的 IDE key
+    const expandedIdeCard = ref('');      // 当前展开操作工具栏的 IDE key
 
     async function loadIdeDetect() {
       if (ideDetecting.value) return;
@@ -1805,6 +1952,8 @@ createApp({
         ideDetects.value = r.ides || [];
         ideDetectStats.value = r.stats || {};
         toast(`检测完成: ${ideDetectStats.value.installed}/${ideDetectStats.value.total} 已安装`, 'ok');
+        // 并行加载安装元信息
+        loadIdeInstallInfo();
       } finally { ideDetecting.value = false; }
     }
 
@@ -1849,6 +1998,139 @@ createApp({
       } finally {
         ideLaunching.value = '';
         ideResuming.value = '';
+      }
+    }
+
+    async function loadIdeInstallInfo() {
+      try {
+        const r = await api('/api/ide/install-info');
+        if (!r.ok) return;
+        const infos = r.infos || [];
+        for (const info of infos) {
+          ideInstallInfo[info.ide] = info;
+        }
+        ideInstallInfoLoaded.value = true;
+      } catch (e) {}
+    }
+
+    async function installIde(ideKey, mode) {
+      const key = `${ideKey}:${mode}`;
+      if (ideInstalling.value) return;
+      ideInstalling.value = key;
+      try {
+        const r = await api('/api/ide/install', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ide: ideKey, mode }),
+        });
+        if (r.ok) {
+          toast(`安装 ${ideKey} ${mode.toUpperCase()} 成功`, 'ok');
+          // 重新检测安装状态
+          await loadIdeDetect();
+        } else if (r.url) {
+          // manual 模式返回下载链接
+          toast(`${r.message || '需手动安装'}：${r.url}`, 'warn');
+          window.open(r.url, '_blank');
+        } else {
+          toast(`安装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err');
+        }
+      } finally {
+        ideInstalling.value = '';
+      }
+    }
+
+    async function uninstallIde(ideKey, mode) {
+      const key = `${ideKey}:${mode}`;
+      if (ideUninstalling.value) return;
+      if (!confirm(`确定卸载 ${ideKey} ${mode.toUpperCase()}？`)) return;
+      ideUninstalling.value = key;
+      try {
+        const r = await api('/api/ide/uninstall', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ide: ideKey, mode }),
+        });
+        if (r.ok) {
+          toast(`卸载 ${ideKey} ${mode.toUpperCase()} 成功`, 'ok');
+          await loadIdeDetect();
+        } else {
+          toast(`卸载 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err');
+        }
+      } finally {
+        ideUninstalling.value = '';
+      }
+    }
+
+    async function reinstallIde(ideKey, mode) {
+      const key = `${ideKey}:${mode}`;
+      if (ideReinstalling.value) return;
+      if (!confirm(`确定重装 ${ideKey} ${mode.toUpperCase()}？（先卸载再安装）`)) return;
+      ideReinstalling.value = key;
+      try {
+        const r = await api('/api/ide/reinstall', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ide: ideKey, mode }),
+        });
+        if (r.ok) {
+          toast(`重装 ${ideKey} ${mode.toUpperCase()} 成功`, 'ok');
+          await loadIdeDetect();
+        } else if (r.url) {
+          toast(`${r.message || '需手动安装'}：${r.url}`, 'warn');
+          window.open(r.url, '_blank');
+        } else {
+          toast(`重装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err');
+        }
+      } finally {
+        ideReinstalling.value = '';
+      }
+    }
+
+    function toggleIdeCard(ideKey) {
+      expandedIdeCard.value = expandedIdeCard.value === ideKey ? '' : ideKey;
+    }
+
+    // 每张 IDE 卡片当前激活的 tab（'cli' / 'app'）
+    const ideCardTab = reactive({});
+    function setIdeCardTab(ideKey, tab) {
+      ideCardTab[ideKey] = tab;
+    }
+
+    async function syncIdeConfig(ideKey) {
+      if (ideSyncing.value) return;
+      ideSyncing.value = ideKey;
+      try {
+        // SSE 流式同步
+        const resp = await fetch(`/api/init-ide?ide=${encodeURIComponent(ideKey)}&scope=llm,mcp,skill,rules`, {
+          method: 'GET',
+          headers: { 'Accept': 'text/event-stream' },
+        });
+        if (!resp.ok) {
+          toast(`同步 ${ideKey} 配置请求失败 (HTTP ${resp.status})`, 'err');
+          return;
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let lastLine = '';
+        let ok = true;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          const lines = (lastLine + text).split('\n');
+          lastLine = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const payload = line.slice(5).trim();
+            if (!payload) continue;
+            try {
+              const obj = JSON.parse(payload);
+              if (obj.error) ok = false;
+            } catch (e) {}
+          }
+        }
+        toast(ok ? `同步 ${ideKey} 配置完成` : `同步 ${ideKey} 配置完成（含警告）`, ok ? 'ok' : 'warn');
+      } catch (e) {
+        toast(`同步 ${ideKey} 配置失败: ${e.message || e}`, 'err');
+      } finally {
+        ideSyncing.value = '';
       }
     }
 
@@ -1932,6 +2214,8 @@ createApp({
         ideDetects.value = ideR.ides || [];
         ideDetectStats.value = ideR.stats || {};
       }
+      // 并行加载 IDE 安装元信息（触发 ideInstallInfoLoaded）
+      loadIdeInstallInfo();
       // 加载完成，启用自动同步监听
       _isLoading = false;
     });
@@ -1974,6 +2258,13 @@ createApp({
       shareTargetIdes,
       loadIdeDetect, loadIdeSessions, toggleIdeSessions, launchIde,
       exportSession, openShareModal, importSession,
+      // IDE 安装/卸载
+      ideInstallInfo, ideInstallInfoLoaded, ideInstalling, ideUninstalling,
+      loadIdeInstallInfo, installIde, uninstallIde,
+      // IDE 重装/配置同步/卡片展开
+      ideReinstalling, ideSyncing, expandedIdeCard,
+      reinstallIde, syncIdeConfig, toggleIdeCard,
+      ideCardTab, setIdeCardTab,
     };
   }
 }).mount('#app');

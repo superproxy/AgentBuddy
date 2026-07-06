@@ -365,10 +365,12 @@ IDE_SESSION_SCANNERS = {
     "WorkBuddy": lambda d, k="WorkBuddy": scan_generic_sessions(d, k),
     "OpenClaw": lambda d, k="OpenClaw": scan_generic_sessions(d, k),
     "Qoder": lambda d, k="Qoder": scan_generic_sessions(d, k),
+    "QoderCN": lambda d, k="QoderCN": scan_generic_sessions(d, k),
     "OpenCode": lambda d, k="OpenCode": scan_generic_sessions(d, k),
     "Trae": lambda d, k="Trae": scan_generic_sessions(d, k),
     "TraeCN": lambda d, k="TraeCN": scan_generic_sessions(d, k),
     "TraeSoloCN": lambda d, k="TraeSoloCN": scan_generic_sessions(d, k),
+    "ZCode": lambda d, k="ZCode": scan_generic_sessions(d, k),
 }
 
 
@@ -406,8 +408,10 @@ IDE_RESUME_COMMANDS = {
     "Cursor": "{exe} --continue",                             # Cursor 无 CLI resume，只能 --continue 最近会话
     "OpenCode": "{exe} --resume {session_id}",
     "Qoder": "{exe} --resume {session_id}",
+    "QoderCN": "{exe} --resume {session_id}",
     "OpenClaw": "{exe} --resume {session_id}",
     "WorkBuddy": "{exe} --resume {session_id}",
+    "ZCode": "{exe} --resume {session_id}",
 }
 
 

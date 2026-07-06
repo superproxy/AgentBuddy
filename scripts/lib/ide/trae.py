@@ -1,4 +1,4 @@
-"""Trae IDE 分发器（含 Trae / Trae CN / Trae Solo CN）。
+"""Trae IDE 分发器（含 Trae / Trae CN / Trae Work CN）。
 
 迁移自 scripts/init-ide.py 的 init_trae() / init_trae_cn() / init_trae_solo_cn()。
 三个变体共享相同结构，差异在全局目录名和 IDE User 目录名。

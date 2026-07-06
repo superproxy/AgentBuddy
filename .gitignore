@@ -78,4 +78,8 @@ ide/codex/config.toml
 
 # PyInstaller 构建产物
 /build/
+/dist/
+*.spec.bak
+# frozen 首次运行标记
+.bundle_bootstrapped
 

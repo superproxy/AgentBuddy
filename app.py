@@ -24,6 +24,30 @@ def _resolve_project_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _redirect_stdio_to_log(project_root: Path) -> None:
+    """windowed 模式下 stdout/stderr 被丢弃，重定向到 exe 目录 app.log 便于排查。
+
+    仅在 frozen 且无控制台（stdout 非 tty）时生效；dev 模式或带控制台时不干预。
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    # windowed 模式 stdout 不是 tty（指向 /dev/null 或为 None）；带控制台则是 tty
+    out_is_tty = bool(sys.stdout and sys.stdout.isatty())
+    err_is_tty = bool(sys.stderr and sys.stderr.isatty())
+    if out_is_tty and err_is_tty:
+        return
+    try:
+        log_path = project_root / "app.log"
+        log_fp = open(log_path, "a", encoding="utf-8", buffering=1)
+        if not out_is_tty:
+            sys.stdout = log_fp
+        if not err_is_tty:
+            sys.stderr = log_fp
+        print(f"\n===== AgentBuddy 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
+    except Exception:
+        pass  # 重定向失败也不阻塞启动
+
+
 PROJECT_ROOT = _resolve_project_root()
 TOOLS_DIR = PROJECT_ROOT / "tools"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
@@ -168,8 +192,12 @@ def main():
 
     # --run 派发：在当前进程运行 scripts 下的脚本，供 config_server 子进程调用
     if args.run:
+        # --run 子进程由 config_server 捕获 stdout，无需重定向
         rc = _run_bundled_script(args.run, extra)
         sys.exit(rc)
+
+    # windowed 模式：stdout/stderr 为 None，重定向到 exe 目录 app.log
+    _redirect_stdio_to_log(PROJECT_ROOT)
 
     # frozen 模式首次运行：从 bundle 复制资源到 exe 目录
     _bootstrap_from_bundle()
