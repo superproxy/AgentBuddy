@@ -19,9 +19,9 @@ class ZCodeTarget(IdeTarget):
         pass
 
     def init_mcp(self, source_mcp_file: Path):
-        # 优先从 .agents/ide/zcode/zcode.json 复制（由 generate 生成）
+        # 优先从 config/ide/zcode/zcode.json 复制（由 generate 生成）
         source_dir = self.root
-        generated = source_dir / ".agents" / "ide" / "zcode" / "zcode.json"
+        generated = source_dir / "config" / "ide" / "zcode" / "zcode.json"
         zcode_dir = Path.home() / ".zcode"
         zcode_dir.mkdir(parents=True, exist_ok=True)
 

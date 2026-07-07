@@ -28,11 +28,11 @@ from lib.skills import install_skill
 
 
 # ============================================================
-# 已安装插件清单（.agents/installed-plugins.yaml）
+# 已安装插件清单（config/installed-plugins.yaml）
 # ============================================================
 
 def _installed_list_path(project_root: Path) -> Path:
-    return project_root / ".agents" / "installed-plugins.yaml"
+    return project_root / "config" / "installed-plugins.yaml"
 
 
 def read_installed_plugins(project_root: Path) -> list:
@@ -307,7 +307,7 @@ def uninstall_plugin(
 
     工作流程（install 的逆操作）：
       1. 读取 plugin.yaml 获取 skills 列表和 envVars
-      2. 删除 .agents/skills/ 下该插件安装的 skill
+      2. 删除 config/skills/ 下该插件安装的 skill
       3. 从 llm.yaml 移除该插件的 envVars
       4. （可选）删除 plugin.yaml 文件本身
 
@@ -332,9 +332,9 @@ def uninstall_plugin(
     print(f"\n{COLOR_WHITE}插件名称: {name}{COLOR_RESET}")
     print(f"{COLOR_WHITE}版本: {plugin_config.get('version', '')}{COLOR_RESET}")
 
-    # Step 1: 删除 .agents/skills/ 下该插件的 skill
+    # Step 1: 删除 config/skills/ 下该插件的 skill
     print(f"\n{COLOR_MAGENTA}步骤 1/3: 删除已安装的 skill{COLOR_RESET}")
-    agents_skills_dir = project_root / ".agents" / "skills"
+    agents_skills_dir = project_root / "config" / "skills"
     skills_list = plugin_config.get('skills', []) or []
     removed_skills = 0
     for skill in skills_list:

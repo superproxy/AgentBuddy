@@ -147,7 +147,7 @@ def cmd_sync(args):
 
     sync 会自动完成：
       1. 合并 mcp.yaml + 已安装插件 mcpServers → 全局 mcp.json
-      2. 合并 template/skills/ + .agents/skills/ → IDE skills 目录
+      2. 合并 template/skills/ + config/skills/ → IDE skills 目录
       3. 同步 mcp.json + skills + rules 到各 IDE
     """
     # 解析 scope
@@ -184,14 +184,14 @@ def cmd_sync(args):
                 pass
         mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
 
-    # skill 源：template/skills/（源/内置）+ .agents/skills/（plugin 安装的，补充）
+    # skill 源：template/skills/（源/内置）+ config/skills/（plugin 安装的，补充）
     source_skills = [PROJECT_ROOT / "template" / "skills"]
-    plugin_skills = PROJECT_ROOT / ".agents" / "skills"
+    plugin_skills = PROJECT_ROOT / "config" / "skills"
     if plugin_skills.exists():
         source_skills.append(plugin_skills)
 
     # 从 skill.yaml 读取启用清单，只同步启用的 skill
-    skill_yaml = PROJECT_ROOT / "template" / "skills" / "skill.yaml"
+    skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
     if "skill" in scope and skill_yaml.exists():
         enabled_set = skills.get_enabled_skills(skill_yaml)
         if enabled_set:

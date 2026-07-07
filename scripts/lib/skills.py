@@ -78,9 +78,9 @@ def disable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
 
 
 def scan_local_skills(project_root: Path) -> list:
-    """扫描本地所有技能（template/skills/ + .agents/skills/），返回去重的技能名列表。"""
+    """扫描本地所有技能（template/skills/ + config/skills/），返回去重的技能名列表。"""
     seen = set()
-    for d in (project_root / "template" / "skills", project_root / ".agents" / "skills"):
+    for d in (project_root / "template" / "skills", project_root / "config" / "skills"):
         if not d.exists():
             continue
         for skill_dir in sorted(d.iterdir()):
@@ -243,13 +243,13 @@ def write_skills_index(skills_source_dir: Path, target_file: Path, ide_name: str
     if ide_name == "Cursor":
         lines.append("> Cursor IDE does not natively support a Skills directory. Use `@file-path` to reference SKILL.md in conversations.")
     elif ide_name == "Agents":
-        lines.append("> `.agents/` 是全局共享 AI 智能体目录，可作为多项目通用技能源。")
+        lines.append("> `config/skills/` 是项目级 AI 智能体技能目录，可作为多项目通用技能源。")
     elif ide_name == "Codex":
         lines.append("> Codex IDE supports Skills via `.codex/skills/` directory.")
     elif ide_name == "Claude":
         lines.append("> Claude IDE supports Skills via `.claude/skills/` directory.")
     else:
-        lines.append("> Trae IDE supports Skills via `.agents/skills/` directory.")
+        lines.append("> Trae IDE supports Skills via `.trae/skills/` directory.")
     lines.append("")
 
     lines.append(f"{H2}Skill List")
@@ -429,7 +429,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     """安装技能：source 有效则先用 source；否则 find-skills 按名查找；再找本地缓存；都不行则失败。
 
     流程：
-      1. 已存在于 .agents/skills/ → 跳过（成功）
+      1. 已存在于 config/skills/ → 跳过（成功）
       2. source 有效（owner/repo 或 url）→ npx skills add <source> [--skill <name>]
          - 有 --skill → 安装指定技能，按 <name> 验证
          - 无 --skill（整个仓库）→ returncode==0 即视为成功
@@ -456,24 +456,24 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
 
     install_cwd = source_dir if source_dir else None
 
-    # Step 1: 已存在于 .agents/skills/ → 跳过（仅对单技能安装有效）
+    # Step 1: 已存在于 config/skills/ → 跳过（仅对单技能安装有效）
     if source_dir and not is_whole_repo:
-        dot_agents_skills_dir = source_dir / ".agents" / "skills"
+        dot_agents_skills_dir = source_dir / "config" / "skills"
         dot_agents_skills_dir.mkdir(parents=True, exist_ok=True)
         target_skill_dir = dot_agents_skills_dir / skill_name
         if target_skill_dir.exists():
-            print(f"{COLOR_DARKGRAY}[-] Skill already exists in .agents/skills: {skill_name}, skipping update{COLOR_RESET}")
+            print(f"{COLOR_DARKGRAY}[-] Skill already exists in config/skills: {skill_name}, skipping update{COLOR_RESET}")
             return True
 
     def _verify_installed():
-        """检查技能是否已落到 .agents/skills 或全局目录。整个仓库安装时跳过此检查。"""
+        """检查技能是否已落到 config/skills 或全局目录。整个仓库安装时跳过此检查。"""
         if is_whole_repo:
             return True  # 整个仓库安装，returncode==0 即视为成功
         if source_dir:
-            expected = source_dir / ".agents" / "skills" / skill_name
+            expected = source_dir / "config" / "skills" / skill_name
             if expected.exists():
                 return True
-            home_skill = Path.home() / ".agents" / "skills" / skill_name
+            home_skill = Path.home() / ".config" / "skills" / skill_name
             if home_skill.exists():
                 print(f"{COLOR_YELLOW}[!] Skill installed to global dir: {home_skill}{COLOR_RESET}")
                 print(f"    期望位置: {expected}")
@@ -526,7 +526,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
         if cache_skill_dir.exists():
             print(f"{COLOR_MAGENTA}[-] Installing skill from local cache: {skill_name}{COLOR_RESET}")
             try:
-                dot_agents_skills_dir = source_dir / ".agents" / "skills"
+                dot_agents_skills_dir = source_dir / "config" / "skills"
                 dot_agents_skills_dir.mkdir(parents=True, exist_ok=True)
                 target_skill_dir = dot_agents_skills_dir / skill_name
                 shutil.copytree(cache_skill_dir, target_skill_dir, ignore=shutil.ignore_patterns('.git'))

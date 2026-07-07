@@ -111,7 +111,7 @@ def _bootstrap_from_bundle() -> None:
     """frozen 模式首次运行：把 bundled 只读资源从 _MEIPASS 复制到 exe 目录（PROJECT_ROOT）。
 
     这样所有脚本的 `source_dir = script_dir.parent` 逻辑无需改动即可工作，
-    用户数据（llm.yaml/mcp.yaml/.agents/）也在 exe 目录可写。
+    用户数据（llm.yaml/mcp.yaml/config/）也在 exe 目录可写。
     已存在的目标不覆盖，保留用户修改；删除 exe 目录可重置。
     """
     if not getattr(sys, "frozen", False):

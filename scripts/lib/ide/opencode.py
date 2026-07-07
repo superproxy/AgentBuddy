@@ -20,10 +20,10 @@ class OpenCodeTarget(IdeTarget):
         pass
 
     def init_mcp(self, source_mcp_file: Path):
-        # 优先从 .agents/ide/opencode/opencode.json 复制（由 generate 生成）
+        # 优先从 config/ide/opencode/opencode.json 复制（由 generate 生成）
         source_dir = self.root
-        generated = source_dir / ".agents" / "ide" / "opencode" / "opencode.json"
-        opencode_template = source_dir / "ide" / "opencode" / "opencode.template.json"
+        generated = source_dir / "config" / "ide" / "opencode" / "opencode.json"
+        opencode_template = source_dir / "template" / "ide" / "opencode" / "opencode.template.json"
         opencode_dir = Path.home() / ".config" / "opencode"
         opencode_dir.mkdir(parents=True, exist_ok=True)
 

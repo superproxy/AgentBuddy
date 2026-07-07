@@ -187,7 +187,7 @@ IDE_DETECT_META = {
         "cli_names": [],
         "macos_apps": [],
         "windows_apps": [],
-        "config_dirs": [".agents"],
+        "config_dirs": ["./config/skills"],
         "sessions_subdir": None,
         "is_tui": False,
     },
@@ -614,11 +614,23 @@ def _get_cli_version(exe_path: str) -> str:
 
 
 def _resolve_config_paths(config_dirs: list[str]) -> list[str]:
-    """将相对 Path.home() 的配置目录解析为绝对路径，返回存在的路径列表。"""
+    """将配置目录解析为绝对路径，返回存在的路径列表。
+
+    路径约定：
+    - 以 "/" 开头：绝对路径
+    - 以 "./" 开头：项目根目录（PROJECT_ROOT，detect 模块无法获取，用 cwd 兜底）
+    - 其他：相对 Path.home()
+    """
     home = Path.home()
+    project_root = Path.cwd()
     found = []
     for d in config_dirs:
-        abs_path = home / d if not d.startswith("/") else Path(d)
+        if d.startswith("/"):
+            abs_path = Path(d)
+        elif d.startswith("./"):
+            abs_path = project_root / d[2:]
+        else:
+            abs_path = home / d
         if abs_path.exists():
             found.append(str(abs_path))
     return found

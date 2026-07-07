@@ -108,7 +108,7 @@ PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
 SKILL_YAML = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
 AGENTS_SKILLS_CACHE = PROJECT_ROOT / "template" / "skills"
-DOT_AGENTS_SKILLS = PROJECT_ROOT / ".agents" / "skills"
+DOT_AGENTS_SKILLS = PROJECT_ROOT / "config" / "skills"
 
 # env.yaml 中属于 llm.yaml 的顶层键（其余归 mcp.yaml 的只有 mcp）
 LLM_TOP_KEYS = ["llm", "embedding", "tts", "asr", "vision", "misc"]
@@ -451,13 +451,43 @@ def delete_mcp_config_key(key):
 # ============================================================
 @app.route("/api/skills/local", methods=["GET"])
 def list_local_skills():
-    if not SKILLS_CSV.exists():
-        return jsonify({"ok": True, "data": []})
+    """列出本地技能：合并 CSV 索引与 template/skills/ 实际目录。
+
+    CSV 提供 category/role/description 等元信息；目录扫描确保未在 CSV
+    中登记但实际存在的本地 skill 也能展示（避免遗漏）。
+    """
     rows = []
-    with open(SKILLS_CSV, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
+    csv_map: dict[str, dict] = {}
+    if SKILLS_CSV.exists():
+        with open(SKILLS_CSV, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                name = row.get("skill_name") or row.get("name") or ""
+                if name:
+                    csv_map[name] = row
+                    rows.append(row)
+
+    # 补充 template/skills/ 下未在 CSV 中登记的本地 skill
+    if AGENTS_SKILLS_CACHE.exists():
+        existing_names = {r.get("skill_name") or r.get("name") for r in rows}
+        for d in sorted(AGENTS_SKILLS_CACHE.iterdir()):
+            if not d.is_dir() or not (d / "SKILL.md").exists():
+                continue
+            if d.name in existing_names:
+                continue
+            rows.append({
+                "skill_name": d.name,
+                "category": "",
+                "role": "",
+                "description": "",
+                "trigger_keywords": "",
+                "installable": "false",
+                "source_type": "local",
+                "source": d.name,
+                "url": "",
+                "market_channel": "",
+                "short_name": d.name,
+            })
     return jsonify({"ok": True, "data": rows})
 
 
@@ -942,7 +972,7 @@ def uninstall_plugin_api():
     except Exception as e:
         return jsonify({"ok": False, "error": f"移除清单失败: {e}"}), 500
 
-    # 2. 删除 .agents/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
+    # 2. 删除 config/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
     # 查找对应的 plugin.yaml
     plugin_file = None
     if PLUGINS_DIR.exists():
@@ -1012,7 +1042,7 @@ def import_from_ide():
 
     扫描范围：
       - MCP: 所有 IDE 的项目级 + 全局级配置文件（JSON / TOML）
-      - Skills: 所有 IDE 的全局 skills 目录 + 项目级 .agents/skills/
+      - Skills: 所有 IDE 的全局 skills 目录 + 项目级 config/skills/
     合并策略：同名 MCP/Skill 首次出现保留，记录来源 IDE。
     """
     home = Path.home()
@@ -1088,7 +1118,7 @@ def import_from_ide():
         (home / ".trae" / "skills", "Trae"),
         (home / ".traecn" / "skills", "TraeCN"),
         (home / ".traesolocn" / "skills", "TraeSoloCN"),
-        (DOT_AGENTS_SKILLS, "Project(.agents)"),
+        (DOT_AGENTS_SKILLS, "Project(config/skills)"),
     ]
     merged_skills = []  # [{name, sources:[]}]
     skill_name_sources = {}  # name -> [ide名]
@@ -1251,7 +1281,7 @@ def install_plugin_sse():
 
                 # Step 1: 已存在则跳过（仅单技能）
                 if not is_whole_repo:
-                    target = PROJECT_ROOT / ".agents" / "skills" / skill_name
+                    target = PROJECT_ROOT / "config" / "skills" / skill_name
                     if target.exists():
                         yield f"data: [-] Skill already exists: {skill_name}, skipping\n\n"
                         continue
@@ -1262,7 +1292,7 @@ def install_plugin_sse():
                     rc = yield from _stream_process_rc(cmd, cwd=PROJECT_ROOT)
                     if rc == 0:
                         # 验证（整仓库跳过目录验证）
-                        if is_whole_repo or (PROJECT_ROOT / ".agents" / "skills" / skill_name).exists():
+                        if is_whole_repo or (PROJECT_ROOT / "config" / "skills" / skill_name).exists():
                             yield f"data: [OK] Skill installed via source: {skill_name}\n\n"
                             continue
                         yield f"data: [!] source 命令成功但目录未找到，尝试 find-skills\n\n"
@@ -1272,7 +1302,7 @@ def install_plugin_sse():
                 # Step 3: find-skills 按名查找
                 find_cmd = f"npx skills add {skill_name} -y"
                 rc = yield from _stream_process_rc(find_cmd, cwd=PROJECT_ROOT)
-                if rc == 0 and (is_whole_repo or (PROJECT_ROOT / ".agents" / "skills" / skill_name).exists()):
+                if rc == 0 and (is_whole_repo or (PROJECT_ROOT / "config" / "skills" / skill_name).exists()):
                     yield f"data: [OK] Skill installed from marketplace: {skill_name}\n\n"
                     continue
 
@@ -1283,7 +1313,7 @@ def install_plugin_sse():
                         yield f"data: [-] Copying from local cache: {skill_name}\n\n"
                         try:
                             import shutil
-                            target = PROJECT_ROOT / ".agents" / "skills" / skill_name
+                            target = PROJECT_ROOT / "config" / "skills" / skill_name
                             target.parent.mkdir(parents=True, exist_ok=True)
                             shutil.copytree(cache, target, ignore=shutil.ignore_patterns('.git'))
                             yield f"data: [OK] Skill copied from cache: {skill_name}\n\n"
@@ -1303,7 +1333,7 @@ def install_plugin_sse():
         except Exception as e:
             yield f"data: [ERROR] 注册失败: {e}\n\n"
 
-        # 自动 generate（刷新 mcp.json + .agents/ide/ 产物）
+        # 自动 generate（刷新 mcp.json + config/ide/ 产物）
         yield f"data: [STEP] 生成配置 (generate)\n\n"
         try:
             result = subprocess.run(

@@ -1,0 +1,17 @@
+refactor: 合并 .agents/ 到 config/，新增本地 skills 目录扫描
+
+主要变更：
+- 物理迁移 .agents/skills/ → config/skills/，删除 .agents/ 目录
+- 全局替换 .agents/skills/ 引用为 config/skills/（11 个代码文件）
+  * tools/config_server.py: DOT_AGENTS_SKILLS 路径常量 + 6 处引用
+  * scripts/agentctl.py: cmd_sync 的 plugin_skills 路径 + skill_yaml 路径
+  * scripts/lib/skills.py: scan_local_skills / install_skill / _verify_installed
+  * scripts/lib/plugins.py: installed-plugins.yaml 路径 + 卸载逻辑
+  * scripts/lib/ide/agents.py: AgentsTarget 同步目标改为 config/skills/
+  * scripts/lib/ide/{claude,codex,opencode,zcode}.py: 生成产物路径
+    .agents/ide/<ide>/ → config/ide/<ide>/，模板路径 ide/ → template/ide/
+  * scripts/lib/ide/detect.py: Agents IDE config_dirs 改为 ./config/skills
+  * app.py: bootstrap 注释更新
+- _resolve_config_paths() 支持 ./ 前缀（项目根相对路径）
+- /api/skills/local 接口合并 CSV 索引与 template/skills/ 目录扫描，
+  确保未在 CSV 中登记的本地 skill 也能展示

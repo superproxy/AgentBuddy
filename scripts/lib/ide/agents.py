@@ -1,9 +1,9 @@
-""".agents 本地运行目录分发器。
+"""config/skills 本地运行目录分发器。
 
 定位（与 AGENTS.md 一致）：
-  - .agents/ 是根据配置生成的目录，或存放 skill 的目录
-  - .agents/skills/  → 插件安装的技能（开发环境，不提交）
-  - .agents/installed-plugins.yaml → 已安装插件清单
+  - config/skills/ 是根据配置生成的目录，或存放 skill 的目录
+  - config/skills/  → 插件安装的技能（开发环境，不提交）
+  - config/skill.yaml → 已启用技能清单
   - 不再同步 rules/ 和 mcp/（这些由 agents/ 单一数据源维护）
 """
 from pathlib import Path
@@ -25,9 +25,9 @@ class AgentsTarget(IdeTarget):
         pass
 
     def init_skills(self, source_skills_dir: Path):
-        """同步 skills 到 .agents/skills/（插件安装的技能开发环境）。"""
-        agents_skills_dir = self.root / ".agents" / "skills"
-        copy_skills_safe(source_skills_dir, agents_skills_dir, ".agents/skills/",
+        """同步 skills 到 config/skills/（插件安装的技能开发环境）。"""
+        agents_skills_dir = self.root / "config" / "skills"
+        copy_skills_safe(source_skills_dir, agents_skills_dir, "config/skills/",
                          self.force, self.include_skills)
         write_skills_index(source_skills_dir, agents_skills_dir / "README.md",
                            "Agents", self.force, self.include_skills)
@@ -44,4 +44,4 @@ class AgentsTarget(IdeTarget):
                     if d.is_dir() and d.name not in seen:
                         seen.add(d.name)
                         skill_count += 1
-            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in .agents/skills/{COLOR_RESET}")
+            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in config/skills/{COLOR_RESET}")
