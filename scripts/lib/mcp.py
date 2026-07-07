@@ -527,7 +527,7 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
     for server_name, server in content.get("mcpServers", content).items():
         if server.get("disabled", False):
             continue
-        mcp_lines.append(f"[mcp_servers.{server_name}]")
+        mcp_lines.append(f"[mcp_servers.{_toml_string(server_name)}]")
         if server.get("type") in ("http", "streamableHttp") or server.get("url"):
             mcp_lines.append(f'url = {_toml_string(server["url"])}')
             if server.get("headers"):
@@ -544,7 +544,7 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
                 timeout_sec = max(1, int(timeout_ms / 1000))
                 mcp_lines.append(f"startup_timeout_sec = {timeout_sec}")
             if server.get("env"):
-                mcp_lines.append(f"[mcp_servers.{server_name}.env]")
+                mcp_lines.append(f"[mcp_servers.{_toml_string(server_name)}.env]")
                 for k, v in server["env"].items():
                     mcp_lines.append(f'{k} = {_toml_string(v)}')
         mcp_lines.append("")
