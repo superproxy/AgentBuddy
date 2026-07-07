@@ -371,9 +371,10 @@ def _normalize_id(s: str) -> str:
 
 
 def _scan_registry_uninstall() -> list[dict]:
-    """扫描 Windows 卸载注册表，返回 [{name, icon, location}] 列表（带缓存）。
+    """扫描 Windows 卸载注册表，返回 [{name, icon, location, version}] 列表（带缓存）。
 
     覆盖 HKLM 64/32 位和 HKCU 三个根，能识别 user-scope 安装的 IDE。
+    version 来自 DisplayVersion 字段，用于 GUI 应用版本号展示（不调用 CLI）。
     """
     global _REGISTRY_CACHE
     if _REGISTRY_CACHE is not None:
@@ -411,11 +412,17 @@ def _scan_registry_uninstall() -> list[dict]:
                                 location = winreg.QueryValueEx(sk, "InstallLocation")[0]
                             except FileNotFoundError:
                                 pass
+                            version = ""
+                            try:
+                                version = winreg.QueryValueEx(sk, "DisplayVersion")[0]
+                            except FileNotFoundError:
+                                pass
                             if name:
                                 entries.append({
                                     "name": str(name),
                                     "icon": str(icon).split(",")[0].strip('"').strip(),
                                     "location": str(location).strip('"').strip(),
+                                    "version": str(version).strip(),
                                 })
                     except FileNotFoundError:
                         continue
@@ -429,6 +436,7 @@ def _scan_start_menu_shortcuts() -> dict[str, str]:
     """扫描开始菜单 .lnk 快捷方式，返回 {name_stem: target_path}（带缓存）。
 
     覆盖 user 和 all-users 两个 Start Menu\Programs 目录。
+    多线程环境下 pywin32 COM 需要每线程 CoInitialize（detect_all 用线程池）。
     """
     global _STARTMENU_CACHE
     if _STARTMENU_CACHE is not None:
@@ -441,6 +449,11 @@ def _scan_start_menu_shortcuts() -> dict[str, str]:
         os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs"),
         os.path.join(os.environ.get("ProgramData", r"C:\Program Data"), "Microsoft", "Windows", "Start Menu", "Programs"),
     ]
+    try:
+        import pythoncom
+        pythoncom.CoInitialize()
+    except ImportError:
+        pass
     try:
         import win32com.client  # pywin32
         shell = win32com.client.Dispatch("WScript.Shell")
@@ -469,40 +482,53 @@ def _scan_start_menu_shortcuts() -> dict[str, str]:
         except Exception:
             pass
         _STARTMENU_CACHE = result
+        try:
+            import pythoncom
+            pythoncom.CoUninitialize()
+        except ImportError:
+            pass
         return result
 
-    for p in paths:
-        base = Path(p)
-        if not base.exists():
-            continue
+    try:
+        for p in paths:
+            base = Path(p)
+            if not base.exists():
+                continue
+            try:
+                for lnk in base.rglob("*.lnk"):
+                    try:
+                        target = shell.CreateShortcut(str(lnk)).TargetPath
+                        if target and Path(target).exists():
+                            result[lnk.stem] = target
+                    except Exception:
+                        continue
+            except (PermissionError, OSError):
+                continue
+    finally:
         try:
-            for lnk in base.rglob("*.lnk"):
-                try:
-                    target = shell.CreateShortcut(str(lnk)).TargetPath
-                    if target and Path(target).exists():
-                        result[lnk.stem] = target
-                except Exception:
-                    continue
-        except (PermissionError, OSError):
-            continue
+            import pythoncom
+            pythoncom.CoUninitialize()
+        except ImportError:
+            pass
     _STARTMENU_CACHE = result
     return result
 
 
-def _lookup_windows_app_via_system(label: str) -> str:
+def _lookup_windows_app_via_system(label: str) -> tuple[str, str]:
     """通过注册表 + 开始菜单快捷方式查找 Windows GUI exe（兜底）。
 
     匹配规则：规范化后的 label 是否被规范化后的 DisplayName / 快捷方式名 包含。
     避免误匹配：Trae CN 不会匹配到 "TRAE Work CN"（traecn 不是 traeworkcn 的子串）。
 
     Returns:
-        找到的 exe 绝对路径（字符串），未找到返回空串。
+        (exe_path, version) 元组。未找到返回 ("", "")。
+        version 来自注册表 DisplayVersion 字段（不调用 CLI）。
     """
     if sys.platform != "win32" or not label:
-        return ""
+        return "", ""
     norm_label = _normalize_id(label)
     if not norm_label:
-        return ""
+        return "", ""
 
     # 1. 注册表：DisplayIcon 通常指向真实 exe（如 "C:\...\Trae CN.exe,0"）
     #    优先 InstallLocation + 重名 exe，其次 DisplayIcon
@@ -516,7 +542,7 @@ def _lookup_windows_app_via_system(label: str) -> str:
         if entry["icon"] and entry["icon"].lower().endswith(".exe"):
             p = Path(entry["icon"])
             if p.exists():
-                return _realpath_case(str(p))
+                return _realpath_case(str(p)), entry.get("version", "")
     for entry in reg_hits:
         # InstallLocation 下找 <label>.exe（去掉空格的版本）
         if entry["location"]:
@@ -530,14 +556,14 @@ def _lookup_windows_app_via_system(label: str) -> str:
                 for cand in candidates:
                     p = loc / cand
                     if p.exists():
-                        return _realpath_case(str(p))
+                        return _realpath_case(str(p)), entry.get("version", "")
                 # 兜底：目录下任何与 label 同名（大小写不敏感）的 exe
                 label_norm = _normalize_id(label)
                 try:
                     for f in loc.iterdir():
                         if (f.is_file() and f.suffix.lower() == ".exe"
                                 and label_norm == _normalize_id(f.stem)):
-                            return _realpath_case(str(f))
+                            return _realpath_case(str(f)), entry.get("version", "")
                 except (PermissionError, OSError):
                     pass
 
@@ -545,8 +571,23 @@ def _lookup_windows_app_via_system(label: str) -> str:
     for name, target in _scan_start_menu_shortcuts().items():
         if norm_label == _normalize_id(name) or norm_label in _normalize_id(name):
             if target.lower().endswith(".exe") and Path(target).exists():
-                return _realpath_case(target)
+                # 快捷方式无版本号，尝试从注册表反查
+                ver = _lookup_version_from_registry(name)
+                return _realpath_case(target), ver
 
+    return "", ""
+
+
+def _lookup_version_from_registry(label: str) -> str:
+    """通过 label 反查注册表中的 DisplayVersion。"""
+    if sys.platform != "win32" or not label:
+        return ""
+    norm_label = _normalize_id(label)
+    if not norm_label:
+        return ""
+    for entry in _scan_registry_uninstall():
+        if norm_label == _normalize_id(entry["name"]):
+            return entry.get("version", "")
     return ""
 
 
@@ -633,6 +674,7 @@ def detect_ide(ide_key: str) -> dict:
 
     # 2. App 探测：macOS .app + Windows GUI exe
     app_path = ""
+    app_version = ""
     for ap in meta.get("macos_apps", []):
         if _check_macos_app(ap):
             app_path = ap
@@ -646,7 +688,7 @@ def detect_ide(ide_key: str) -> dict:
                 break
         # 兜底：注册表 + 开始菜单快捷方式（识别非默认路径、改名 IDE）
         if not app_path:
-            app_path = _lookup_windows_app_via_system(meta.get("label", ""))
+            app_path, app_version = _lookup_windows_app_via_system(meta.get("label", ""))
 
     # 3. 配置目录（仅信息展示，不影响 installed 判定）
     config_paths = _resolve_config_paths(meta.get("config_dirs", []))
@@ -654,6 +696,10 @@ def detect_ide(ide_key: str) -> dict:
 
     # 4. installed：必须有可执行文件（CLI 或 App），配置目录不算
     installed = bool(exe_path or app_path)
+
+    # 5. 版本号：优先 CLI 版本，其次注册表 DisplayVersion
+    if not version and app_version:
+        version = app_version
 
     return {
         "key": ide_key,
