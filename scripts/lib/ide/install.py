@@ -1,13 +1,17 @@
 """IDE 安装/卸载模块。
 
 支持两种安装方式：
-- CLI：通过 brew / npm / script（curl|bash）/ manual（下载页）安装
+- CLI：通过 brew / npm / script（curl|bash）/ app_cli（App 内 CLI 建软链）/ manual（下载页）安装
 - App：通过 brew install --cask / brew uninstall --cask，或下载 dmg
 
 各 IDE 的安装元数据在 IDE_INSTALL_META 中定义：
-    cli_install: {method: brew|npm|script|manual, package?, script_url?, url?}
+    cli_install: {method: brew|npm|script|app_cli|manual, package?, script_url?, app_path?, cli_relpath?, link_name?, url?}
     app_install: {method: cask|manual, package?, url?}
     homepage: 官方主页
+
+app_cli method：CLI 随 App 分发（如 Cursor.app 内的 cursor 命令），通过建软链
+    <link_dir>/<link_name> → <app_path>/<cli_relpath> 使其出现在 PATH 上。
+    link_dir 优先 /usr/local/bin，不可写则回退 ~/.local/bin。
 """
 import shutil
 import subprocess
@@ -30,7 +34,13 @@ IDE_INSTALL_META = {
         "homepage": "https://openai.com/codex",
     },
     "Cursor": {
-        "cli_install": {"method": "manual", "url": "https://cursor.com"},
+        "cli_install": {
+            "method": "app_cli",
+            "app_path": "/Applications/Cursor.app",
+            "cli_relpath": "Contents/Resources/app/bin/cursor",
+            "link_name": "cursor",
+            "url": "https://cursor.com",
+        },
         "app_install": {"method": "cask", "package": "cursor"},
         "homepage": "https://cursor.com",
     },
@@ -119,6 +129,25 @@ def _run_cmd(cmd: list[str], timeout: int = 300) -> dict:
                 "cmd": " ".join(cmd)}
 
 
+def _select_link_dir() -> Path:
+    """选择可写的软链目录：优先 /usr/local/bin（标准 PATH），不可写则回退 ~/.local/bin。
+
+    app_cli method 用它给 App 内 CLI 建软链，使其出现在 PATH 上。
+    """
+    candidates = [Path("/usr/local/bin"), Path.home() / ".local" / "bin"]
+    for d in candidates:
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            probe = d / ".agentbuddy.write_probe"
+            probe.touch()
+            probe.unlink(missing_ok=True)
+            return d
+        except (PermissionError, OSError):
+            continue
+    # 兜底：~/.local/bin（即使不可写也返回，由调用方报错）
+    return Path.home() / ".local" / "bin"
+
+
 def install_ide(ide_key: str, mode: str = "cli") -> dict:
     """安装 IDE。
 
@@ -154,6 +183,44 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
             "cmd": "", "stdout": "", "stderr": "",
             "url": url or meta.get("homepage", ""),
         }
+
+    if method == "app_cli":
+        # CLI 随 App 分发（如 Cursor.app 内的 cursor 命令）：建软链到 PATH
+        app_path = install_meta.get("app_path", "")
+        cli_relpath = install_meta.get("cli_relpath", "")
+        link_name = install_meta.get("link_name", ide_key.lower())
+        fallback_url = url or meta.get("homepage", "")
+        if not app_path or not cli_relpath:
+            return {"ok": False, "ide": ide_key, "mode": mode, "method": "app_cli",
+                    "message": "app_cli 配置不完整（缺 app_path/cli_relpath）",
+                    "cmd": "", "stdout": "", "stderr": "", "url": fallback_url}
+        cli_in_app = Path(app_path) / cli_relpath
+        if not cli_in_app.exists():
+            return {"ok": False, "ide": ide_key, "mode": mode, "method": "app_cli",
+                    "message": f"未找到 App 内 CLI（{cli_in_app}），请先安装 App（点'安装 App'）",
+                    "cmd": "", "stdout": "", "stderr": "", "url": fallback_url}
+        link_dir = _select_link_dir()
+        link_target = link_dir / link_name
+        cmd_str = f"ln -sf {cli_in_app} {link_target}"
+        try:
+            # 覆盖已有软链/文件（先删再建，避免 symlink_to 覆盖文件时的行为差异）
+            if link_target.is_symlink() or link_target.exists():
+                link_target.unlink()
+            link_target.symlink_to(cli_in_app)
+            return {
+                "ok": True, "ide": ide_key, "mode": mode, "method": "app_cli",
+                "message": f"已创建软链: {link_target} → {cli_in_app}",
+                "cmd": cmd_str, "stdout": "", "stderr": "",
+            }
+        except PermissionError:
+            return {"ok": False, "ide": ide_key, "mode": mode, "method": "app_cli",
+                    "message": f"无权限写入 {link_dir}，请手动执行: sudo ln -sf {cli_in_app} {link_target}",
+                    "cmd": f"sudo ln -sf {cli_in_app} {link_target}",
+                    "stdout": "", "stderr": "PermissionError", "url": fallback_url}
+        except Exception as e:
+            return {"ok": False, "ide": ide_key, "mode": mode, "method": "app_cli",
+                    "message": f"创建软链失败: {e}", "cmd": cmd_str,
+                    "stdout": "", "stderr": str(e), "url": fallback_url}
 
     if method == "script":
         # curl -fsSL <script_url> | bash
@@ -339,6 +406,9 @@ def get_install_info(ide_key: str) -> dict:
         if cli_install.get("method") == "cask":
             cli_install = {"method": "manual", "url": homepage}
         if cli_install.get("method") == "brew":
+            cli_install = {"method": "manual", "url": homepage}
+        if cli_install.get("method") == "app_cli":
+            # app_cli 依赖 macOS .app 内 CLI，非 macOS 降级为 manual
             cli_install = {"method": "manual", "url": homepage}
         if app_install.get("method") == "cask":
             app_install = {"method": "manual", "url": homepage}
