@@ -58,7 +58,7 @@ class _TraeBaseTarget(IdeTarget):
                     if d.is_dir() and d.name not in seen:
                         seen.add(d.name)
                         skill_count += 1
-            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in agents/skills/{COLOR_RESET}")
+            print(f"{COLOR_GREEN}[OK] {skill_count} skills available in template/skills/{COLOR_RESET}")
 
 
 class TraeTarget(_TraeBaseTarget):

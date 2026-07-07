@@ -1,37 +1,25 @@
-# MCP 本地密钥配置（包含真实 API Key）
-agents/mcp/mcp.json
+# === 运行态配置（template 输出，含真实密钥，禁止提交） ===
+# config/ 目录：由 template/ 模板生成的运行态文件，含真实 API Key
+/config/
 
 # 根目录本地密钥/运行态文件（禁止提交）
 /llm.yaml
 /mcp.yaml
-/agents/skills/skill.yaml
+env.local.yaml
+opencode.json
+skills-lock.json
+temp_parse.py
 
 # Codex 运行态配置（由脚本生成）
 .codex/
 
-# MCP 运行时配置（由 init-mcp-env 脚本从模板生成，包含真实密钥）
-agents/mcp/mcp.json
-env.local.yaml
-# 拆分后的密钥配置文件（包含真实 API Key，禁止提交）
-agents/llm/llm.yaml
-agents/mcp/mcp.yaml
-# 注意：llm-env-example.yaml 和 mcp-env-example.yaml 是模板文件，可以安全提交
-
-opencode.json
-
-# 注意：mcp.template.json 和 mcp-env.example.json 是模板文件，可以安全提交
+# === 临时/缓存 ===
 .DS_Store
-skills-lock.json
-temp_parse.py
-agents/skills/bid-to-tender-skills
-ide/codex/auth.json
-
 .agents
 .idea
 .claude
 .qoder
 .trae
-
 
 # === Python ===
 # 字节码文件 / 编译产物
@@ -62,18 +50,8 @@ ENV/
 .env
 .env.local
 .env.*.local
-agents/skills/ui-ux-pro-max/scripts/__pycache__/core.cpython-314.pyc
-ide/codex/config.toml
-/ide/claude/settings.json
-/ide/opencode/opencode.json
-/.idea/
-/.agents/
-/.claude/skills/open-browser-use/
-/.claude/skills/open-browser-use/
-/.claude/skills/open-browser-use/
-/proxy/config.yaml
 
-# npx skills add 全局安装的远程技能缓存（项目根 skills/，非 agents/skills）
+# npx skills add 全局安装的远程技能缓存（项目根 skills/，非 template/skills）
 /skills/
 
 # PyInstaller 构建产物
@@ -82,4 +60,3 @@ ide/codex/config.toml
 *.spec.bak
 # frozen 首次运行标记
 .bundle_bootstrapped
-

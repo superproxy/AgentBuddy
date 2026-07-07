@@ -47,8 +47,8 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
       3. 只有 env.yaml → 直接读 env.yaml（向后兼容）
       4. 都没有 → 报错
     """
-    llm_file = project_root / "agents" / "llm" / "llm.yaml"
-    mcp_file = project_root / "agents" / "mcp" / "mcp.yaml"
+    llm_file = project_root / "config" / "llm" / "llm.yaml"
+    mcp_file = project_root / "config" / "mcp" / "mcp.yaml"
     env_file = project_root / "env.yaml"
 
     if llm_file.exists():
@@ -81,17 +81,17 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
     print(f"  Expected: {llm_file} + {mcp_file}")
     print()
     print("Steps:")
-    print("  1. Copy agents/llm/llm-env-example.yaml to agents/llm/llm.yaml")
-    print("  2. Copy agents/mcp/mcp-env-example.yaml to agents/mcp/mcp.yaml")
-    print("  3. Fill in real API Keys in agents/llm/llm.yaml / agents/mcp/mcp.yaml")
+    print("  1. Copy template/llm/llm-env-example.yaml to config/llm/llm.yaml")
+    print("  2. Copy template/mcp/mcp-env-example.yaml to config/mcp/mcp.yaml")
+    print("  3. Fill in real API Keys in config/llm/llm.yaml / config/mcp/mcp.yaml")
     print("  4. Re-run this script")
     sys.exit(1)
 
 
 def save_split_env_config(project_root: Path, config: dict) -> None:
-    """将配置拆分保存回 agents/llm/llm.yaml + agents/mcp/mcp.yaml。"""
-    llm_file = project_root / "agents" / "llm" / "llm.yaml"
-    mcp_file = project_root / "agents" / "mcp" / "mcp.yaml"
+    """将配置拆分保存回 config/llm/llm.yaml + config/mcp/mcp.yaml。"""
+    llm_file = project_root / "config" / "llm" / "llm.yaml"
+    mcp_file = project_root / "config" / "mcp" / "mcp.yaml"
     llm_data = {k: v for k, v in (config or {}).items() if k in LLM_TOP_KEYS}
     if "_description" in config:
         llm_data["_description"] = config["_description"]
@@ -106,8 +106,8 @@ def read_env_config(env_file: Path, silent: bool = False) -> dict:
         print(f"{COLOR_RED}[ERROR] Config file not found: {env_file}{COLOR_RESET}")
         print()
         print("Steps:")
-        print("  1. Copy agents/llm/llm-env-example.yaml to agents/llm/llm.yaml")
-        print("  2. Copy agents/mcp/mcp-env-example.yaml to agents/mcp/mcp.yaml")
+        print("  1. Copy template/llm/llm-env-example.yaml to config/llm/llm.yaml")
+        print("  2. Copy template/mcp/mcp-env-example.yaml to config/mcp/mcp.yaml")
         print("  3. Fill in real API Keys in llm.yaml / mcp.yaml")
         print("  4. Re-run this script")
         sys.exit(1)
@@ -457,7 +457,7 @@ def switch_provider(env_config: dict, provider: str, protocol, env_file: Path) -
     env_config["llm"]["_active_protocol"] = protocol
     # 拆分保存到 llm.yaml + mcp.yaml（向后兼容 env.yaml）
     if env_file.name == "llm.yaml":
-        # llm.yaml 在 agents/llm/ 下，mcp.yaml 在 agents/mcp/ 下
+        # llm.yaml 在 config/llm/ 下，mcp.yaml 在 config/mcp/ 下
         # save_split_env_config 期望 llm_file 和 mcp_file 在同一目录，
         # 这里直接调用 save_env_config_file 分别保存
         from lib.config_io import save_env_config_file

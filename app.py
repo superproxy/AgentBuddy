@@ -121,7 +121,7 @@ def _bootstrap_from_bundle() -> None:
     project = Path(sys.executable).parent
 
     resources = [
-        "scripts", "agents", "tools", "ide",
+        "scripts", "agents", "template", "tools",
         "AGENTS.md",
     ]
     copied = []

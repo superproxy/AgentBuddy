@@ -98,16 +98,16 @@ app = Flask(__name__, static_folder=None)
 ENV_EXAMPLE = PROJECT_ROOT / "env.example.yaml"
 ENV_FILE = PROJECT_ROOT / "env.yaml"
 # 新拆分：env.yaml → llm.yaml + mcp.yaml
-LLM_FILE = PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
-MCP_CONFIG_FILE = PROJECT_ROOT / "agents" / "mcp" / "mcp.yaml"
+LLM_FILE = PROJECT_ROOT / "config" / "llm" / "llm.yaml"
+MCP_CONFIG_FILE = PROJECT_ROOT / "config" / "mcp" / "mcp.yaml"
 # 拆分后的示例模板（可安全提交）
-LLM_EXAMPLE = PROJECT_ROOT / "agents" / "llm" / "llm-env-example.yaml"
-MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "agents" / "mcp" / "mcp-env-example.yaml"
-MCP_TEMPLATE = PROJECT_ROOT / "agents" / "mcp" / "mcp.template.json"
-PLUGINS_DIR = PROJECT_ROOT / "agents" / "plugins"
-SKILLS_CSV = PROJECT_ROOT / "agents" / "skills" / "skills-index.csv"
-SKILL_YAML = PROJECT_ROOT / "agents" / "skills" / "skill.yaml"
-AGENTS_SKILLS_CACHE = PROJECT_ROOT / "agents" / "skills"
+LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
+MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
+MCP_TEMPLATE = PROJECT_ROOT / "template" / "mcp" / "mcp.template.json"
+PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
+SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
+SKILL_YAML = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
+AGENTS_SKILLS_CACHE = PROJECT_ROOT / "template" / "skills"
 DOT_AGENTS_SKILLS = PROJECT_ROOT / ".agents" / "skills"
 
 # env.yaml 中属于 llm.yaml 的顶层键（其余归 mcp.yaml 的只有 mcp）
@@ -1111,7 +1111,7 @@ def import_from_ide():
     # LLM 配置：从项目 llm.yaml 读取已配置的 provider（有 api_key 的算已配置）
     llm_providers = []
     try:
-        llm_path = PROJECT_ROOT / "agents" / "llm" / "llm.yaml"
+        llm_path = PROJECT_ROOT / "config" / "llm" / "llm.yaml"
         if llm_path.exists():
             llm_data = load_env_config_file(llm_path)
             if isinstance(llm_data, dict):
@@ -1278,7 +1278,7 @@ def install_plugin_sse():
 
                 # Step 4: 本地缓存（仅单技能）
                 if not is_whole_repo:
-                    cache = PROJECT_ROOT / "agents" / "skills" / skill_name
+                    cache = PROJECT_ROOT / "template" / "skills" / skill_name
                     if cache.exists():
                         yield f"data: [-] Copying from local cache: {skill_name}\n\n"
                         try:

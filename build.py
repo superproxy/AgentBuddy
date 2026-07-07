@@ -129,10 +129,10 @@ def check_examples_present() -> None:
     base = DIST_DIR / "AgentBuddy" / "_internal"
     # PyInstaller 6.x 把数据放到 _internal/；旧版放到 exe 同级
     candidates = [
-        DIST_DIR / "AgentBuddy" / "agents" / "llm" / "llm-env-example.yaml",
-        DIST_DIR / "AgentBuddy" / "agents" / "mcp" / "mcp-env-example.yaml",
-        base / "agents" / "llm" / "llm-env-example.yaml",
-        base / "agents" / "mcp" / "mcp-env-example.yaml",
+        DIST_DIR / "AgentBuddy" / "template" / "llm" / "llm-env-example.yaml",
+        DIST_DIR / "AgentBuddy" / "template" / "mcp" / "mcp-env-example.yaml",
+        base / "template" / "llm" / "llm-env-example.yaml",
+        base / "template" / "mcp" / "mcp-env-example.yaml",
     ]
     found = [c for c in candidates if c.exists()]
     if not found:
@@ -160,7 +160,7 @@ def report() -> None:
         print(f"  产物目录: dist/AgentBuddy/")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
         print("  分发:    压缩为 .tar.gz，或用 appimagetool 做 .AppImage")
-    print("\n  首次运行会自动从模板生成 agents/llm/llm.yaml 与 agents/mcp/mcp.yaml")
+    print("\n  首次运行会自动从模板生成 config/llm/llm.yaml 与 config/mcp/mcp.yaml")
     print("  用户在 UI 中填入真实 API Key 即可。\n")
 
 

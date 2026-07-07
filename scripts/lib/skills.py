@@ -78,9 +78,9 @@ def disable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
 
 
 def scan_local_skills(project_root: Path) -> list:
-    """扫描本地所有技能（agents/skills/ + .agents/skills/），返回去重的技能名列表。"""
+    """扫描本地所有技能（template/skills/ + .agents/skills/），返回去重的技能名列表。"""
     seen = set()
-    for d in (project_root / "agents" / "skills", project_root / ".agents" / "skills"):
+    for d in (project_root / "template" / "skills", project_root / ".agents" / "skills"):
         if not d.exists():
             continue
         for skill_dir in sorted(d.iterdir()):
@@ -297,7 +297,7 @@ def write_skills_index(skills_source_dir: Path, target_file: Path, ide_name: str
 
     lines.append(f"{H2}Skill to Role Mapping")
     lines.append("")
-    # CSV 在 agents/skills/ 目录内
+    # CSV 在 template/skills/ 目录内
     csv_path = srcs[0] / "skills-index.csv"
     mapping = load_skill_mapping(csv_path)
     if mapping:
@@ -434,7 +434,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
          - 有 --skill → 安装指定技能，按 <name> 验证
          - 无 --skill（整个仓库）→ returncode==0 即视为成功
       3. find-skills 按名查找：npx skills add <name> -y（市场搜索）
-      4. 本地缓存 agents/skills/<name> → 复制
+      4. 本地缓存 template/skills/<name> → 复制
       5. 仍未成功 → 返回 False（失败）
 
     Returns:
@@ -520,9 +520,9 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     except Exception as e:
         print(f"{COLOR_YELLOW}[!] find-skills 错误: {e}，尝试本地缓存{COLOR_RESET}")
 
-    # Step 4: 本地缓存 agents/skills/<name> → 复制（仅对单技能安装有效）
+    # Step 4: 本地缓存 template/skills/<name> → 复制（仅对单技能安装有效）
     if source_dir and not is_whole_repo:
-        cache_skill_dir = source_dir / "agents" / "skills" / skill_name
+        cache_skill_dir = source_dir / "template" / "skills" / skill_name
         if cache_skill_dir.exists():
             print(f"{COLOR_MAGENTA}[-] Installing skill from local cache: {skill_name}{COLOR_RESET}")
             try:

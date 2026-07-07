@@ -56,7 +56,7 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
 datas = []
 datas += collect_dir('scripts', 'scripts')
 datas += collect_dir('tools', 'tools')
-datas += collect_dir('ide', 'ide')
+datas += collect_dir('template', 'template')
 datas += collect_dir('agents', 'agents')
 
 # 单文件资源

@@ -1,0 +1,38 @@
+refactor: 重构目录结构 - template/ 模板输入 + config/ 运行态输出
+
+变更：
+1. 新建 template/ 目录，迁移以下模板输入（只读，可提交）：
+   - agents/llm/        → template/llm/         (llm-env-example.yaml)
+   - agents/mcp/         → template/mcp/         (mcp-env-example.yaml)
+   - agents/plugins/     → template/plugins/     (*.plugin.yaml)
+   - agents/skills/      → template/skills/      (SKILL.md + skills-index.csv)
+   - agents/system-prompts/ → template/system-prompts/
+   - ide/                → template/ide/         (claude/codex/idea/opencode 模板)
+   - proxy/              → template/proxy/       (config.template.yaml)
+
+2. 新建 config/ 目录，承接运行态输出（含真实密钥，gitignore）：
+   - config/llm/llm.yaml       (用户填密钥)
+   - config/mcp/mcp.yaml       (用户填密钥)
+   - config/mcp/mcp.json       (agentctl generate 生成)
+   - config/ide/{claude,codex,opencode}/* (模板渲染产物)
+   - config/proxy/config.yaml  (模板渲染产物)
+
+3. agents/ 仅保留协作框架相关目录（best-practices/commands/evolution/faq/roles/rules/sync/workflows + harness.yaml/communication.yaml）
+
+代码修改：
+- tools/config_server.py: 路径常量区分 template（只读模板）和 config（运行态）
+- scripts/agentctl.py: generate 输出到 config/，sync 读 config/mcp/mcp.json
+- scripts/lib/llm.py: load/save_split_env_config 读写 config/llm 和 config/mcp
+- scripts/lib/skills.py: scan_local_skills 读 template/skills
+- scripts/lib/mcp.py: 注释更新
+- scripts/lib/ide/trae.py: print 提示更新
+- build.py: check_examples_present 校验 template/ 下模板文件
+- app.py: bootstrap 资源列表新增 template（config 不打包）
+- app.spec: collect_dir('template', 'template')，移除 ide
+- .gitignore: 新增 /config/ 规则，移除旧 agents/ide/proxy 路径
+
+验证：
+- agentctl generate: 成功从 config/mcp/mcp.yaml 生成 config/mcp/mcp.json 和各 IDE 配置
+- agentctl plugin list: 正确扫描 template/plugins/
+- agentctl skill list: 正确扫描 template/skills/skills-index.csv
+- python build.py: 构建成功，密钥扫描通过，模板已就位
