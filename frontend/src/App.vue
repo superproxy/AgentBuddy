@@ -6,9 +6,11 @@ import Modal from './components/Modal.vue'
 import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
 import EnvView from './views/EnvView.vue'
+import McpView from './views/McpView.vue'
 import PlaceholderView from './views/PlaceholderView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
+import { useMcpStore } from './stores/mcp'
 
 const tab = ref('ide')
 const tabs = [
@@ -22,9 +24,12 @@ const tabs = [
 
 const ide = useIdeStore()
 const env = useEnvStore()
+const mcp = useMcpStore()
 onMounted(() => {
   ide.loadIdeDetect()
   env.loadEnv()
+  mcp.loadMcpCatalog()
+  mcp.loadMcpConfig()
 })
 </script>
 
@@ -33,6 +38,7 @@ onMounted(() => {
   <main class="max-w-[1600px] mx-auto px-6 py-5">
     <IdeView v-if="tab === 'ide'" />
     <EnvView v-else-if="tab === 'env'" />
+    <McpView v-else-if="tab === 'mcp'" />
     <PlaceholderView v-else :label="tabs.find((t) => t.key === tab)?.label" />
   </main>
   <Toast />
