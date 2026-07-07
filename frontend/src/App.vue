@@ -8,10 +8,12 @@ import IdeView from './views/IdeView.vue'
 import EnvView from './views/EnvView.vue'
 import McpView from './views/McpView.vue'
 import SkillView from './views/SkillView.vue'
+import PluginView from './views/PluginView.vue'
 import PlaceholderView from './views/PlaceholderView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
+import { usePluginStore } from './stores/plugin'
 
 const tab = ref('ide')
 const tabs = [
@@ -26,6 +28,7 @@ const tabs = [
 const ide = useIdeStore()
 const env = useEnvStore()
 const mcp = useMcpStore()
+const plugin = usePluginStore()
 onMounted(() => {
   ide.loadIdeDetect()
   env.loadEnv()
@@ -41,6 +44,7 @@ onMounted(() => {
     <EnvView v-else-if="tab === 'env'" />
     <McpView v-else-if="tab === 'mcp'" />
     <SkillView v-else-if="tab === 'skill'" />
+    <PluginView v-else-if="tab === 'plugin'" />
     <PlaceholderView v-else :label="tabs.find((t) => t.key === tab)?.label" />
   </main>
   <Toast />
