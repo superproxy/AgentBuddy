@@ -40,6 +40,12 @@ venv/
 env/
 ENV/
 
+# 前端工程（Vue 3 + Vite）
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+tools/dist-ui/
+
 # 工具缓存
 .pytest_cache/
 .mypy_cache/

@@ -1,0 +1,71 @@
+/* Tailwind v4 + 设计 token（从 config_ui.html 搬迁，视觉零变化） */
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #d9e6ff;
+  --color-brand-500: #165dff;
+  --color-brand-600: #0e42d2;
+  --color-brand-700: #0a2e9c;
+  --color-ink-100: #f7f8fa;
+  --color-ink-300: #c9cdd4;
+  --color-ink-500: #86909c;
+  --color-ink-700: #4e5969;
+  --color-ink-900: #1f2329;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 0 3px rgba(22, 93, 255, 0.15);
+}
+
+/* 全局基础样式（从 config_ui.html L24-38 搬迁） */
+body {
+  font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c9cdd4;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #86909c;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.log-panel {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+input,
+select,
+textarea {
+  transition: all 0.15s;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.15);
+  border-color: #165dff;
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, #1f2329 0%, #2a2f36 100%);
+}
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+}

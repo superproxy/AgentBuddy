@@ -302,7 +302,24 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
 # ============================================================
 @app.route("/")
 def index():
+    """根路由：优先返回 Vite 构建产物（Vue 3 + Vite 重构版），不存在则回退旧版 HTML。"""
+    dist_ui = PROJECT_ROOT / "tools" / "dist-ui" / "index.html"
+    if dist_ui.exists():
+        return send_file(dist_ui)
     return send_file(PROJECT_ROOT / "tools" / "config_ui.html")
+
+
+@app.route("/old")
+def old_ui():
+    """旧版 UI（运行时 Vue 单文件），渐进式迁移期间备用。"""
+    return send_file(PROJECT_ROOT / "tools" / "config_ui.html")
+
+
+@app.route("/assets/<path:filename>")
+def dist_assets(filename):
+    """Vite 构建产物（JS/CSS chunk）。"""
+    from flask import send_from_directory
+    return send_from_directory(PROJECT_ROOT / "tools" / "dist-ui" / "assets", filename)
 
 
 @app.route("/static/<path:filename>")
