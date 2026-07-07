@@ -321,16 +321,34 @@ def reinstall_ide(ide_key: str, mode: str = "cli") -> dict:
 
 
 def get_install_info(ide_key: str) -> dict:
-    """获取 IDE 的安装元信息（不执行安装）。"""
+    """获取 IDE 的安装元信息（不执行安装）。
+
+    平台适配：
+    - macOS：cask 方式有效（brew install --cask）
+    - Windows/Linux：cask 不可用，自动降级为 manual + homepage URL
+    """
     meta = IDE_INSTALL_META.get(ide_key)
     if not meta:
         return {"ide": ide_key, "available": False}
+    cli_install = dict(meta.get("cli_install", {}))
+    app_install = dict(meta.get("app_install", {}))
+    homepage = meta.get("homepage", "")
+
+    # 非 macOS 平台：cask 降级为 manual + homepage
+    if sys.platform != "darwin":
+        if cli_install.get("method") == "cask":
+            cli_install = {"method": "manual", "url": homepage}
+        if cli_install.get("method") == "brew":
+            cli_install = {"method": "manual", "url": homepage}
+        if app_install.get("method") == "cask":
+            app_install = {"method": "manual", "url": homepage}
+
     return {
         "ide": ide_key,
         "available": True,
-        "cli": meta.get("cli_install", {}),
-        "app": meta.get("app_install", {}),
-        "homepage": meta.get("homepage", ""),
+        "cli": cli_install,
+        "app": app_install,
+        "homepage": homepage,
     }
 
 
