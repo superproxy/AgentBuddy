@@ -98,10 +98,29 @@ export const useEnvStore = defineStore('env', () => {
     await runSse('/api/proxy/start?cmd=' + encodeURIComponent(cmd), (line) => ui.appendLog(line))
   }
 
+  async function verifyLlm(pn: string, proto: string) {
+    const cfg = envData.llm[pn][proto]
+    if (!cfg || !cfg.base_url || !cfg.api_key) { ui.toast('请先填 base_url 和 api_key', 'warn'); return }
+    ui.toast('验证中...', 'ok')
+    const r = await api<{ ok: boolean; models?: string[]; error?: string }>('/api/llm/verify', {
+      method: 'POST', body: JSON.stringify({ base_url: cfg.base_url, api_key: cfg.api_key, protocol: proto }),
+    })
+    if (r.ok) {
+      ui.toast(`验证成功，${r.models?.length || 0} 个模型可用`)
+      if (r.models && r.models.length) {
+        const newModels: any = {}
+        for (const m of r.models) newModels[m] = { name: m }
+        cfg.models = newModels
+      }
+    } else {
+      ui.toast('验证失败: ' + r.error, 'err')
+    }
+  }
+
   return {
     envData, envDataText, openedProviders, providerNames, proxyEnabled,
     loadEnv, toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
     addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
-    generateProxyConfig, startProxyServer,
+    generateProxyConfig, startProxyServer, verifyLlm,
   }
 })

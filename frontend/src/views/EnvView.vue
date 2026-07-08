@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useEnvStore } from '../stores/env'
 const env = useEnvStore()
 const { envData, envDataText, openedProviders, providerNames, proxyEnabled } = storeToRefs(env)
-const { toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider, addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv, generateProxyConfig, startProxyServer } = env
+const { toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider, addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv, generateProxyConfig, startProxyServer, verifyLlm } = env
 </script>
 <template>
   <div class="space-y-4">
@@ -62,6 +62,7 @@ const { toggleProvider, updateEnvDataSection, addProvider, deleteProvider, setAc
                   </tbody>
                 </table>
                 <button @click="addModel(pn, proto)" class="mt-1.5 text-[11px] text-brand-600 hover:underline">+ 添加 model</button>
+                <button @click="verifyLlm(pn, proto)" class="mt-1.5 ml-2 text-[11px] text-green-600 hover:underline">验证 key + 获取模型</button>
               </div>
             </template>
             <button @click="addProtocol(pn)" class="text-[11px] text-brand-600 hover:underline">+ 添加协议</button>

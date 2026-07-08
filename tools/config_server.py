@@ -1834,5 +1834,46 @@ def save_subagent():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ============================================================
+# LLM key 验证 + model 获取（调 provider 的 /v1/models）
+# ============================================================
+@app.route("/api/llm/verify", methods=["POST"])
+def verify_llm():
+    """验证 LLM api_key 是否可用，并返回可用 model 列表。
+
+    Body: {base_url, api_key, protocol?}
+    调 base_url + /v1/models（OpenAI 兼容），成功返回 model 列表。
+    """
+    body = request.get_json(force=True)
+    base_url = (body.get("base_url") or "").rstrip("/")
+    api_key = body.get("api_key", "")
+    protocol = (body.get("protocol") or "openai").lower()
+    if not base_url or not api_key:
+        return jsonify({"ok": False, "error": "base_url 和 api_key 必填"}), 400
+    try:
+        import requests as _req
+        # OpenAI 兼容：/v1/models（base_url 可能已含 /v1）
+        url = base_url.rstrip("/")
+        if not url.endswith("/v1/models") and not url.endswith("/models"):
+            url = url + ("/v1/models" if not url.endswith("/v1") else "/models")
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if protocol == "anthropic":
+            headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        r = _req.get(url, headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            models = []
+            if isinstance(data, dict) and "data" in data:
+                models = sorted([m.get("id") for m in data["data"] if m.get("id")])
+            elif isinstance(data, dict) and "models" in data:
+                models = sorted([m.get("id", m) if isinstance(m, dict) else m for m in data["models"]])
+            return jsonify({"ok": True, "models": models, "count": len(models)})
+        return jsonify({"ok": False, "error": f"HTTP {r.status_code}: {r.text[:300]}"})
+    except _req.exceptions.Timeout:
+        return jsonify({"ok": False, "error": "请求超时（15s），请检查 base_url 或网络"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 if __name__ == "__main__":
     main()
