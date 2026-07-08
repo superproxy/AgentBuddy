@@ -33,5 +33,11 @@ export const useSubagentStore = defineStore('subagent', () => {
     else ui.toast('导入失败: ' + r.error, 'err')
   }
 
-  return { subagentData, loadSubagent, saveSubagent, addSubagent, deleteSubagent, exportSubagent, importSubagent }
+  async function syncToOpencode() {
+    const r = await api<{ ok: boolean; count?: number; error?: string }>("/api/subagent/sync-opencode", { method: "POST" })
+    if (r.ok) ui.toast(`已同步 ${r.count} 个角色到 OpenCode`)
+    else ui.toast("同步失败: " + r.error, "err")
+  }
+
+  return { subagentData, loadSubagent, saveSubagent, addSubagent, deleteSubagent, exportSubagent, importSubagent, syncToOpencode }
 })

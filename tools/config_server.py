@@ -1914,3 +1914,73 @@ def import_subagent():
 
 if __name__ == "__main__":
     main()
+
+# ============================================================
+# cmd/subagent 同步到 OpenCode
+# ============================================================
+@app.route("/api/cmd/sync-opencode", methods=["POST"])
+def sync_cmd_opencode():
+    """同步 cmd.yaml 到 ~/.config/opencode/commands/*.md"""
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        cmd_path = _ensure_cmd_file()
+        data = load_env_config_file(cmd_path)
+        commands = data.get("commands", []) if isinstance(data, dict) else []
+        oc_cmd_dir = _Path.home() / ".config" / "opencode" / "commands"
+        oc_cmd_dir.mkdir(parents=True, exist_ok=True)
+        count = 0
+        for cmd in commands:
+            name = cmd.get("name", "").strip()
+            if not name:
+                continue
+            safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
+            if not safe_name:
+                continue
+            md = f"---\ndescription: {cmd.get('description', '')}\n---\n{cmd.get('prompt', '')}\n"
+            (oc_cmd_dir / f"{safe_name}.md").write_text(md, encoding="utf-8")
+            count += 1
+        return jsonify({"ok": True, "count": count, "path": str(oc_cmd_dir)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/subagent/sync-opencode", methods=["POST"])
+def sync_subagent_opencode():
+    """同步 subagent.yaml 到 opencode.json 的 agent 字段"""
+    import json as _json
+    from pathlib import Path as _Path
+    try:
+        sa_path = _ensure_subagent_file()
+        data = load_env_config_file(sa_path)
+        subagents = data.get("subagents", []) if isinstance(data, dict) else []
+        oc_config = _Path.home() / ".config" / "opencode" / "opencode.json"
+        oc_config.parent.mkdir(parents=True, exist_ok=True)
+        # 读已有 opencode.json（合并，不覆盖其他字段）
+        existing = {}
+        if oc_config.exists():
+            try:
+                existing = _json.loads(oc_config.read_text(encoding="utf-8"))
+            except Exception:
+                existing = {}
+        # 构建 agent 字段
+        agents = existing.get("agent", {})
+        if not isinstance(agents, dict):
+            agents = {}
+        for sa in subagents:
+            name = sa.get("name", "").strip()
+            if not name:
+                continue
+            safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
+            if not safe_name:
+                continue
+            agents[safe_name] = {
+                "name": sa.get("role", name),
+                "description": sa.get("desc", ""),
+                "prompt": sa.get("prompt", ""),
+            }
+        existing["agent"] = agents
+        oc_config.write_text(_json.dumps(existing, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        return jsonify({"ok": True, "count": len(subagents), "path": str(oc_config)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
