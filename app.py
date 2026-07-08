@@ -204,6 +204,7 @@ def main():
 
     url = f"http://{args.host}:{args.port}"
     print(f"[App] 项目根: {PROJECT_ROOT}")
+    print(f"[App] 配置目录: {PROJECT_ROOT / 'config'}")
     print(f"[App] 启动 Flask: {url}")
 
     start_flask_thread(args.host, args.port)

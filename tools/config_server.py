@@ -126,6 +126,35 @@ SKILLS_SH_API = "https://skills.sh/api/search"
 HTTP_TIMEOUT = 15  # 外部 API 超时秒数
 
 
+def _ensure_config_dirs() -> None:
+    """确保 config/ 下的所有子目录存在（打包后首次运行时创建）。
+
+    _bootstrap_from_bundle 只复制 scripts/template/tools，
+    config/ 目录由 _ensure_llm_file / _ensure_mcp_config_file 部分创建，
+    但 skills/cmd/subagent/ide/proxy 等子目录需要显式创建。
+    """
+    config_dirs = [
+        PROJECT_ROOT / "config",
+        PROJECT_ROOT / "config" / "llm",
+        PROJECT_ROOT / "config" / "mcp",
+        PROJECT_ROOT / "config" / "skills",
+        PROJECT_ROOT / "config" / "cmd",
+        PROJECT_ROOT / "config" / "subagent",
+        PROJECT_ROOT / "config" / "ide",
+        PROJECT_ROOT / "config" / "ide" / "claude",
+        PROJECT_ROOT / "config" / "ide" / "codex",
+        PROJECT_ROOT / "config" / "ide" / "opencode",
+        PROJECT_ROOT / "config" / "plugins",
+        PROJECT_ROOT / "config" / "proxy",
+    ]
+    for d in config_dirs:
+        d.mkdir(parents=True, exist_ok=True)
+
+
+# 启动时确保目录存在
+_ensure_config_dirs()
+
+
 # ============================================================
 # 通用工具
 # ============================================================
