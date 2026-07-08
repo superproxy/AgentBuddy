@@ -170,8 +170,8 @@ IDE_DETECT_META = {
     },
     "WorkBuddy": {
         "label": "WorkBuddy",
-        "cli_names": ["workbuddy"],
-        "macos_apps": [],
+        "cli_names": ["workbuddy", "codebuddy"],
+        "macos_apps": ["/Applications/WorkBuddy.app"],
         "windows_apps": [],
         "config_dirs": [".workbuddy"],
         "sessions_subdir": "sessions",
