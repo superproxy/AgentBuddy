@@ -24,12 +24,12 @@ from pathlib import Path
 # app_install: 安装 App 的方式（cask/download/manual）与包名/URL
 IDE_INSTALL_META = {
     "Claude": {
-        "cli_install": {"method": "npm", "package": "@anthropic-ai/claude-code"},
+        "cli_install": {"method": "npm", "package": "@anthropic-ai/claude-code", "uninstall_cmd": "npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; rm -f $(which claude) 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code ~/.nvm/versions/node/*/lib/node_modules/@anthropic-ai/claude-code"},
         "app_install": {"method": "cask", "package": "claude"},
         "homepage": "https://claude.ai/download",
     },
     "Codex": {
-        "cli_install": {"method": "npm", "package": "@openai/codex"},
+        "cli_install": {"method": "npm", "package": "@openai/codex", "uninstall_cmd": "npm uninstall -g @openai/codex 2>/dev/null; rm -f $(which codex) 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@openai/codex ~/.nvm/versions/node/*/lib/node_modules/@openai/codex"},
         "app_install": {"method": "manual", "url": "https://openai.com/codex/download"},
         "homepage": "https://openai.com/codex",
     },
