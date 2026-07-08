@@ -1,6 +1,6 @@
 """ZCode（智谱 ADE）IDE 分发器。
 
-同步 MCP 到 ~/.zcode/mcp.json（标准 mcpServers 格式，ZCode 实际读取的文件），
+同步 MCP 到 ~/.zcode/cli/config.json（mcp.servers 格式，ZCode 实际读取的文件），
 同步 LLM 模型到 ~/.zcode/v2/config.json（ZCode provider 格式），
 同步 skills 到 ~/.zcode/skills/。
 """
@@ -20,16 +20,18 @@ class ZCodeTarget(IdeTarget):
         pass
 
     def init_mcp(self, source_mcp_file: Path):
-        """同步 MCP 到 ~/.zcode/mcp.json（标准 mcpServers 格式）。
+        """同步 MCP 到 ~/.zcode/cli/config.json（mcp.servers 格式）。
 
-        ZCode 实际读取的 MCP 配置文件是 ~/.zcode/mcp.json（与 Claude/OpenCode 格式一致），
-        而非 ~/.zcode/cli/config.json（后者仅存 CLI 内部状态）。
+        ZCode 实际读取的 MCP 配置是 ~/.zcode/cli/config.json 的 mcp.servers 字段，
+        格式与标准 mcpServers 略有差异：
+        - stdio 类型需显式 type: "stdio"
+        - 路径为 cli/config.json 而非根目录 mcp.json
 
-        合并已有 mcp.json 的其他字段，仅更新 mcpServers。
+        合并已有 cli/config.json 的其他字段（如 plugins），仅更新 mcp.servers。
         force=True 用新 servers 覆盖；否则保留已有 + 新增。
         """
-        mcp_config = Path.home() / ".zcode" / "mcp.json"
-        mcp_config.parent.mkdir(parents=True, exist_ok=True)
+        cli_config = Path.home() / ".zcode" / "cli" / "config.json"
+        cli_config.parent.mkdir(parents=True, exist_ok=True)
 
         if not source_mcp_file.exists():
             print(f"{COLOR_YELLOW}[!] MCP source not found: {source_mcp_file}{COLOR_RESET}")
@@ -40,19 +42,46 @@ class ZCodeTarget(IdeTarget):
         except Exception as e:
             print(f"{COLOR_YELLOW}[!] 解析 mcp.json 失败: {e}{COLOR_RESET}")
             return
-        new_servers = mcp_data.get("mcpServers", {}) if isinstance(mcp_data, dict) else {}
+        raw_servers = mcp_data.get("mcpServers", {}) if isinstance(mcp_data, dict) else {}
+
+        # 转换为 ZCode 格式：stdio 补 type 字段，跳过 disabled
+        new_servers = {}
+        for name, cfg in raw_servers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("disabled") is True or cfg.get("disabled") == "true":
+                continue
+            server = {}
+            if "url" in cfg or cfg.get("type") in ("http", "streamableHttp"):
+                # http 类型
+                server["type"] = cfg.get("type", "http")
+                server["url"] = cfg["url"]
+                if cfg.get("headers"):
+                    server["headers"] = dict(cfg["headers"])
+            else:
+                # stdio 类型，ZCode 需显式 type
+                server["type"] = "stdio"
+                server["command"] = cfg.get("command", "")
+                if cfg.get("args"):
+                    server["args"] = list(cfg["args"])
+                if cfg.get("env"):
+                    server["env"] = dict(cfg["env"])
+            new_servers[name] = server
 
         existing = {}
-        if mcp_config.exists():
+        if cli_config.exists():
             try:
-                with open(mcp_config, "r", encoding="utf-8") as f:
+                with open(cli_config, "r", encoding="utf-8") as f:
                     existing = json.load(f)
                 if not isinstance(existing, dict):
                     existing = {}
             except Exception:
                 existing = {}
 
-        servers = existing.get("mcpServers", {})
+        mcp_section = existing.get("mcp", {})
+        if not isinstance(mcp_section, dict):
+            mcp_section = {}
+        servers = mcp_section.get("servers", {})
         if not isinstance(servers, dict):
             servers = {}
         if self.force:
@@ -61,12 +90,13 @@ class ZCodeTarget(IdeTarget):
             for name, cfg in new_servers.items():
                 if name not in servers:
                     servers[name] = cfg
-        existing["mcpServers"] = servers
+        mcp_section["servers"] = servers
+        existing["mcp"] = mcp_section
 
-        with open(mcp_config, "w", encoding="utf-8") as f:
+        with open(cli_config, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
             f.write("\n")
-        print(f"{COLOR_GREEN}[OK] MCP synced to ~/.zcode/mcp.json ({len(servers)} servers){COLOR_RESET}")
+        print(f"{COLOR_GREEN}[OK] MCP synced to ~/.zcode/cli/config.json ({len(servers)} servers){COLOR_RESET}")
 
     def init_llm(self, source_rules_dir: Path):
         """同步 LLM 模型到 ~/.zcode/v2/config.json（ZCode provider 格式）。
