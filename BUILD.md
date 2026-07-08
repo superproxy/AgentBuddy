@@ -1,6 +1,26 @@
 # AgentBuddy 构建指南
 
-## 快速构建（推荐）
+## GitHub Actions 自动构建发布
+
+推送 tag 即可触发 GitHub Actions 自动构建 macOS + Windows 并发布 Release：
+
+```bash
+# 1. 打 tag
+git tag v1.0.0
+
+# 2. 推送 tag（触发自动构建）
+git push origin v1.0.0
+
+# 3. 等待 Actions 完成，自动在 Releases 页面生成:
+#    - AgentBuddy-1.0.0-macos.dmg / .zip
+#    - AgentBuddy-1.0.0-x64.exe
+```
+
+也可在 GitHub 仓库 Actions 页面手动触发（workflow_dispatch）。
+
+> 首次使用前需在 GitHub 仓库 Settings -> Actions -> General 中允许读写权限。
+
+## 本地快速构建
 
 ```bash
 # macOS / Linux
