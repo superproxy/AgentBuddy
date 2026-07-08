@@ -35,6 +35,11 @@ UninstallDisplayName=AgentBuddy {#APP_VERSION}
 WizardStyle=modern
 DisableWelcomePage=no
 DisableReadyPage=no
+SetupIconFile=assets\app.ico
+VersionInfoVersion={#APP_VERSION}
+VersionInfoProductVersion={#APP_VERSION}
+VersionInfoDescription=AgentBuddy - Multi-IDE Agent Config Tool
+VersionInfoCompanyName=AgentBuddy
 LicenseFile=
 InfoBeforeFile=
 

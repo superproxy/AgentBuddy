@@ -106,6 +106,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(PROJECT_ROOT / 'assets' / 'app.ico') if (PROJECT_ROOT / 'assets' / 'app.ico').exists() else None,
 )
 coll = COLLECT(
     exe,
