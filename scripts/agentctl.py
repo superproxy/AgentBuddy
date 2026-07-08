@@ -205,14 +205,15 @@ def cmd_sync(args):
                 pass
         mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
 
-    # skill 源：template/skills/（源/内置）+ config/skills/（plugin 安装的，补充）
+    # skill 源：template/skills/（源/内置）+ ~/.agents/skills/（用户安装的）
+    from pathlib import Path as _Path
     source_skills = [PROJECT_ROOT / "template" / "skills"]
-    plugin_skills = PROJECT_ROOT / "config" / "skills"
-    if plugin_skills.exists():
-        source_skills.append(plugin_skills)
+    agents_skills = _Path.home() / ".agents" / "skills"
+    if agents_skills.exists():
+        source_skills.append(agents_skills)
 
     # 从 skill.yaml 读取启用清单，只同步启用的 skill
-    skill_yaml = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
+    skill_yaml = agents_skills / "skill.yaml"
     if "skill" in scope and skill_yaml.exists():
         enabled_set = skills.get_enabled_skills(skill_yaml)
         if enabled_set:

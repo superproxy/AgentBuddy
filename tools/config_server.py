@@ -106,9 +106,11 @@ MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "template" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
-SKILL_YAML = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
+# 技能安装到用户级目录 ~/.agents/skills/（与 ZCode 等工具一致）
+AGENTS_SKILLS_DIR = Path.home() / ".agents" / "skills"
+SKILL_YAML = AGENTS_SKILLS_DIR / "skill.yaml"
 AGENTS_SKILLS_CACHE = PROJECT_ROOT / "template" / "skills"
-DOT_AGENTS_SKILLS = PROJECT_ROOT / "config" / "skills"
+DOT_AGENTS_SKILLS = AGENTS_SKILLS_DIR
 CMD_FILE = PROJECT_ROOT / "config" / "cmd" / "cmd.yaml"
 CMD_EXAMPLE = PROJECT_ROOT / "template" / "cmd" / "cmd.yaml"
 SUBAGENT_FILE = PROJECT_ROOT / "config" / "subagent" / "subagent.yaml"
@@ -137,7 +139,6 @@ def _ensure_config_dirs() -> None:
         PROJECT_ROOT / "config",
         PROJECT_ROOT / "config" / "llm",
         PROJECT_ROOT / "config" / "mcp",
-        PROJECT_ROOT / "config" / "skills",
         PROJECT_ROOT / "config" / "cmd",
         PROJECT_ROOT / "config" / "subagent",
         PROJECT_ROOT / "config" / "ide",
@@ -146,6 +147,8 @@ def _ensure_config_dirs() -> None:
         PROJECT_ROOT / "config" / "ide" / "opencode",
         PROJECT_ROOT / "config" / "plugins",
         PROJECT_ROOT / "config" / "proxy",
+        # 技能安装目录（用户级，与 ZCode 等工具共享）
+        Path.home() / ".agents" / "skills",
     ]
     for d in config_dirs:
         d.mkdir(parents=True, exist_ok=True)
@@ -691,7 +694,7 @@ def install_skill_sse():
     skill = request.args.get("skill", "").strip()
     command = request.args.get("command", "").strip()
 
-    # 本地预置技能：直接从 template/skills/ 复制到 config/skills/
+    # 本地预置技能：直接从 template/skills/ 复制到 ~/.agents/skills/
     if source.startswith("local:"):
         skill_name = source[6:] or skill
         if not skill_name:
@@ -1052,7 +1055,7 @@ def uninstall_plugin_api():
     except Exception as e:
         return jsonify({"ok": False, "error": f"移除清单失败: {e}"}), 500
 
-    # 2. 删除 config/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
+    # 2. 删除 ~/.agents/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
     # 查找对应的 plugin.yaml
     plugin_file = None
     if PLUGINS_DIR.exists():
@@ -1122,7 +1125,7 @@ def import_from_ide():
 
     扫描范围：
       - MCP: 所有 IDE 的项目级 + 全局级配置文件（JSON / TOML）
-      - Skills: 所有 IDE 的全局 skills 目录 + 项目级 config/skills/
+      - Skills: 所有 IDE 的全局 skills 目录 + ~/.agents/skills/
     合并策略：同名 MCP/Skill 首次出现保留，记录来源 IDE。
     """
     home = Path.home()
@@ -1198,7 +1201,7 @@ def import_from_ide():
         (home / ".trae" / "skills", "Trae"),
         (home / ".traecn" / "skills", "TraeCN"),
         (home / ".traesolocn" / "skills", "TraeSoloCN"),
-        (DOT_AGENTS_SKILLS, "Project(config/skills)"),
+        (DOT_AGENTS_SKILLS, "User(~/.agents/skills)"),
     ]
     merged_skills = []  # [{name, sources:[]}]
     skill_name_sources = {}  # name -> [ide名]
