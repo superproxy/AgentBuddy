@@ -62,11 +62,6 @@ export const usePluginStore = defineStore('plugin', () => {
   async function onTogglePlugin(p: PluginItem, checked: boolean) {
     if (installingPlugin.value) { ui.toast('正在安装其他插件，请稍候', 'warn'); return }
     if (checked) {
-      if (!sync.syncTargetIdes.length) {
-        ui.toast('请先在顶部选择目标 IDE', 'warn')
-        p.installed = false
-        return
-      }
       installingPlugin.value = p.name
       p.installed = true
       const ides = sync.syncTargetIdes.join(',')
