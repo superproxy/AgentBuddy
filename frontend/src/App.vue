@@ -10,6 +10,7 @@ import McpView from './views/McpView.vue'
 import SkillView from './views/SkillView.vue'
 import PluginView from './views/PluginView.vue'
 import PluginBuildView from './views/PluginBuildView.vue'
+import CommandView from './views/CommandView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
@@ -22,6 +23,7 @@ const tabs = [
   { key: 'skill', label: 'Skills 配置' },
   { key: 'plugin', label: '插件配置' },
   { key: 'plugin-build', label: '插件构建' },
+  { key: 'command', label: '常用命令' },
 ]
 
 const ide = useIdeStore()
@@ -44,6 +46,7 @@ onMounted(() => {
     <SkillView v-else-if="tab === 'skill'" />
     <PluginView v-else-if="tab === 'plugin'" />
     <PluginBuildView v-else-if="tab === 'plugin-build'" />
+    <CommandView v-else-if="tab === 'command'" />
   </main>
   <Toast />
   <Modal />

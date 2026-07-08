@@ -109,6 +109,8 @@ SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
 SKILL_YAML = PROJECT_ROOT / "config" / "skills" / "skill.yaml"
 AGENTS_SKILLS_CACHE = PROJECT_ROOT / "template" / "skills"
 DOT_AGENTS_SKILLS = PROJECT_ROOT / "config" / "skills"
+CMD_FILE = PROJECT_ROOT / "config" / "cmd" / "cmd.yaml"
+CMD_EXAMPLE = PROJECT_ROOT / "template" / "cmd" / "cmd.yaml"
 
 # env.yaml 中属于 llm.yaml 的顶层键（其余归 mcp.yaml 的只有 mcp）
 LLM_TOP_KEYS = ["llm", "embedding", "tts", "asr", "vision", "misc"]
@@ -1750,6 +1752,45 @@ def main():
             pass
 
     app.run(host=args.host, port=args.port, debug=False, threaded=True)
+
+
+# ============================================================
+# Command 配置 API (cmd.yaml - 常用命令集合)
+# ============================================================
+def _ensure_cmd_file() -> Path:
+    """确保 cmd.yaml 存在，不存在则从模板复制。"""
+    if CMD_FILE.exists():
+        return CMD_FILE
+    CMD_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if CMD_EXAMPLE.exists():
+        import shutil
+        shutil.copy2(CMD_EXAMPLE, CMD_FILE)
+    else:
+        CMD_FILE.write_text("commands: []\n", encoding="utf-8")
+    return CMD_FILE
+
+
+@app.route("/api/cmd", methods=["GET"])
+def get_cmd():
+    path = _ensure_cmd_file()
+    try:
+        data = load_env_config_file(path)
+        return jsonify({"ok": True, "data": data, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/cmd", methods=["POST"])
+def save_cmd():
+    body = request.get_json(force=True)
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "data 必须是对象"}), 400
+    try:
+        save_env_config_file(_ensure_cmd_file(), data)
+        return jsonify({"ok": True, "path": "config/cmd/cmd.yaml"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

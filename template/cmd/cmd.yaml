@@ -1,0 +1,22 @@
+_description: 常用命令集合，UI 可展示 / 编辑 / 复制。复制为 config/cmd/cmd.yaml 后可自定义。
+commands:
+  - name: 构建前端
+    command: cd frontend && npm run build-only
+    desc: 构建 Vue 3 + Vite 前端产物到 tools/dist-ui
+    category: 构建
+  - name: 启动开发
+    command: ./run.sh --no-webview
+    desc: 启动 Flask 后端（浏览器访问 5173 dev 或 5000）
+    category: 开发
+  - name: 启动桌面
+    command: ./run.sh
+    desc: 启动 pywebview 桌面应用
+    category: 开发
+  - name: 安装前端依赖
+    command: cd frontend && npm install
+    desc: 安装 Vue 3 + Vite 依赖
+    category: 开发
+  - name: 同步全部 IDE
+    command: python -m agentctl sync --ide All --force
+    desc: 同步 rules/mcp/skills 到所有已安装 IDE
+    category: 同步
