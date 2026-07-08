@@ -1,5 +1,5 @@
 @echo off
-REM AgentBuddy 配置工具桌面启动器 (Windows, pywebview 优先)
+REM AdeBuddy 配置工具桌面启动器 (Windows, pywebview 优先)
 REM 用法: run.cmd [port] [--no-webview]
 
 setlocal

@@ -1,4 +1,4 @@
-# AgentBuddy 构建指南
+# AdeBuddy 构建指南
 
 ## GitHub Actions 自动构建发布
 
@@ -12,8 +12,8 @@ git tag v1.0.0
 git push origin v1.0.0
 
 # 3. 等待 Actions 完成，自动在 Releases 页面生成:
-#    - AgentBuddy-1.0.0-macos.dmg / .zip
-#    - AgentBuddy-1.0.0-x64.exe
+#    - AdeBuddy-1.0.0-macos.dmg / .zip
+#    - AdeBuddy-1.0.0-x64.exe
 ```
 
 也可在 GitHub 仓库 Actions 页面手动触发（workflow_dispatch）。
@@ -36,7 +36,7 @@ build.cmd --windowed --clean
 
 1. **前端构建**：`cd frontend && npm run build-only` -> 产出 `tools/dist-ui/`
 2. **Python 依赖检查**：自动安装缺失的 flask/pyyaml/requests/pywebview/pyinstaller
-3. **PyInstaller 打包**：`python build.py` -> 产出 `dist/AgentBuddy/`
+3. **PyInstaller 打包**：`python build.py` -> 产出 `dist/AdeBuddy/`
 4. **验证**：确认前端产物（dist-ui/index.html）已进 bundle
 5. **安装包生成**（仅 Windows）：调用 Inno Setup 生成 `.exe` 安装包
 
@@ -80,9 +80,9 @@ build.cmd --windowed --clean --no-installer
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| 可执行目录 | `dist\AgentBuddy\` | PyInstaller onedir 产物 |
-| 可执行文件 | `dist\AgentBuddy\AgentBuddy.exe` | 主程序 |
-| 安装包 | `dist\installer\AgentBuddy-Setup-<version>-x64.exe` | Inno Setup 安装包 |
+| 可执行目录 | `dist\AdeBuddy\` | PyInstaller onedir 产物 |
+| 可执行文件 | `dist\AdeBuddy\AdeBuddy.exe` | 主程序 |
+| 安装包 | `dist\installer\AdeBuddy-Setup-<version>-x64.exe` | Inno Setup 安装包 |
 
 安装包特性：
 - 64 位 Windows 安装包（LZMA2/ultra64 压缩）
@@ -116,10 +116,10 @@ build.cmd --windowed --clean --no-installer
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| 可执行目录 | `dist/AgentBuddy/` | PyInstaller onedir 产物 |
-| 可执行文件 | `dist/AgentBuddy/AgentBuddy` | 主程序 |
-| DMG 分发包 | `dist/installer/AgentBuddy-<version>-macos.dmg` | 需 create-dmg |
-| ZIP 分发包 | `dist/installer/AgentBuddy-<version>-macos.zip` | 默认回退 |
+| 可执行目录 | `dist/AdeBuddy/` | PyInstaller onedir 产物 |
+| 可执行文件 | `dist/AdeBuddy/AdeBuddy` | 主程序 |
+| DMG 分发包 | `dist/installer/AdeBuddy-<version>-macos.dmg` | 需 create-dmg |
+| ZIP 分发包 | `dist/installer/AdeBuddy-<version>-macos.zip` | 默认回退 |
 
 ## 开发模式
 

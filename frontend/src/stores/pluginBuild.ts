@@ -25,7 +25,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   const env = useEnvStore()
   const plugin = usePluginStore()
 
-  const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'AgentBuddy', install_script: '' })
+  const pluginForm = reactive({ name: '', version: '1.0.0', description: '', author: 'AdeBuddy', install_script: '' })
   const selectedSkills = ref<string[]>([])
   const selectedMcp = ref<string[]>([])
   const selectedLlm = ref<string[]>([])
@@ -57,7 +57,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   function newPlugin() {
     plugin.selectedPluginFile = ''
     pluginForm.name = ''; pluginForm.version = '1.0.0'; pluginForm.description = ''
-    pluginForm.author = 'AgentBuddy'; pluginForm.install_script = ''
+    pluginForm.author = 'AdeBuddy'; pluginForm.install_script = ''
     selectedSkills.value = []; selectedMcp.value = []; selectedLlm.value = []
     wizardStep.value = 0
   }
@@ -122,7 +122,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     if (!r.ok) { ui.toast('加载失败: ' + r.error, 'err'); return }
     const d = r.data
     pluginForm.name = d.name || ''; pluginForm.version = d.version || '1.0.0'
-    pluginForm.description = d.description || ''; pluginForm.author = d.author || 'AgentBuddy'
+    pluginForm.description = d.description || ''; pluginForm.author = d.author || 'AdeBuddy'
     pluginForm.install_script = (d.scripts && d.scripts.install) || ''
     selectedSkills.value = [...(d.skills || [])].map((s:any) => typeof s === 'string' ? s : s.name || s.skill || '')
     selectedMcp.value = Object.keys(d.mcpServers || {})
@@ -155,7 +155,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     })
     return {
       name: pluginForm.name.trim(), version: pluginForm.version.trim() || '1.0.0',
-      description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'AgentBuddy',
+      description: pluginForm.description.trim(), author: pluginForm.author.trim() || 'AdeBuddy',
       mcpServers: Object.fromEntries(selectedMcp.value.map(n => [n, mcp.mcpTemplate.mcpServers[n]])),
       skills: skillsOut, llm: llmList,
       scripts: pluginForm.install_script.trim() ? { install: pluginForm.install_script.trim() } : {},

@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dist
-          path: dist/installer/AgentBuddy-*
+          path: dist/installer/AdeBuddy-*
 
   build-windows:
     runs-on: windows-latest
@@ -123,7 +123,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/installer/AgentBuddy-*
+          path: dist/installer/AdeBuddy-*
 
   release:
     needs: [build-macos, build-windows]
@@ -141,7 +141,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: AgentBuddy ${{ github.ref_name }}
+          name: AdeBuddy ${{ github.ref_name }}
           generate_release_notes: true
           files: |
             artifacts/macos-dist/*

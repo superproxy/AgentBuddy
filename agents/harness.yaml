@@ -1,8 +1,8 @@
-# AgentBuddy Harness 总配置
+# AdeBuddy Harness 总配置
 # 由 init-dev-harness-agents 生成，已初始化后走合并增强（不覆盖）
 version: "1.0"
 project:
-  name: "AgentBuddy"
+  name: "AdeBuddy"
   goal: "把 agents/ 共享配置（LLM/MCP/Skills/Rules）一键映射到多 IDE 的桌面工具"
   tech_stack: "Python 3 + Flask + pywebview + PyInstaller（桌面应用）"
   main_flow: "配置编辑 → 生成 → 同步多 IDE"

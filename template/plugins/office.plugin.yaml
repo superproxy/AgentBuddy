@@ -1,7 +1,7 @@
 name: office
 version: 1.0.0
 description: 常用办公插件
-author: AgentBuddy
+author: AdeBuddy
 scripts:
   install: npm i -g open-computer-use && npm i -g open-browser-use && open-browser-use setup
 mcpServers:

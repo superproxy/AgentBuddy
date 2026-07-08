@@ -1,5 +1,5 @@
 @echo off
-REM AgentBuddy one-shot install entry (Windows)
+REM AdeBuddy one-shot install entry (Windows)
 REM Equivalent to: agentctl setup (generate + sync to all IDEs)
 REM
 REM Usage:
@@ -11,7 +11,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo ========================================
-echo   AgentBuddy Install
+echo   AdeBuddy Install
 echo ========================================
 echo.
 

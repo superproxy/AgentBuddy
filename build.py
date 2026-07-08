@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""AgentBuddy 跨平台打包脚本。
+"""AdeBuddy 跨平台打包脚本。
 
 在当前平台生成可分发的程序包（onedir）：
-  - macOS  : dist/AgentBuddy/AgentBuddy (可进一步压成 .zip / 做成 .dmg)
-  - Windows: dist/AgentBuddy/AgentBuddy.exe
-  - Linux  : dist/AgentBuddy/AgentBuddy (可进一步做成 .AppImage)
+  - macOS  : dist/AdeBuddy/AdeBuddy (可进一步压成 .zip / 做成 .dmg)
+  - Windows: dist/AdeBuddy/AdeBuddy.exe
+  - Linux  : dist/AdeBuddy/AdeBuddy (可进一步做成 .AppImage)
 
 安全保证：
   - mcp.yaml / llm.yaml / mcp.json / skill.yaml 绝不打包（由 app.spec 的 Tree.excludes 过滤）
@@ -149,11 +149,11 @@ def verify_bundle() -> None:
 
 def check_examples_present() -> None:
     """确认模板文件已进 bundle（运行时生成依赖它们）。"""
-    base = DIST_DIR / "AgentBuddy" / "_internal"
+    base = DIST_DIR / "AdeBuddy" / "_internal"
     # PyInstaller 6.x 把数据放到 _internal/；旧版放到 exe 同级
     candidates = [
-        DIST_DIR / "AgentBuddy" / "template" / "llm" / "llm-env-example.yaml",
-        DIST_DIR / "AgentBuddy" / "template" / "mcp" / "mcp-env-example.yaml",
+        DIST_DIR / "AdeBuddy" / "template" / "llm" / "llm-env-example.yaml",
+        DIST_DIR / "AdeBuddy" / "template" / "mcp" / "mcp-env-example.yaml",
         base / "template" / "llm" / "llm-env-example.yaml",
         base / "template" / "mcp" / "mcp-env-example.yaml",
     ]
@@ -169,26 +169,26 @@ def report() -> None:
     print("========================================")
     plat = sys.platform
     if plat == "darwin":
-        exe = DIST_DIR / "AgentBuddy" / "AgentBuddy"
-        print(f"  产物目录: dist/AgentBuddy/")
+        exe = DIST_DIR / "AdeBuddy" / "AdeBuddy"
+        print(f"  产物目录: dist/AdeBuddy/")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
-        dist_pkg = list(INSTALLER_OUT_DIR.glob("AgentBuddy-*-*.*")) if INSTALLER_OUT_DIR.exists() else []
+        dist_pkg = list(INSTALLER_OUT_DIR.glob("AdeBuddy-*-*.*")) if INSTALLER_OUT_DIR.exists() else []
         if dist_pkg:
             print(f"  分发包:  {dist_pkg[0].relative_to(PROJECT_ROOT)}")
         else:
-            print("  分发:    压缩 dist/AgentBuddy 为 .zip，或用 create-dmg 做 .dmg")
+            print("  分发:    压缩 dist/AdeBuddy 为 .zip，或用 create-dmg 做 .dmg")
     elif plat == "win32":
-        exe = DIST_DIR / "AgentBuddy" / "AgentBuddy.exe"
-        print(f"  产物目录: dist\\AgentBuddy\\")
+        exe = DIST_DIR / "AdeBuddy" / "AdeBuddy.exe"
+        print(f"  产物目录: dist\\AdeBuddy\\")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
-        installer = list(INSTALLER_OUT_DIR.glob("AgentBuddy-Setup-*.exe")) if INSTALLER_OUT_DIR.exists() else []
+        installer = list(INSTALLER_OUT_DIR.glob("AdeBuddy-Setup-*.exe")) if INSTALLER_OUT_DIR.exists() else []
         if installer:
             print(f"  安装包:  {installer[0].relative_to(PROJECT_ROOT)}")
         else:
-            print("  分发:    压缩 dist\\AgentBuddy 为 .zip，或用 Inno Setup 做 .exe 安装包")
+            print("  分发:    压缩 dist\\AdeBuddy 为 .zip，或用 Inno Setup 做 .exe 安装包")
     else:
-        exe = DIST_DIR / "AgentBuddy" / "AgentBuddy"
-        print(f"  产物目录: dist/AgentBuddy/")
+        exe = DIST_DIR / "AdeBuddy" / "AdeBuddy"
+        print(f"  产物目录: dist/AdeBuddy/")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
         print("  分发:    压缩为 .tar.gz，或用 appimagetool 做 .AppImage")
     print("\n  首次运行会自动从模板生成 config/llm/llm.yaml 与 config/mcp/mcp.yaml")
@@ -228,7 +228,7 @@ def build_installer(version: str = "1.0.0") -> None:
 
 
 def _build_windows_installer(version: str) -> None:
-    """Windows: Inno Setup -> AgentBuddy-Setup-<version>-x64.exe"""
+    """Windows: Inno Setup -> AdeBuddy-Setup-<version>-x64.exe"""
     if not INSTALLER_ISS.is_file():
         fail(f"找不到 {INSTALLER_ISS.name}")
     iscc = find_iscc()
@@ -242,7 +242,7 @@ def _build_windows_installer(version: str) -> None:
     rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
     if rc != 0:
         fail(f"Inno Setup 编译失败 (exit={rc})")
-    installer = INSTALLER_OUT_DIR / f"AgentBuddy-Setup-{version}-x64.exe"
+    installer = INSTALLER_OUT_DIR / f"AdeBuddy-Setup-{version}-x64.exe"
     if installer.is_file():
         info(f"安装包已生成: {installer.relative_to(PROJECT_ROOT)}")
     else:
@@ -252,14 +252,14 @@ def _build_windows_installer(version: str) -> None:
 def _build_macos_dist(version: str) -> None:
     """macOS: 优先 create-dmg 生成 .dmg，回退到 .zip"""
     INSTALLER_OUT_DIR.mkdir(parents=True, exist_ok=True)
-    app_dir = DIST_DIR / "AgentBuddy"
+    app_dir = DIST_DIR / "AdeBuddy"
     if not app_dir.is_dir():
         fail(f"找不到产物目录: {app_dir}")
 
     # 尝试用 create-dmg 生成 .dmg
     create_dmg = shutil.which("create-dmg")
     if create_dmg:
-        dmg_name = f"AgentBuddy-{version}-macos.dmg"
+        dmg_name = f"AdeBuddy-{version}-macos.dmg"
         dmg_path = INSTALLER_OUT_DIR / dmg_name
         info(f"使用 create-dmg 生成 .dmg...")
         # --no-internet-enable: 不添加 Internet Enable 属性
@@ -268,7 +268,7 @@ def _build_macos_dist(version: str) -> None:
             create_dmg,
             "--no-internet-enable",
             "--overwrite",
-            "--app-name", "AgentBuddy",
+            "--app-name", "AdeBuddy",
             str(dmg_path),
             str(app_dir),
         ]
@@ -280,10 +280,10 @@ def _build_macos_dist(version: str) -> None:
             info("create-dmg 失败，回退到 .zip")
 
     # 回退：生成 .zip
-    zip_name = f"AgentBuddy-{version}-macos.zip"
+    zip_name = f"AdeBuddy-{version}-macos.zip"
     zip_path = INSTALLER_OUT_DIR / zip_name
     info(f"生成 .zip: {zip_name}")
-    cmd = ["zip", "-r", "-y", str(zip_path), "AgentBuddy"]
+    cmd = ["zip", "-r", "-y", str(zip_path), "AdeBuddy"]
     rc = subprocess.call(cmd, cwd=str(DIST_DIR))
     if rc != 0:
         fail(f"zip 打包失败 (exit={rc})")
@@ -294,7 +294,7 @@ def _build_macos_dist(version: str) -> None:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="AgentBuddy 跨平台打包")
+    ap = argparse.ArgumentParser(description="AdeBuddy 跨平台打包")
     ap.add_argument("--windowed", action="store_true", help="无控制台（macOS 生成 .app / Windows 无黑框）")
     ap.add_argument("--clean", action="store_true", help="构建前清理 dist/ build/")
     ap.add_argument("--no-verify", action="store_true", help="跳过密钥泄漏扫描（不推荐）")

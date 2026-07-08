@@ -1,7 +1,7 @@
 name: productivity
 version: 1.0.0
 description: 生产力插件 - 提供需求分析、任务规划、项目管理能力
-author: AgentBuddy
+author: AdeBuddy
 mcpServers:
   yuque-mcp:
     command: npx

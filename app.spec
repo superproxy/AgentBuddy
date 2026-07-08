@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for AgentBuddy desktop app.
+"""PyInstaller spec for AdeBuddy desktop app.
 
 安全边界（关键）：
   - agents/mcp/mcp.yaml、agents/llm/llm.yaml 含真实 API Key，绝不打包进 bundle
@@ -95,7 +95,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AgentBuddy',
+    name='AdeBuddy',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -115,5 +115,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AgentBuddy',
+    name='AdeBuddy',
 )

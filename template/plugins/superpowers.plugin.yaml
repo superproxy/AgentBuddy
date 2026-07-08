@@ -1,7 +1,7 @@
 name: superpowers
 version: 1.0.0
 description: Superpowers 技能组 - 来自 obra/superpowers 的完整技能集合
-author: AgentBuddy
+author: AdeBuddy
 mcpServers: {}
 skills:
   - name: superpowers

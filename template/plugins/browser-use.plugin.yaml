@@ -1,7 +1,7 @@
 name: computer-use
 version: 1.0.0
 description: 电脑操作插件 - 提供浏览器自动化和桌面操作能力
-author: AgentBuddy
+author: AdeBuddy
 scripts:
   install: npm i -g open-browser-use && open-browser-use setup
 mcpServers:

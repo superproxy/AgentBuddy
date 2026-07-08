@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AgentBuddy 一键初始化安装入口 (macOS / Linux)
+# AdeBuddy 一键初始化安装入口 (macOS / Linux)
 # 等价于 agentctl setup: generate + sync 到所有 IDE
 #
 # 用法:
@@ -11,7 +11,7 @@ set -e
 cd "$(dirname "$0")"
 
 echo "========================================"
-echo "  AgentBuddy 一键初始化"
+echo "  AdeBuddy 一键初始化"
 echo "========================================"
 echo
 

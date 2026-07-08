@@ -30,7 +30,7 @@ onMounted(async () => {
           A
         </div>
         <div>
-          <h1 class="text-base font-semibold">AgentBuddy 配置工具<span v-if="appVersion" class="text-xs text-white/50 font-normal ml-2">v{{ appVersion }}</span></h1>
+          <h1 class="text-base font-semibold">AdeBuddy 配置工具<span v-if="appVersion" class="text-xs text-white/50 font-normal ml-2">v{{ appVersion }}</span></h1>
           <div class="text-xs text-white/60">{{ buildTime ? `构建于 ${buildTime.slice(0, 10)}` : '开发模式' }}</div>
         </div>
       </div>

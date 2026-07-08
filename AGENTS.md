@@ -1,4 +1,4 @@
-# AgentBuddy — Harness Engineering 入口
+# AdeBuddy — Harness Engineering 入口
 
 ## 项目定位
 - **项目目标**：把 agents/ 共享配置（LLM/MCP/Skills/Rules）一键映射到多 IDE 的桌面工具

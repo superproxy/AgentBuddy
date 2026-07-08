@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AgentBuddy 配置工具 Web UI 后端
+AdeBuddy 配置工具 Web UI 后端
 
 启动: python tools/config_server.py
 访问: http://127.0.0.1:5000
@@ -918,7 +918,7 @@ def save_plugin():
         "name": name,
         "version": body.get("version", "1.0.0").strip() or "1.0.0",
         "description": body.get("description", "").strip(),
-        "author": body.get("author", "AgentBuddy").strip() or "AgentBuddy",
+        "author": body.get("author", "AdeBuddy").strip() or "AdeBuddy",
         "mcpServers": body.get("mcpServers", {}),
         "skills": body.get("skills", []),
         "llm": body.get("llm", []),
@@ -1816,7 +1816,7 @@ def api_ide_session_import():
 # Main
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="AgentBuddy 配置工具 Web UI")
+    parser = argparse.ArgumentParser(description="AdeBuddy 配置工具 Web UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")

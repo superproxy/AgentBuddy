@@ -448,7 +448,7 @@ def generate_plugin_from_csv(
         "name": plugin_name,
         "version": "1.0.0",
         "description": plugin_description,
-        "author": "AgentBuddy",
+        "author": "AdeBuddy",
         "mcpServers": {},
         "skills": plugin_skills
     }

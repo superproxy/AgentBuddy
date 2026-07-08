@@ -2,7 +2,7 @@ name: dev
 version: 1.0.0
 description: 核心插件 - 提供基础的技能发现、初始化、项目管理能力
 default: true
-author: AgentBuddy
+author: AdeBuddy
 mcpServers: {}
 skills:
   - name: superproxy

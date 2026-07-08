@@ -40,7 +40,7 @@ cp agents/mcp/mcp-env-example.yaml agents/mcp/mcp.yaml
 
 ## 1.5 GUI 桌面工具（推荐）
 
-除 CLI 外，AgentBuddy 提供完整的 GUI 桌面应用，覆盖所有配置功能，无需记忆命令。
+除 CLI 外，AdeBuddy 提供完整的 GUI 桌面应用，覆盖所有配置功能，无需记忆命令。
 
 ### 启动方式
 
@@ -65,7 +65,7 @@ GUI 顶部有 8 个功能标签页：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  AgentBuddy                                  [自动同步] [IDE▼]  │
+│  AdeBuddy                                  [自动同步] [IDE▼]  │
 │  AIDE 管理 | LLM 配置 | MCP 配置 | Skills | 自定义命令 | ...   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
@@ -193,7 +193,7 @@ GUI 顶部有 8 个功能标签页：
 
 ![插件配置](docs/screenshots/plugin-config.png)
 
-管理 AgentBuddy 插件（MCP + Skills + LLM 打包为 `.plugin.yaml`）。插件的 MCP/Skills 安装后会自动合并到全局同步。
+管理 AdeBuddy 插件（MCP + Skills + LLM 打包为 `.plugin.yaml`）。插件的 MCP/Skills 安装后会自动合并到全局同步。
 
 ```
 ┌──────────────────────────────────────────────────────────────┐

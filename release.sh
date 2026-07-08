@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AgentBuddy Release 脚本：打 tag + 推送，触发 GitHub Actions 自动构建发布
+# AdeBuddy Release 脚本：打 tag + 推送，触发 GitHub Actions 自动构建发布
 #
 # 用法:
 #   ./release.sh              # 交互式输入版本号
@@ -34,7 +34,7 @@ if [ "$2" = "-p" ] || [ "$2" = "--push" ]; then
 fi
 
 echo -e "${C}========================================${N}"
-echo -e "${C}  AgentBuddy Release${N}"
+echo -e "${C}  AdeBuddy Release${N}"
 echo -e "${C}========================================${N}"
 
 # ===== 1. 检查工作区 =====
@@ -114,6 +114,6 @@ echo "  Actions:    https://github.com/$(git remote get-url origin | sed 's|.*gi
 echo "  Releases:   https://github.com/$(git remote get-url origin | sed 's|.*github.com[:/]||;s|\.git$||')/releases"
 echo ""
 echo "  构建完成后，Releases 页面将出现:"
-echo "    - AgentBuddy-${VERSION}-macos.dmg / .zip"
-echo "    - AgentBuddy-Setup-${VERSION}-x64.exe"
+echo "    - AdeBuddy-${VERSION}-macos.dmg / .zip"
+echo "    - AdeBuddy-Setup-${VERSION}-x64.exe"
 echo ""

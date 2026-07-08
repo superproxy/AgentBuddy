@@ -1,4 +1,4 @@
-"""AgentBuddy 配置工具 - pywebview 桌面启动器。
+"""AdeBuddy 配置工具 - pywebview 桌面启动器。
 
 在后台线程启动 Flask 服务，前台用 pywebview 打开嵌入窗口。
 - 默认窗口 1400x900，最小 1000x680
@@ -43,7 +43,7 @@ def _redirect_stdio_to_log(project_root: Path) -> None:
             sys.stdout = log_fp
         if not err_is_tty:
             sys.stderr = log_fp
-        print(f"\n===== AgentBuddy 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
+        print(f"\n===== AdeBuddy 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
     except Exception:
         pass  # 重定向失败也不阻塞启动
 
@@ -164,7 +164,7 @@ def start_flask_thread(host: str, port: int) -> threading.Thread:
     return t
 
 
-def open_with_pywebview(url: str, title: str = "AgentBuddy 配置工具", width: int = 1400, height: int = 900) -> bool:
+def open_with_pywebview(url: str, title: str = "AdeBuddy 配置工具", width: int = 1400, height: int = 900) -> bool:
     """用 pywebview 打开窗口，成功返回 True。"""
     try:
         import webview  # type: ignore
@@ -183,7 +183,7 @@ def open_with_pywebview(url: str, title: str = "AgentBuddy 配置工具", width:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AgentBuddy 配置工具 (pywebview 桌面版)")
+    parser = argparse.ArgumentParser(description="AdeBuddy 配置工具 (pywebview 桌面版)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-webview", action="store_true", help="不使用 pywebview，回退到系统浏览器")
