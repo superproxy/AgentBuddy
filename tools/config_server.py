@@ -1875,5 +1875,42 @@ def verify_llm():
         return jsonify({"ok": False, "error": str(e)})
 
 
+# ===== cmd/subagent 导入导出 =====
+@app.route("/api/cmd/export", methods=["GET"])
+def export_cmd():
+    return send_file(_ensure_cmd_file(), as_attachment=True, download_name="cmd.yaml")
+
+
+@app.route("/api/cmd/import", methods=["POST"])
+def import_cmd():
+    body = request.get_json(force=True)
+    content = body.get("content", "")
+    try:
+        import yaml as _yaml
+        data = _yaml.safe_load(content)
+        save_env_config_file(_ensure_cmd_file(), data if isinstance(data, dict) else {"commands": []})
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/subagent/export", methods=["GET"])
+def export_subagent():
+    return send_file(_ensure_subagent_file(), as_attachment=True, download_name="subagent.yaml")
+
+
+@app.route("/api/subagent/import", methods=["POST"])
+def import_subagent():
+    body = request.get_json(force=True)
+    content = body.get("content", "")
+    try:
+        import yaml as _yaml
+        data = _yaml.safe_load(content)
+        save_env_config_file(_ensure_subagent_file(), data if isinstance(data, dict) else {"subagents": []})
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 if __name__ == "__main__":
     main()

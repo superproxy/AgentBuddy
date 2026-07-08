@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCmdStore } from '../stores/cmd'
 const cmd = useCmdStore()
 const { cmdData } = storeToRefs(cmd)
-const { loadCmd, saveCmd, addCmd, deleteCmd } = cmd
+const { loadCmd, saveCmd, addCmd, deleteCmd, exportCmd, importCmd } = cmd
+const inputRef = ref<HTMLInputElement | null>(null)
+async function onImport(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  const content = await f.text()
+  ;(e.target as HTMLInputElement).value = ''
+  await importCmd(content)
+}
 onMounted(() => { loadCmd() })
 </script>
 <template>
@@ -18,6 +26,9 @@ onMounted(() => { loadCmd() })
         <div class="flex gap-2">
           <button @click="addCmd" class="px-3 py-1.5 text-xs bg-brand-50 text-brand-600 rounded-md hover:bg-brand-100 font-medium">+ 添加</button>
           <button @click="saveCmd()" class="px-3 py-1.5 text-xs bg-brand-500 text-white rounded-md hover:bg-brand-600 font-medium">保存</button>
+          <button @click="exportCmd" class="px-3 py-1.5 text-xs text-ink-600 hover:text-brand-600">导出</button>
+          <button @click="inputRef?.click()" class="px-3 py-1.5 text-xs text-brand-600 hover:underline">导入</button>
+          <input ref="inputRef" type="file" accept=".yaml,.yml" @change="onImport" class="hidden">
         </div>
       </div>
       <div class="space-y-2">
