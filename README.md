@@ -8,6 +8,20 @@
 
 ## 1. 快速开始
 
+### 方式一：GUI 桌面工具（推荐）
+
+```bash
+# macOS / Linux
+./run.sh
+
+# Windows
+run.cmd
+```
+
+打开后通过图形界面完成所有配置，无需记忆命令。详见 [§1.5 GUI 操作指南](#15-gui-桌面工具推荐)。
+
+### 方式二：CLI 命令行
+
 ```bash
 # 1) 复制密钥模板（拆分为两个文件）
 cp agents/llm/llm-env-example.yaml agents/llm/llm.yaml
@@ -24,9 +38,183 @@ cp agents/mcp/mcp-env-example.yaml agents/mcp/mcp.yaml
 
 ---
 
-## 2. 命令总览
+## 1.5 GUI 桌面工具（推荐）
+
+除 CLI 外，AgentBuddy 提供完整的 GUI 桌面应用，覆盖所有配置功能，无需记忆命令。
+
+### 启动方式
+
+```bash
+# macOS / Linux
+./run.sh
+
+# Windows
+run.cmd
+
+# 仅启动 Web 服务（不打开桌面窗口，用浏览器访问 http://127.0.0.1:5050）
+./run.sh --no-webview
+```
+
+> GUI 底层仍调用 `agentctl`，所有操作与 CLI 完全等价，可混合使用。
+
+### 界面总览
+
+![AIDE 管理页](docs/screenshots/aide-management.png)
+
+GUI 顶部有 8 个功能标签页：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  AgentBuddy                                  [自动同步] [IDE▼]  │
+│  AIDE 管理 | LLM 配置 | MCP 配置 | Skills | 自定义命令 | ...   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│                        各标签页内容                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 各标签页操作指南
+
+#### ① AIDE 管理
+
+管理所有 AI IDE 的检测、安装、启动、会话、配置同步。
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  AIDE 检测与管理                              [重新检测]    │
+│  总计: 15   已安装: 8   未安装: 7                           │
+├────────────────────────────────────────────────────────────┤
+│  ┌──────────┬─────────────────────────────────────────┐   │
+│  │ Claude   │ ● npx  [打开] [配置目录] [配置同步] [官网] │   │
+│  │ CLI App  │   method: npm                            │   │
+│  │ 会话(12) │                                          │   │
+│  ├──────────┼─────────────────────────────────────────┤   │
+│  │ ZCode    │ ● npx  [打开] [配置目录] [配置同步]       │   │
+│  │ CLI App  │   method: npm                            │   │
+│  │ 会话(3)  │                                          │   │
+│  └──────────┴─────────────────────────────────────────┘   │
+│  ▶ 未安装 IDE (7)                                          │
+└────────────────────────────────────────────────────────────┘
+```
+
+| 操作 | 说明 |
+|------|------|
+| **重新检测** | 扫描所有 IDE 的 CLI/App 安装状态 |
+| **CLI / App 标签** | 切换查看 CLI 或桌面 App 信息；「打开」按钮按当前标签启动对应模式 |
+| **安装 / 卸载 / 重装** | 一键安装或卸载 CLI/App（npm/brew/script 自动选择） |
+| **配置目录** | 用系统文件管理器打开 IDE 配置目录 |
+| **配置同步** | 将 rules/mcp/skills/llm 同步到该 IDE（等价 `agentctl sync -i <IDE>`） |
+| **会话** | 点击打开右侧滑出抽屉，查看/恢复/导出/共享会话 |
+
+**会话管理抽屉**（点击「会话」按钮后从右侧滑出）：
+
+![会话管理抽屉](docs/screenshots/session-drawer.png)
+
+```
+                    ┌──────────────────┐
+                    │ 💬 会话管理    × │
+                    │ [Claude][ZCode]  │
+                    ├──────────────────┤
+                    │ 会话标题          │
+                    │ ID · 5条 · 3工具  │
+                    │ /path/to/project  │
+                    │ 2026-07-08T...    │
+                    │ [继续] [导出] [共享]│
+                    ├──────────────────┤
+                    │ 另一个会话...     │
+                    └──────────────────┘
+```
+
+- **继续**：恢复指定会话（CLI 模式调用 `--resume`）
+- **导出**：导出会话为 JSON
+- **共享**：将会话导入到其他 IDE
+
+#### ② LLM 配置
+
+![LLM 配置](docs/screenshots/llm-config.png)
+
+配置 LLM Provider、API Key、模型。
+
+| 操作 | 说明 |
+|------|------|
+| **添加 Provider** | 点击「智能添加」，粘贴 API Key，自动识别 Provider（openai/anthropic/deepseek 等） |
+| **验证 Key** | 点击「验证」检测 Key 是否可用，并获取可用模型列表 |
+| **切换 Provider** | 选择活跃的 Provider/Protocol，影响所有 IDE |
+| **配置同步** | 将 LLM 配置同步到各 IDE（Claude settings.json / ZCode v2/config.json 等） |
+
+#### ③ MCP 配置
+
+管理 MCP Server 配置（`config/mcp/mcp.yaml`）。
+
+| 操作 | 说明 |
+|------|------|
+| **添加 / 编辑 / 删除** | 管理 MCP Server（command/args/env/url） |
+| **启用 / 禁用** | `disabled: true/false` 控制是否同步 |
+| **配置同步** | 将 MCP 同步到各 IDE（Claude mcp.json / ZCode mcp.json / Codex TOML 等） |
+
+#### ④ Skills 配置
+
+![Skills 配置](docs/screenshots/skills-config.png)
+
+管理 AI 技能（template/skills + 市场安装）。
+
+| Tab | 说明 |
+|-----|------|
+| **本地预置** | 显示 `template/skills/` 下有 SKILL.md 的技能，点击「安装」复制到 `config/skills/` |
+| **市场检索** | 从 ModelScope / skills.sh 搜索并安装技能 |
+| **手动安装** | 输入 `owner/repo` 或 GitHub URL 安装 |
+
+已安装技能区可勾选启用/禁用，点击「同步到 IDE」同步到各 IDE 的 skills 目录。
+
+#### ⑤ 自定义命令
+
+管理 AI 自定义命令（类似 OpenCode 的 `/command`）。
+
+- 添加/编辑/删除命令（name + description + prompt）
+- 导入/导出命令配置
+- 「同步到 IDE」将命令写入 OpenCode `commands/*.md` + Claude `commands/*.md`
+
+#### ⑥ Subagent
+
+管理预设子代理角色（java/前端/嵌入式/dev/产品等）。
+
+- 添加/编辑/删除角色（name + role + category + prompt）
+- 导入/导出角色配置
+- 「同步到 IDE」将角色写入 OpenCode `opencode.json` 的 agent 字段
+
+#### ⑦ 插件配置
+
+管理 AgentBuddy 插件（MCP + Skills 打包）。
+
+- 安装/卸载插件
+- 查看已安装插件列表
+- 插件的 MCP/Skills 自动合并到全局同步
+
+#### ⑧ 插件构建
+
+从 CSV 构建可分发的 `.plugin.yaml` 插件包。
+
+- 选择技能 + MCP Server 打包
+- 生成插件配置文件
+
+### 顶部全局工具条
+
+在 LLM/MCP/Skills 标签页，顶部显示全局同步工具条：
+
+| 控件 | 说明 |
+|------|------|
+| **自动同步** | 勾选后，每次修改配置自动同步到选中的 IDE |
+| **IDE 多选** | 勾选要同步的 IDE（支持拖拽排序） |
+| **同步** | 一键将当前配置同步到所有选中的 IDE |
+
+---
+
+## 2. 命令总览（CLI）
 
 所有功能通过统一 CLI 入口 `scripts/agentctl.py` 提供，合并了原 `init-env.py` / `init-ide.py` / `plugin-manager.py` 三个脚本。
+
+> **提示**：以下 CLI 操作均可通过上方 GUI 完成，GUI 底层调用相同的 `agentctl` 命令。
 
 | 命令 | 用途 |
 |------|------|
