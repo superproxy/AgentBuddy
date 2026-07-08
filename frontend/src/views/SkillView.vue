@@ -74,7 +74,7 @@ onMounted(() => { loadLocalSkills(); loadInstalledSkills() })
           <div class="text-[10px] text-ink-500 line-clamp-2">{{ s.description }}</div>
           <div class="flex items-center gap-1 mt-1">
             <span v-if="s.category" class="text-[9px] px-1 py-0.5 bg-brand-50 text-brand-600 rounded">{{ s.category }}</span>
-            <button @click="installFromSearch({ source: 'local', name: s.skill_name, description: s.description, install_command: 'npx skills add ' + s.skill_name + ' --copy -y' })" class="text-[10px] text-green-600 hover:underline ml-auto">安装</button>
+            <button @click="installFromSearch({ source: 'local', name: s.skill_name, description: s.description, install_command: '' })" class="text-[10px] text-green-600 hover:underline ml-auto">安装</button>
           </div>
         </div>
       </div>

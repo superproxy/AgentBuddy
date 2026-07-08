@@ -472,10 +472,11 @@ def delete_mcp_config_key(key):
 # ============================================================
 @app.route("/api/skills/local", methods=["GET"])
 def list_local_skills():
-    """列出本地技能：合并 CSV 索引与 template/skills/ 实际目录。
+    """列出本地预置技能：仅返回 template/skills/ 下有 SKILL.md 的技能。
 
-    CSV 提供 category/role/description 等元信息；目录扫描确保未在 CSV
-    中登记但实际存在的本地 skill 也能展示（避免遗漏）。
+    CSV 提供 category/role/description 等元信息；
+    目录扫描确保所有实际存在的本地 skill 都能展示。
+    不含 remote 类型（远程技能在市场搜索中获取）。
     """
     rows = []
     csv_map: dict[str, dict] = {}
@@ -486,29 +487,33 @@ def list_local_skills():
                 name = row.get("skill_name") or row.get("name") or ""
                 if name:
                     csv_map[name] = row
-                    rows.append(row)
 
-    # 补充 template/skills/ 下未在 CSV 中登记的本地 skill
+    # 仅扫描 template/skills/ 下有 SKILL.md 的目录
     if AGENTS_SKILLS_CACHE.exists():
-        existing_names = {r.get("skill_name") or r.get("name") for r in rows}
         for d in sorted(AGENTS_SKILLS_CACHE.iterdir()):
             if not d.is_dir() or not (d / "SKILL.md").exists():
                 continue
-            if d.name in existing_names:
-                continue
-            rows.append({
-                "skill_name": d.name,
-                "category": "",
-                "role": "",
-                "description": "",
-                "trigger_keywords": "",
-                "installable": "false",
-                "source_type": "local",
-                "source": d.name,
-                "url": "",
-                "market_channel": "",
-                "short_name": d.name,
-            })
+            name = d.name
+            if name in csv_map:
+                # CSV 中有元信息，合并
+                row = dict(csv_map[name])
+                row["skill_name"] = name
+                rows.append(row)
+            else:
+                # CSV 中未登记，用基本信息
+                rows.append({
+                    "skill_name": name,
+                    "category": "",
+                    "role": "",
+                    "description": "",
+                    "trigger_keywords": "",
+                    "installable": "false",
+                    "source_type": "local",
+                    "source": name,
+                    "url": "",
+                    "market_channel": "",
+                    "short_name": name,
+                })
     return jsonify({"ok": True, "data": rows})
 
 
@@ -655,6 +660,30 @@ def install_skill_sse():
     source = request.args.get("source", "").strip()
     skill = request.args.get("skill", "").strip()
     command = request.args.get("command", "").strip()
+
+    # 本地预置技能：直接从 template/skills/ 复制到 config/skills/
+    if source.startswith("local:"):
+        skill_name = source[6:] or skill
+        if not skill_name:
+            return Response("data: [ERROR] 缺少技能名\n\n", mimetype="text/event-stream")
+        cache = PROJECT_ROOT / "template" / "skills" / skill_name
+        target = DOT_AGENTS_SKILLS / skill_name
+        def _local_copy():
+            if not cache.exists() or not (cache / "SKILL.md").exists():
+                yield f"data: [ERROR] 本地预置技能不存在: {skill_name}\n\n"
+                return
+            if target.exists():
+                yield f"data: [-] 技能已存在，跳过: {skill_name}\n\n"
+                yield f"data: [OK] {skill_name} (already installed)\n\n"
+                return
+            try:
+                import shutil
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(cache, target, ignore=shutil.ignore_patterns('.git'))
+                yield f"data: [OK] Skill copied from template: {skill_name}\n\n"
+            except Exception as e:
+                yield f"data: [ERROR] 复制失败: {e}\n\n"
+        return Response(stream_with_context(_local_copy()), mimetype="text/event-stream")
 
     if command:
         cmd = command

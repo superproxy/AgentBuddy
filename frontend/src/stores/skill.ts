@@ -57,7 +57,7 @@ export const useSkillStore = defineStore('skill', () => {
       const localHits = localSkills.value.filter((s) =>
         (s.skill_name || '').toLowerCase().includes(q.toLowerCase()) ||
         (s.description || '').toLowerCase().includes(q.toLowerCase()),
-      ).map((s) => ({ source: 'local', name: s.skill_name, description: s.description, author: '', install_count: 0, install_command: 'npx skills add ' + s.skill_name + ' --copy -y' }))
+      ).map((s) => ({ source: 'local', name: s.skill_name, description: s.description, author: '', install_count: 0, install_command: '' }))
       results = results.concat(localHits)
     }
     const marketSrcs = srcs.filter((s) => s !== 'local')
@@ -73,6 +73,12 @@ export const useSkillStore = defineStore('skill', () => {
     skillSearchHint.value = ''
   }
   async function installFromSearch(s: any) {
+    // 本地预置技能：直接从 template/skills/ 复制
+    if (s.source === 'local' || (s.install_command === '' && s.source === 'local')) {
+      ui.clearLog()
+      await runSse('/api/skills/install?source=local:' + encodeURIComponent(s.name), (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
+      return
+    }
     let cmd = s.install_command || ''
     if (cmd && cmd.startsWith('npx')) {
       if (!cmd.includes('--copy')) cmd = cmd.replace(/ -y$/, '') + ' --copy -y'
