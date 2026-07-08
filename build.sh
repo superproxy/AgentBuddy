@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AgentBuddy 完整构建脚本（前端 + 后端 + PyInstaller 打包）
-# 用法: ./build.sh [--windowed] [--clean] [--no-frontend] [--no-verify]
+# 用法: ./build.sh [--windowed] [--clean] [--no-frontend] [--no-verify] [--version 1.0.0]
 set -e
 
 cd "$(dirname "$0")"
@@ -20,12 +20,16 @@ WINDOWED=false
 CLEAN=false
 NO_FRONTEND=false
 NO_VERIFY=false
+VERSION="1.0.0"
 for arg in "$@"; do
   case "$arg" in
     --windowed)     WINDOWED=true ;;
     --clean)        CLEAN=true ;;
     --no-frontend)  NO_FRONTEND=true ;;
     --no-verify)    NO_VERIFY=true ;;
+    --version=*)    VERSION="${arg#--version=}" ;;
+    --version)      shift_next=true ;;
+    *) if [ "$shift_next" = true ]; then VERSION="$arg"; shift_next=false; fi ;;
   esac
 done
 
@@ -70,6 +74,7 @@ BUILD_ARGS=""
 if [ "$WINDOWED" = true ]; then BUILD_ARGS="$BUILD_ARGS --windowed"; fi
 if [ "$CLEAN" = true ]; then BUILD_ARGS="$BUILD_ARGS --clean"; fi
 if [ "$NO_VERIFY" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-verify"; fi
+BUILD_ARGS="$BUILD_ARGS --version $VERSION"
 "$PY" build.py $BUILD_ARGS || fail "PyInstaller 打包失败"
 info "后端打包完成: dist/AgentBuddy/"
 

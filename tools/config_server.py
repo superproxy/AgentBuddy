@@ -306,17 +306,11 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
 # ============================================================
 @app.route("/")
 def index():
-    """根路由：优先返回 Vite 构建产物（Vue 3 + Vite 重构版），不存在则回退旧版 HTML。"""
+    """根路由：返回 Vite 构建产物（Vue 3 + Vite）。"""
     dist_ui = PROJECT_ROOT / "tools" / "dist-ui" / "index.html"
     if dist_ui.exists():
         return send_file(dist_ui)
-    return send_file(PROJECT_ROOT / "tools" / "config_ui.html")
-
-
-@app.route("/old")
-def old_ui():
-    """旧版 UI（运行时 Vue 单文件），渐进式迁移期间备用。"""
-    return send_file(PROJECT_ROOT / "tools" / "config_ui.html")
+    return "Frontend not built. Run: cd frontend && npm run build-only", 503
 
 
 @app.route("/assets/<path:filename>")
@@ -326,11 +320,18 @@ def dist_assets(filename):
     return send_from_directory(PROJECT_ROOT / "tools" / "dist-ui" / "assets", filename)
 
 
-@app.route("/static/<path:filename>")
-def static_files(filename):
-    """提供本地静态资源（Vue / Tailwind JIT 等），避免依赖外部 CDN。"""
-    from flask import send_from_directory
-    return send_from_directory(PROJECT_ROOT / "tools" / "static", filename)
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    """返回应用版本号。构建时由 build.py 写入 tools/dist-ui/version.json。"""
+    import json
+    version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
+    if version_file.exists():
+        try:
+            with open(version_file, "r", encoding="utf-8") as f:
+                return jsonify(json.load(f))
+        except Exception:
+            pass
+    return jsonify({"version": "dev", "build_time": ""})
 
 
 # ============================================================

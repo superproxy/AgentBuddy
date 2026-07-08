@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import SyncBar from './SyncBar.vue'
 interface TabItem {
   key: string
@@ -6,6 +7,17 @@ interface TabItem {
 }
 defineProps<{ tab: string; tabs: TabItem[] }>()
 const emit = defineEmits<{ (e: 'update:tab', v: string): void }>()
+
+const appVersion = ref('')
+const buildTime = ref('')
+onMounted(async () => {
+  try {
+    const r = await fetch('/api/version')
+    const d = await r.json()
+    appVersion.value = d.version || ''
+    buildTime.value = d.build_time || ''
+  } catch {}
+})
 </script>
 
 <template>
@@ -18,8 +30,8 @@ const emit = defineEmits<{ (e: 'update:tab', v: string): void }>()
           A
         </div>
         <div>
-          <h1 class="text-base font-semibold">AgentBuddy 配置工具</h1>
-          <div class="text-xs text-white/60">Vue 3 + Vite 重构中 · AIDE 管理 tab 已迁移</div>
+          <h1 class="text-base font-semibold">AgentBuddy 配置工具<span v-if="appVersion" class="text-xs text-white/50 font-normal ml-2">v{{ appVersion }}</span></h1>
+          <div class="text-xs text-white/60">{{ buildTime ? `构建于 ${buildTime.slice(0, 10)}` : '开发模式' }}</div>
         </div>
       </div>
       <div class="flex items-center gap-2">

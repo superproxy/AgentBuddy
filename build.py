@@ -86,6 +86,22 @@ def clean() -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
+def write_version(version: str) -> None:
+    """构建时写入版本信息到 tools/dist-ui/version.json，供运行时 /api/version 读取。"""
+    import json
+    from datetime import datetime, timezone
+    version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
+    data = {
+        "version": version,
+        "build_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    version_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(version_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    info(f"版本信息已写入: {version_file.relative_to(PROJECT_ROOT)} (v{version})")
+
+
 def run_pyinstaller(windowed: bool) -> None:
     cmd = [sys.executable, "-m", "PyInstaller", str(SPEC_FILE), "--noconfirm"]
     if windowed:
@@ -222,8 +238,9 @@ def main():
     ap.add_argument("--version", default="1.0.0", help="安装包版本号（默认 1.0.0）")
     args = ap.parse_args()
 
-    info(f"平台: {sys.platform} | Python: {sys.version.split()[0]}")
+    info(f"平台: {sys.platform} | Python: {sys.version.split()[0]} | 版本: {args.version}")
     ensure_pyinstaller()
+    write_version(args.version)
     if args.clean:
         clean()
     run_pyinstaller(windowed=args.windowed)
