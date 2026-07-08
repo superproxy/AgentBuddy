@@ -11,6 +11,7 @@ import SkillView from './views/SkillView.vue'
 import PluginView from './views/PluginView.vue'
 import PluginBuildView from './views/PluginBuildView.vue'
 import CommandView from './views/CommandView.vue'
+import SubagentView from './views/SubagentView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
@@ -24,6 +25,7 @@ const tabs = [
   { key: 'plugin', label: '插件配置' },
   { key: 'plugin-build', label: '插件构建' },
   { key: 'command', label: '常用命令' },
+  { key: 'subagent', label: 'Subagent' },
 ]
 
 const ide = useIdeStore()
@@ -47,6 +49,7 @@ onMounted(() => {
     <PluginView v-else-if="tab === 'plugin'" />
     <PluginBuildView v-else-if="tab === 'plugin-build'" />
     <CommandView v-else-if="tab === 'command'" />
+    <SubagentView v-else-if="tab === 'subagent'" />
   </main>
   <Toast />
   <Modal />
