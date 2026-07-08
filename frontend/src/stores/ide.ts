@@ -79,6 +79,16 @@ export const useIdeStore = defineStore('ide', () => {
   })
 
   // ===== 函数 =====
+  /** 直接下载（不跳转新窗口）：用 <a download> 触发，浏览器处理 */
+  function downloadUrl(url: string) {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   async function loadIdeDetect() {
     if (ideDetecting.value) return
     ideDetecting.value = true
@@ -213,7 +223,7 @@ export const useIdeStore = defineStore('ide', () => {
         await loadIdeDetect()
       } else if (r.url) {
         ui.toast(`${r.message || '需手动安装'}：${r.url}`, 'warn')
-        window.open(r.url, '_blank')
+        downloadUrl(r.url)
       } else {
         ui.toast(`安装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
       }
@@ -258,7 +268,7 @@ export const useIdeStore = defineStore('ide', () => {
         await loadIdeDetect()
       } else if (r.url) {
         ui.toast(`${r.message || '需手动安装'}：${r.url}`, 'warn')
-        window.open(r.url, '_blank')
+        downloadUrl(r.url)
       } else {
         ui.toast(`重装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
       }
