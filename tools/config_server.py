@@ -558,30 +558,14 @@ def list_local_skills():
 def list_installed_skills():
     enabled_set = get_enabled_skills(SKILL_YAML)
     installed = []
-    seen = set()
-    # 扫描两个技能目录：~/.agents/skills/（用户安装）+ config/skills/（项目级）
-    scan_dirs = [
-        (DOT_AGENTS_SKILLS, "user"),
-        (PROJECT_SKILLS_DIR, "project"),
-    ]
-    for scan_dir, source in scan_dirs:
-        if not scan_dir.exists():
-            continue
-        for d in scan_dir.iterdir():
+    # 只扫描当前项目 config/skills/（~/.agents/skills/ 是用户级共享目录，不在此展示）
+    if PROJECT_SKILLS_DIR.exists():
+        for d in PROJECT_SKILLS_DIR.iterdir():
             if not d.is_dir() or not (d / "SKILL.md").exists():
                 continue
-            if d.name in seen:
-                continue
-            seen.add(d.name)
-            # 路径显示：~/.agents/ 缩写为 ~，项目内用相对路径
-            try:
-                rel = str(d.relative_to(PROJECT_ROOT))
-            except ValueError:
-                rel = str(d).replace(str(Path.home()), "~", 1)
             installed.append({
                 "name": d.name,
-                "path": rel,
-                "source": source,
+                "path": str(d.relative_to(PROJECT_ROOT)),
                 "skill_md_exists": True,
                 "enabled": d.name in enabled_set,
             })
