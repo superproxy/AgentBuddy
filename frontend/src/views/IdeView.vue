@@ -8,22 +8,21 @@ const {
   installedIdes, notInstalledIdes, sessionableIdes, showNotInstalled,
   ideInstalling, ideUninstalling, ideReinstalling, ideSyncing,
   ideLaunching, ideResuming, ideOpeningConfig,
-  expandedIde, expandedIdeCard, ideCardTab,
+  expandedIde, sessionDrawerOpen, expandedIdeCard, ideCardTab,
   ideSessionsMap, ideSessionsStatsMap, ideLoadingSessions,
   exportingSession, shareModalOpen, shareModalSession, shareTargetIde, shareImporting,
   shareTargetIdes,
 } = storeToRefs(ide)
 const {
   loadIdeDetect, launchIde, installIde, uninstallIde, reinstallIde, openIdeConfig,
-  syncIdeConfig, toggleIdeSessions, toggleIdeCard, setIdeCardTab, exportSession,
+  syncIdeConfig, toggleIdeSessions, closeSessionDrawer, toggleIdeCard, setIdeCardTab, exportSession,
   openShareModal, importSession,
 } = ide
 </script>
 
 <template>
-  <div class="flex gap-4 items-start">
-    <!-- 左侧：IDE 管理区 -->
-    <div class="flex-1 min-w-0 space-y-4">
+  <div class="space-y-4">
+    <!-- IDE 管理区（全宽） -->
     <div class="bg-white rounded-xl shadow-card p-4">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold flex items-center gap-2">
@@ -82,7 +81,7 @@ const {
                     :disabled="ideReinstalling === it.key + ':cli'" class="px-2 py-0.5 text-[10px] text-amber-600 bg-amber-50 hover:bg-amber-100 rounded disabled:opacity-40">{{ ideReinstalling === it.key + ':cli' ? '...' : '重装' }}</button>
                   <button v-if="it.exe_path && ideInstallInfo[it.key].cli.method !== 'manual'" @click="uninstallIde(it.key, 'cli')"
                     :disabled="ideUninstalling === it.key + ':cli'" class="px-2 py-0.5 text-[10px] text-red-500 bg-red-50 hover:bg-red-100 rounded disabled:opacity-40">{{ ideUninstalling === it.key + ':cli' ? '...' : '卸载' }}</button>
-                  <button v-if="it.exe_path" @click="launchIde(it.key)" :disabled="!!ideLaunching || !!ideResuming" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideLaunching === it.key ? '...' : '打开' }}</button>
+                  <button v-if="it.exe_path" @click="launchIde(it.key, null, 'cli')" :disabled="!!ideLaunching || !!ideResuming" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideLaunching === it.key ? '...' : '打开' }}</button>
                   <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="!!ideOpeningConfig" class="px-2 py-0.5 text-[10px] text-ink-600 bg-ink-100 hover:bg-ink-200 rounded disabled:opacity-40">{{ ideOpeningConfig === it.key ? '...' : '配置目录' }}</button>
                   <button @click="syncIdeConfig(it.key)" :disabled="!!ideSyncing" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideSyncing === it.key ? '...' : '配置同步' }}</button>
                   <a v-if="ideInstallInfo[it.key].homepage" :href="ideInstallInfo[it.key].homepage" target="_blank" class="px-2 py-0.5 text-[10px] text-ink-500 bg-ink-100 hover:bg-ink-200 rounded">官网</a>
@@ -103,7 +102,7 @@ const {
                     :disabled="ideReinstalling === it.key + ':app'" class="px-2 py-0.5 text-[10px] text-amber-600 bg-amber-50 hover:bg-amber-100 rounded disabled:opacity-40">{{ ideReinstalling === it.key + ':app' ? '...' : '重装' }}</button>
                   <button v-if="it.app_path && ideInstallInfo[it.key].app.method !== 'manual'" @click="uninstallIde(it.key, 'app')"
                     :disabled="ideUninstalling === it.key + ':app'" class="px-2 py-0.5 text-[10px] text-red-500 bg-red-50 hover:bg-red-100 rounded disabled:opacity-40">{{ ideUninstalling === it.key + ':app' ? '...' : '卸载' }}</button>
-                  <button v-if="it.app_path" @click="launchIde(it.key)" :disabled="!!ideLaunching || !!ideResuming" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideLaunching === it.key ? '...' : '打开' }}</button>
+                  <button v-if="it.app_path" @click="launchIde(it.key, null, 'app')" :disabled="!!ideLaunching || !!ideResuming" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideLaunching === it.key ? '...' : '打开' }}</button>
                   <button @click="syncIdeConfig(it.key)" :disabled="!!ideSyncing" class="px-2 py-0.5 text-[10px] text-brand-600 bg-brand-50 hover:bg-brand-100 rounded disabled:opacity-40">{{ ideSyncing === it.key ? '...' : '配置同步' }}</button>
                   <a v-if="ideInstallInfo[it.key].homepage" :href="ideInstallInfo[it.key].homepage" target="_blank" class="px-2 py-0.5 text-[10px] text-ink-500 bg-ink-100 hover:bg-ink-200 rounded">官网</a>
                 </div>
@@ -140,21 +139,27 @@ const {
         </div>
       </div>
     </div>
-    </div><!-- /左侧 IDE 管理区 -->
+  </div>
 
-    <!-- 右侧：会话管理面板（显著） -->
-    <div class="w-[420px] shrink-0 sticky top-0">
-      <div class="bg-white rounded-xl shadow-card border-2 border-brand-300 overflow-hidden">
-        <!-- 面板标题 -->
-        <div class="bg-gradient-to-r from-brand-500 to-brand-600 px-4 py-3 flex items-center justify-between">
-          <h2 class="text-sm font-bold text-white flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-            会话管理
-          </h2>
-          <span v-if="expandedIde" class="text-[10px] text-brand-100">{{ ideSessionsStatsMap[expandedIde]?.total || 0 }} 个会话</span>
-        </div>
+    <!-- 会话管理抽屉（overlay，从右侧滑出） -->
+    <Transition name="drawer">
+      <div v-if="sessionDrawerOpen" class="fixed inset-0 z-40 flex justify-end" @click.self="closeSessionDrawer">
+        <div class="absolute inset-0 bg-black/30"></div>
+        <div class="relative w-[440px] max-w-[90vw] bg-white shadow-2xl h-full flex flex-col">
+          <div class="bg-gradient-to-r from-brand-500 to-brand-600 px-4 py-3 flex items-center justify-between shrink-0">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              会话管理
+            </h2>
+            <div class="flex items-center gap-2">
+              <span v-if="expandedIde" class="text-[10px] text-brand-100">{{ ideSessionsStatsMap[expandedIde]?.total || 0 }} 个会话</span>
+              <button @click="closeSessionDrawer" class="text-white/80 hover:text-white p-1 rounded hover:bg-white/20 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
         <!-- IDE 选择器 -->
-        <div v-if="sessionableIdes.length" class="px-3 py-2 border-b border-ink-200 bg-ink-50/60">
+        <div v-if="sessionableIdes.length" class="px-3 py-2 border-b border-ink-200 bg-ink-50/60 shrink-0">
           <div class="flex gap-1 flex-wrap">
             <button v-for="it in sessionableIdes" :key="it.key" @click="toggleIdeSessions(it.key)"
               :class="['px-2 py-1 text-[10px] rounded-md font-medium transition', expandedIde === it.key ? 'bg-brand-500 text-white shadow-sm' : 'bg-white text-ink-600 hover:bg-brand-50 border border-ink-200']">
@@ -164,7 +169,7 @@ const {
           </div>
         </div>
         <!-- 会话列表 -->
-        <div class="max-h-[calc(100vh-200px)] overflow-y-auto">
+        <div class="flex-1 overflow-y-auto">
           <div v-if="!sessionableIdes.length" class="p-6 text-center text-xs text-ink-400">
             <svg class="w-8 h-8 mx-auto mb-2 text-ink-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             暂无支持会话管理的 IDE
@@ -188,7 +193,7 @@ const {
                   <div class="text-[10px] text-ink-300 mt-0.5">{{ s.updated_at }}</div>
                 </div>
                 <div class="flex flex-col gap-1 shrink-0">
-                  <button @click="launchIde(expandedIde, s)" :disabled="ideResuming === (expandedIde + ':' + s.id) || !!ideLaunching" class="px-2 py-1 text-[10px] text-green-600 bg-green-50 hover:bg-green-100 rounded font-medium disabled:opacity-40 transition">{{ ideResuming === (expandedIde + ':' + s.id) ? '...' : '继续' }}</button>
+                    <button @click="launchIde(expandedIde, s, ideCardTab[expandedIde] || 'cli')" :disabled="ideResuming === (expandedIde + ':' + s.id) || !!ideLaunching" class="px-2 py-1 text-[10px] text-green-600 bg-green-50 hover:bg-green-100 rounded font-medium disabled:opacity-40 transition">{{ ideResuming === (expandedIde + ':' + s.id) ? '...' : '继续' }}</button>
                   <button @click="exportSession(expandedIde, s)" :disabled="exportingSession === s.id" class="px-2 py-1 text-[10px] text-blue-600 bg-blue-50 hover:bg-blue-100 rounded font-medium disabled:opacity-40 transition">{{ exportingSession === s.id ? '...' : '导出' }}</button>
                   <button @click="openShareModal(expandedIde, s)" class="px-2 py-1 text-[10px] text-purple-600 bg-purple-50 hover:bg-purple-100 rounded font-medium transition">共享</button>
                 </div>
@@ -196,9 +201,9 @@ const {
             </div>
           </div>
         </div>
+        </div>
       </div>
-    </div><!-- /右侧会话管理面板 -->
-  </div>
+    </Transition>
     <!-- 共享会话 Modal -->
     <div v-if="shareModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" @click.self="shareModalOpen = false">
       <div class="bg-white rounded-lg p-5 w-[500px] max-w-[90vw]">
@@ -223,3 +228,22 @@ const {
       </div>
     </div>
 </template>
+
+<style scoped>
+.drawer-enter-active,
+.drawer-leave-active {
+  transition: opacity 0.25s ease;
+}
+.drawer-enter-active > div:last-child,
+.drawer-leave-active > div:last-child {
+  transition: transform 0.25s ease;
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from > div:last-child,
+.drawer-leave-to > div:last-child {
+  transform: translateX(100%);
+}
+</style>

@@ -182,13 +182,14 @@ def _launch_macos_app(app_path: str, cwd: str = "") -> dict:
         return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
 
 
-def launch_ide(ide_key: str, cwd: str = "", session_id: str = "") -> dict:
+def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = "") -> dict:
     """启动 IDE。
 
     Args:
         ide_key: IDE 标识（如 "Claude"）
         cwd: 工作目录（可选）
         session_id: 要恢复的会话 ID（可选，仅 CLI 支持）
+        mode: 启动模式 - "cli" 仅启动 CLI，"app" 仅启动 App，"" 自动（先 CLI 后 App）
 
     Returns:
         {ok, pid, cmd, error, ide, exe_path, app_path, mode}
@@ -202,32 +203,58 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "") -> dict:
     # 如 Trae 命中 trae-cli 时为 TUI，命中 trae 时为非 TUI），回退 meta 默认值
     is_tui = info.get("is_tui", meta.get("is_tui", False))
 
-    # 优先 CLI（支持 resume）
-    if exe_path:
+    def _try_cli():
+        if not exe_path:
+            return None
         args = []
         if session_id:
-            # 构造 resume 命令
             resume_cmd = build_resume_command(ide_key, exe_path, session_id, cwd)
             if resume_cmd:
-                # resume_cmd 是完整字符串，需拆分
                 parts = resume_cmd.split()
-                # 第一部分是 exe_path，其余是 args
                 args = parts[1:]
-        # TUI 类 CLI 需要 TTY，在 macOS 上用 Terminal.app 启动；否则直接 Popen
         if is_tui:
             result = _launch_cli_in_terminal(
                 exe_path, args, cwd,
-                title=f"{meta.get('label', ide_key)} — {cwd or 'Home'}",
+                title=f"{meta.get('label', ide_key)} - {cwd or 'Home'}",
             )
         else:
             result = _launch_cli(exe_path, args, cwd)
         result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "cli"})
         return result
 
-    # 回退 macOS .app
-    if app_path:
+    def _try_app():
+        if not app_path:
+            return None
         result = _launch_macos_app(app_path, cwd)
         result.update({"ide": ide_key, "exe_path": "", "app_path": app_path, "mode": "app"})
+        return result
+
+    # 按指定 mode 启动
+    if mode == "cli":
+        result = _try_cli()
+        if result:
+            return result
+        return {
+            "ok": False, "pid": 0, "cmd": "",
+            "error": f"IDE {ide_key} CLI 未安装",
+            "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
+        }
+    if mode == "app":
+        result = _try_app()
+        if result:
+            return result
+        return {
+            "ok": False, "pid": 0, "cmd": "",
+            "error": f"IDE {ide_key} App 未安装",
+            "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
+        }
+
+    # 自动模式：优先 CLI（支持 resume），回退 App
+    result = _try_cli()
+    if result:
+        return result
+    result = _try_app()
+    if result:
         return result
 
     # 都没有
@@ -242,9 +269,9 @@ def launch_ide_with_project(ide_key: str, project_path: str) -> dict:
     return launch_ide(ide_key, cwd=project_path)
 
 
-def launch_ide_resume_session(ide_key: str, session_id: str, cwd: str = "") -> dict:
+def launch_ide_resume_session(ide_key: str, session_id: str, cwd: str = "", mode: str = "") -> dict:
     """启动 IDE 并恢复指定会话。"""
-    return launch_ide(ide_key, cwd=cwd, session_id=session_id)
+    return launch_ide(ide_key, cwd=cwd, session_id=session_id, mode=mode)
 
 
 __all__ = ["launch_ide", "launch_ide_with_project", "launch_ide_resume_session"]

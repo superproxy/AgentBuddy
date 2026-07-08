@@ -1565,7 +1565,7 @@ def api_ide_sessions():
 def api_ide_launch():
     """启动 IDE。
 
-    Body: {ide: <IDE key>, cwd?: <工作目录>, session_id?: <会话 ID>}
+    Body: {ide: <IDE key>, cwd?: <工作目录>, session_id?: <会话 ID>, mode?: "cli"|"app"|""}
     """
     body = request.get_json(silent=True) or {}
     ide_key = (body.get("ide") or "").strip()
@@ -1573,11 +1573,12 @@ def api_ide_launch():
         return jsonify({"ok": False, "error": "missing ide"}), 400
     cwd = (body.get("cwd") or "").strip()
     session_id = (body.get("session_id") or "").strip()
+    mode = (body.get("mode") or "").strip()
     try:
         if session_id:
-            result = launch_ide_resume_session(ide_key, session_id, cwd)
+            result = launch_ide_resume_session(ide_key, session_id, cwd, mode=mode)
         else:
-            result = launch_ide(ide_key, cwd)
+            result = launch_ide(ide_key, cwd, mode=mode)
         return jsonify(result)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

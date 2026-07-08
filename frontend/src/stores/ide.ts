@@ -58,6 +58,7 @@ export const useIdeStore = defineStore('ide', () => {
   const ideResuming = ref('')
   const ideOpeningConfig = ref('')
   const expandedIde = ref('')
+  const sessionDrawerOpen = ref(false)
   const exportingSession = ref('')
   const shareModalOpen = ref(false)
   const shareModalSession = ref<(IdeSession & { _source_ide?: string }) | null>(null)
@@ -147,23 +148,25 @@ export const useIdeStore = defineStore('ide', () => {
   }
 
   function toggleIdeSessions(ideKey: string) {
-    if (expandedIde.value === ideKey) {
-      expandedIde.value = ''
-    } else {
-      expandedIde.value = ideKey
-      if (!ideSessionsMap[ideKey]) loadIdeSessions(ideKey)
-    }
+    expandedIde.value = ideKey
+    sessionDrawerOpen.value = true
+    if (!ideSessionsMap[ideKey]) loadIdeSessions(ideKey)
   }
 
-  async function launchIde(ideKey: string, session: IdeSession | null = null) {
+  function closeSessionDrawer() {
+    sessionDrawerOpen.value = false
+  }
+
+  async function launchIde(ideKey: string, session: IdeSession | null = null, mode?: string) {
     const key = session ? `${ideKey}:${session.id}` : ideKey
     if (ideLaunching.value || ideResuming.value) return
     if (session) ideResuming.value = key
     else ideLaunching.value = ideKey
     try {
-      const body = session
+      const body: Record<string, string> = session
         ? { ide: ideKey, session_id: session.id, cwd: session.cwd || '' }
         : { ide: ideKey }
+      if (mode) body.mode = mode
       const r = await api<{ ok: boolean; mode?: string; pid?: number; error?: string }>(
         '/api/ide/launch',
         {
@@ -175,8 +178,8 @@ export const useIdeStore = defineStore('ide', () => {
         ui.toast(`${session ? '恢复会话' : '启动'} ${ideKey} 失败: ` + (r.error || ''), 'err')
         return
       }
-      const mode = r.mode === 'cli' ? 'CLI' : r.mode === 'app' ? 'App' : ''
-      ui.toast(`${session ? '恢复会话' : '启动'} ${ideKey} ${mode} (pid=${r.pid})`, 'ok')
+      const launchMode = r.mode === 'cli' ? 'CLI' : r.mode === 'app' ? 'App' : ''
+      ui.toast(`${session ? '恢复会话' : '启动'} ${ideKey} ${launchMode} (pid=${r.pid})`, 'ok')
     } finally {
       ideLaunching.value = ''
       ideResuming.value = ''
@@ -411,6 +414,7 @@ export const useIdeStore = defineStore('ide', () => {
     ideResuming,
     ideOpeningConfig,
     expandedIde,
+    sessionDrawerOpen,
     exportingSession,
     shareModalOpen,
     shareModalSession,
@@ -435,6 +439,7 @@ export const useIdeStore = defineStore('ide', () => {
     sinkNotInstalledIdes,
     loadIdeSessions,
     toggleIdeSessions,
+    closeSessionDrawer,
     launchIde,
     openIdeConfig,
     loadIdeInstallInfo,
