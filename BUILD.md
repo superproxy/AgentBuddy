@@ -71,6 +71,36 @@ build.cmd --windowed --clean --no-installer
 - 卸载时清理日志文件，保留用户配置
 - 应用图标：`assets/app.ico`
 
+## macOS 分发包
+
+### 前置条件
+
+- **.zip**（默认）：无需额外工具，系统自带 `zip` 命令
+- **.dmg**（可选）：安装 `create-dmg`：`brew install create-dmg`
+
+### 生成分发包
+
+```bash
+# 默认构建（自动生成 .zip 或 .dmg）
+./build.sh --windowed --clean --version 1.2.0
+
+# 跳过分发包生成
+./build.sh --windowed --clean --no-installer
+```
+
+`build.py` 会自动选择：
+1. 检测到 `create-dmg` -> 生成 `.dmg`（带拖拽安装界面）
+2. 未检测到 -> 回退生成 `.zip`
+
+### 产物
+
+| 产物 | 路径 | 说明 |
+|---|---|---|
+| 可执行目录 | `dist/AgentBuddy/` | PyInstaller onedir 产物 |
+| 可执行文件 | `dist/AgentBuddy/AgentBuddy` | 主程序 |
+| DMG 分发包 | `dist/installer/AgentBuddy-<version>-macos.dmg` | 需 create-dmg |
+| ZIP 分发包 | `dist/installer/AgentBuddy-<version>-macos.zip` | 默认回退 |
+
 ## 开发模式
 
 ```bash

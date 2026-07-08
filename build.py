@@ -167,7 +167,11 @@ def report() -> None:
         exe = DIST_DIR / "AgentBuddy" / "AgentBuddy"
         print(f"  产物目录: dist/AgentBuddy/")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
-        print("  分发:    压缩 dist/AgentBuddy 为 .zip，或用 create-dmg 做 .dmg")
+        dist_pkg = list(INSTALLER_OUT_DIR.glob("AgentBuddy-*-*.*")) if INSTALLER_OUT_DIR.exists() else []
+        if dist_pkg:
+            print(f"  分发包:  {dist_pkg[0].relative_to(PROJECT_ROOT)}")
+        else:
+            print("  分发:    压缩 dist/AgentBuddy 为 .zip，或用 create-dmg 做 .dmg")
     elif plat == "win32":
         exe = DIST_DIR / "AgentBuddy" / "AgentBuddy.exe"
         print(f"  产物目录: dist\\AgentBuddy\\")
@@ -208,7 +212,18 @@ def find_iscc() -> str | None:
 
 
 def build_installer(version: str = "1.0.0") -> None:
-    """调用 Inno Setup 编译 installer.iss 生成 .exe 安装包。"""
+    """生成平台安装包。
+    - Windows: 调用 Inno Setup 编译 installer.iss 生成 .exe 安装包
+    - macOS:   优先用 create-dmg 生成 .dmg，回退到 .zip
+    """
+    if sys.platform == "win32":
+        _build_windows_installer(version)
+    elif sys.platform == "darwin":
+        _build_macos_dist(version)
+
+
+def _build_windows_installer(version: str) -> None:
+    """Windows: Inno Setup -> AgentBuddy-Setup-<version>-x64.exe"""
     if not INSTALLER_ISS.is_file():
         fail(f"找不到 {INSTALLER_ISS.name}")
     iscc = find_iscc()
@@ -229,6 +244,50 @@ def build_installer(version: str = "1.0.0") -> None:
         fail(f"未找到预期的安装包输出: {installer.name}")
 
 
+def _build_macos_dist(version: str) -> None:
+    """macOS: 优先 create-dmg 生成 .dmg，回退到 .zip"""
+    INSTALLER_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    app_dir = DIST_DIR / "AgentBuddy"
+    if not app_dir.is_dir():
+        fail(f"找不到产物目录: {app_dir}")
+
+    # 尝试用 create-dmg 生成 .dmg
+    create_dmg = shutil.which("create-dmg")
+    if create_dmg:
+        dmg_name = f"AgentBuddy-{version}-macos.dmg"
+        dmg_path = INSTALLER_OUT_DIR / dmg_name
+        info(f"使用 create-dmg 生成 .dmg...")
+        # --no-internet-enable: 不添加 Internet Enable 属性
+        # --overwrite: 覆盖已有 dmg
+        cmd = [
+            create_dmg,
+            "--no-internet-enable",
+            "--overwrite",
+            "--app-name", "AgentBuddy",
+            str(dmg_path),
+            str(app_dir),
+        ]
+        rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+        if rc == 0 and dmg_path.is_file():
+            info(f"DMG 已生成: {dmg_path.relative_to(PROJECT_ROOT)}")
+            return
+        else:
+            info("create-dmg 失败，回退到 .zip")
+
+    # 回退：生成 .zip
+    zip_name = f"AgentBuddy-{version}-macos.zip"
+    zip_path = INSTALLER_OUT_DIR / zip_name
+    info(f"生成 .zip: {zip_name}")
+    cmd = ["zip", "-r", "-y", str(zip_path), "AgentBuddy"]
+    rc = subprocess.call(cmd, cwd=str(DIST_DIR))
+    if rc != 0:
+        fail(f"zip 打包失败 (exit={rc})")
+    if zip_path.is_file():
+        info(f"ZIP 已生成: {zip_path.relative_to(PROJECT_ROOT)}")
+    else:
+        fail(f"未找到预期的 zip 输出: {zip_name}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="AgentBuddy 跨平台打包")
     ap.add_argument("--windowed", action="store_true", help="无控制台（macOS 生成 .app / Windows 无黑框）")
@@ -247,7 +306,7 @@ def main():
     if not args.no_verify:
         verify_bundle()
         check_examples_present()
-    if sys.platform == "win32" and not args.no_installer:
+    if not args.no_installer and sys.platform in ("win32", "darwin"):
         build_installer(version=args.version)
     report()
 
