@@ -145,6 +145,8 @@ GUI 顶部有 8 个功能标签页：
 
 #### ③ MCP 配置
 
+![MCP 配置](docs/screenshots/mcp-config.png)
+
 管理 MCP Server 配置（`config/mcp/mcp.yaml`）。
 
 | 操作 | 说明 |
@@ -169,6 +171,8 @@ GUI 顶部有 8 个功能标签页：
 
 #### ⑤ 自定义命令
 
+![自定义命令](docs/screenshots/command-config.png)
+
 管理 AI 自定义命令（类似 OpenCode 的 `/command`）。
 
 - 添加/编辑/删除命令（name + description + prompt）
@@ -176,6 +180,8 @@ GUI 顶部有 8 个功能标签页：
 - 「同步到 IDE」将命令写入 OpenCode `commands/*.md` + Claude `commands/*.md`
 
 #### ⑥ Subagent
+
+![Subagent](docs/screenshots/subagent-config.png)
 
 管理预设子代理角色（java/前端/嵌入式/dev/产品等）。
 

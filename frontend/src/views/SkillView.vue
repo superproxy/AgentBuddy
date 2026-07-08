@@ -44,7 +44,7 @@ onMounted(() => { loadLocalSkills(); loadInstalledSkills() })
       </div>
       <div v-show="skillTab === 'market'">
         <div class="flex gap-4 mb-3 items-center">
-          <label v-for="t in [{k:'modelscope',l:'ModelScope 市场'},{k:'skillssh',l:'skills.sh'},{k:'local',l:'本地预置'}]" :key="t.k" class="flex items-center gap-1.5 text-xs cursor-pointer">
+          <label v-for="t in [{k:'modelscope',l:'ModelScope 市场'},{k:'skillssh',l:'skills.sh'}]" :key="t.k" class="flex items-center gap-1.5 text-xs cursor-pointer">
             <input type="checkbox" v-model="skillSources[t.k]" class="rounded text-brand-500">
             <span>{{ t.l }}</span>
           </label>
