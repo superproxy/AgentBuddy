@@ -69,4 +69,5 @@ tools/dist-ui/
 # frozen 首次运行标记
 .bundle_bootstrapped
 .zcode/
-# .workbuddy/mcp.json
+# .workbuddy 运行态目录（含 mcp.json / models.json 等，由应用运行时生成）
+.workbuddy/
