@@ -8,7 +8,7 @@
  * ideList 的 key 与后端 IDE_REGISTRY 完全对齐（驼峰，如 TraeCN/TraeSoloCN）。
  */
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 
 export interface IdeItem {
   key: string
@@ -57,6 +57,26 @@ export const useSyncStore = defineStore('sync', () => {
 
   const syncing = ref(false)
   const autoSync = ref(localStorage.getItem(IDE_AUTOSYNC_KEY) === '1')
+
+  watch(
+    syncTargetIdes,
+    (v) => {
+      try {
+        localStorage.setItem(IDE_SYNC_TARGET_KEY, JSON.stringify(v))
+      } catch {
+        /* ignore */
+      }
+    },
+    { deep: true },
+  )
+
+  watch(autoSync, (v) => {
+    try {
+      localStorage.setItem(IDE_AUTOSYNC_KEY, v ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  })
 
   // ===== IDE 拖拽排序 + localStorage 持久化 =====
   function saveIdeOrder() {

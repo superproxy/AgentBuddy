@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import SyncBar from './SyncBar.vue'
 interface TabItem {
   key: string
   label: string
@@ -64,6 +63,5 @@ onMounted(async () => {
         {{ t.label }}
       </button>
     </nav>
-    <SyncBar :tab="tab" />
   </header>
 </template>
