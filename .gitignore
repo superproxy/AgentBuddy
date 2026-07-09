@@ -20,6 +20,8 @@ temp_parse.py
 .claude
 .qoder
 .trae
+.cursor/
+.specstory/
 
 # === Python ===
 # 字节码文件 / 编译产物
