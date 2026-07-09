@@ -5,12 +5,16 @@ import { useSyncStore } from '../stores/sync'
 import { useSyncLayoutStore, type SyncBarPlacement } from '../stores/syncLayout'
 import { useIdeStore } from '../stores/ide'
 import { useUiStore } from '../stores/ui'
+import { useCmdStore } from '../stores/cmd'
+import { useSubagentStore } from '../stores/subagent'
 import { runSse } from '../api/sse'
 
 const props = defineProps<{ tab: string }>()
 const sync = useSyncStore()
 const layout = useSyncLayoutStore()
 const ideStore = useIdeStore()
+const cmdStore = useCmdStore()
+const subagentStore = useSubagentStore()
 const ui = useUiStore()
 const { ideList, syncTargetIdes, autoSync, syncing, dragIdeKey, dragOverIdeKey } = storeToRefs(sync)
 const { placement, floatPos, floatSize, dragging, hoverZone, headerOffset } = storeToRefs(layout)
@@ -19,6 +23,7 @@ const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
 type FilterMode = 'all' | 'selected' | 'cn'
 type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+type ScopeKind = 'init-ide' | 'cmd' | 'subagent'
 const filterMode = ref<FilterMode>('all')
 const panelRef = ref<HTMLElement | null>(null)
 const collapsed = ref(false)
@@ -26,10 +31,14 @@ const collapsed = ref(false)
 const CN_IDE_KEYS = new Set(['QoderCN', 'TraeCN', 'TraeSoloCN'])
 const EDGE_PX = 56
 
-const SCOPE_META: Record<string, { key: string; label: string }> = {
-  env: { key: 'llm', label: 'LLM' },
-  mcp: { key: 'mcp', label: 'MCP' },
-  skill: { key: 'skill', label: 'Skills' },
+/** tab → 同步范围；含 LLM/MCP/Skills + 命令/Subagent/插件 */
+const SCOPE_META: Record<string, { key: string; label: string; kind: ScopeKind }> = {
+  env: { key: 'llm', label: 'LLM', kind: 'init-ide' },
+  mcp: { key: 'mcp', label: 'MCP', kind: 'init-ide' },
+  skill: { key: 'skill', label: 'Skills', kind: 'init-ide' },
+  command: { key: 'cmd', label: '命令', kind: 'cmd' },
+  subagent: { key: 'subagent', label: 'Subagent', kind: 'subagent' },
+  plugin: { key: 'plugin', label: '插件', kind: 'init-ide' },
 }
 
 const currentScope = computed(() => SCOPE_META[props.tab] ?? null)
@@ -39,6 +48,9 @@ const scopeItems = [
   { key: 'llm', label: 'LLM' },
   { key: 'mcp', label: 'MCP' },
   { key: 'skill', label: 'Skills' },
+  { key: 'cmd', label: '命令' },
+  { key: 'subagent', label: 'Subagent' },
+  { key: 'plugin', label: '插件' },
 ]
 
 /** 「全部」= AIDE 管理页已检测到的已安装 IDE/CLI */
@@ -68,7 +80,21 @@ const filteredIdes = computed(() => {
 
 const actionHint = computed(() => {
   if (!currentScope.value) return '当前页不支持一键同步'
+  if (currentScope.value.kind === 'cmd') return '将同步自定义命令到支持的 IDE'
+  if (currentScope.value.kind === 'subagent') return '将同步 Subagent 到支持的 IDE'
   return `个目标将接收当前 ${currentScope.value.label} 配置`
+})
+
+const canSync = computed(() => {
+  if (syncing.value || !currentScope.value) return false
+  if (needsIdeTargets.value) return syncTargetIdes.value.length > 0
+  return true
+})
+
+const execCountLabel = computed(() => {
+  if (!currentScope.value) return '—'
+  if (currentScope.value.kind === 'cmd' || currentScope.value.kind === 'subagent') return '✓'
+  return String(syncTargetIdes.value.length)
 })
 
 const isSide = computed(() => placement.value === 'left' || placement.value === 'right')
@@ -111,14 +137,15 @@ const shellStyle = computed(() => {
   if (placement.value === 'bottom') {
     return { top: 'auto', left: '0', right: '0', bottom: '0', width: '100%', height: 'auto' }
   }
-  // 左/右：嵌入 Header 下方，而非盖住整屏
+  // 左/右：嵌入 Header 下方；收起时变为竖向侧栏
+  const sideWidth = collapsed.value ? '44px' : 'min(360px, 92vw)'
   if (placement.value === 'left') {
     return {
       top: `${headerOffset.value}px`,
       left: '0',
       right: 'auto',
       bottom: '0',
-      width: 'min(360px, 92vw)',
+      width: sideWidth,
       height: 'auto',
     }
   }
@@ -128,7 +155,7 @@ const shellStyle = computed(() => {
       left: 'auto',
       right: '0',
       bottom: '0',
-      width: 'min(360px, 92vw)',
+      width: sideWidth,
       height: 'auto',
     }
   }
@@ -149,6 +176,8 @@ const tileGridClass = computed(() => {
 
 /** 从停靠拖离 / 切到窗口化时，落到最小可用尺寸并跟手定位 */
 function enterFloatAtPointer(clientX: number, clientY: number, offsetX: number, offsetY: number) {
+  // 收起态拖出窗口化时必须展开，否则 body 仍被 v-show 隐藏
+  collapsed.value = false
   const size = layout.resetToMinFloatSize()
   const ox = Math.min(Math.max(24, offsetX), size.w - 24)
   const oy = Math.min(Math.max(16, offsetY), 40)
@@ -180,22 +209,36 @@ function clearAll() {
 }
 
 async function syncCurrentScope() {
-  if (syncing.value || !syncTargetIdes.value.length) return
-  const scope = currentScope.value?.key
-  if (!scope) {
+  if (syncing.value) return
+  const meta = currentScope.value
+  if (!meta) {
     ui.toast('当前页面不支持同步', 'warn')
     return
   }
+  if (meta.kind === 'init-ide' && !syncTargetIdes.value.length) {
+    ui.toast('请先选择目标 IDE', 'warn')
+    return
+  }
+
   syncing.value = true
   ui.clearLog()
-  for (const ide of syncTargetIdes.value) {
-    await runSse(
-      '/api/init-ide?ide=' + encodeURIComponent(ide) + '&scope=' + scope,
-      (line) => ui.appendLog(line),
-    )
+  try {
+    if (meta.kind === 'cmd') {
+      await cmdStore.syncToOpencode()
+    } else if (meta.kind === 'subagent') {
+      await subagentStore.syncToOpencode()
+    } else {
+      for (const ide of syncTargetIdes.value) {
+        await runSse(
+          '/api/init-ide?ide=' + encodeURIComponent(ide) + '&scope=' + meta.key,
+          (line) => ui.appendLog(line),
+        )
+      }
+      ui.toast('同步完成')
+    }
+  } finally {
+    syncing.value = false
   }
-  syncing.value = false
-  ui.toast('同步完成')
 }
 
 /* —— 窗口化拖拽 —— */
@@ -309,6 +352,7 @@ function onTitlePointerUp(e: PointerEvent) {
     const zone = hoverZone.value ?? resolveZone(e.clientX, e.clientY)
     if (zone === 'float') {
       // 从停靠拖离已在 move 阶段落到最小尺寸；若本就在 float 则保持当前尺寸
+      collapsed.value = false
       layout.setPlacement('float')
       const size = layout.clampFloatSize(floatSize.value.w, floatSize.value.h)
       layout.setFloatSize(size.w, size.h)
@@ -514,9 +558,10 @@ onBeforeUnmount(() => {
     role="complementary"
     aria-label="同步到 IDE"
   >
-    <!-- 标题栏 / 拖拽把手 -->
+    <!-- 标题栏 / 拖拽把手（侧栏收起时变为竖向侧轨） -->
     <div
       class="sync-titlebar"
+      :class="{ 'sync-titlebar--rail': isSide && collapsed }"
       @pointerdown="onTitlePointerDown"
     >
       <div class="traffic" aria-hidden="true">
@@ -548,46 +593,48 @@ onBeforeUnmount(() => {
           <i /><i /><i /><i /><i /><i />
         </span>
         <span class="title-text">同步面板</span>
-        <span class="title-badge">{{ placementLabel }}</span>
+        <span v-if="!(isSide && collapsed)" class="title-badge">{{ placementLabel }}</span>
       </div>
 
       <div class="title-actions">
-        <button
-          type="button"
-          class="icon-btn"
-          title="左侧停靠"
-          aria-label="左侧停靠"
-          @click.stop="snapTo('left')"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2" width="5" height="12" rx="1" /><rect x="8.5" y="2" width="6" height="12" rx="1" opacity=".35" /></svg>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="右侧停靠"
-          aria-label="右侧停靠"
-          @click.stop="snapTo('right')"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2" width="6" height="12" rx="1" opacity=".35" /><rect x="9.5" y="2" width="5" height="12" rx="1" /></svg>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="底部停靠"
-          aria-label="底部停靠"
-          @click.stop="snapTo('bottom')"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1.5" width="12" height="6" rx="1" opacity=".35" /><rect x="2" y="9.5" width="12" height="5" rx="1" /></svg>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="窗口化"
-          aria-label="窗口化"
-          @click.stop="snapTo('float')"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="1.5" /></svg>
-        </button>
+        <template v-if="!(isSide && collapsed)">
+          <button
+            type="button"
+            class="icon-btn"
+            title="左侧停靠"
+            aria-label="左侧停靠"
+            @click.stop="snapTo('left')"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2" width="5" height="12" rx="1" /><rect x="8.5" y="2" width="6" height="12" rx="1" opacity=".35" /></svg>
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="右侧停靠"
+            aria-label="右侧停靠"
+            @click.stop="snapTo('right')"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2" width="6" height="12" rx="1" opacity=".35" /><rect x="9.5" y="2" width="5" height="12" rx="1" /></svg>
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="底部停靠"
+            aria-label="底部停靠"
+            @click.stop="snapTo('bottom')"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="1.5" width="12" height="6" rx="1" opacity=".35" /><rect x="2" y="9.5" width="12" height="5" rx="1" /></svg>
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="窗口化"
+            aria-label="窗口化"
+            @click.stop="snapTo('float')"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="10" height="10" rx="1.5" /></svg>
+          </button>
+        </template>
         <button
           type="button"
           class="icon-btn"
@@ -595,7 +642,10 @@ onBeforeUnmount(() => {
           :aria-label="collapsed ? '展开' : '收起'"
           @click.stop="toggleCollapse"
         >
-          <svg v-if="!collapsed" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <!-- 侧栏收起：左右箭头；其余：上下箭头 -->
+          <svg v-if="isSide && collapsed && placement === 'left'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <svg v-else-if="isSide && collapsed && placement === 'right'" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 4L6 8l4 4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <svg v-else-if="!collapsed" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <svg v-else viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10l4-4 4 4" stroke-linecap="round" stroke-linejoin="round" /></svg>
         </button>
       </div>
@@ -621,25 +671,25 @@ onBeforeUnmount(() => {
                   <span class="sync-switch" aria-hidden="true" />
                 </label>
               </div>
-              <div class="flex flex-col gap-1 mt-auto pt-2 border-t border-white/10" aria-label="当前同步范围">
-                <label
-                  v-for="item in scopeItems"
-                  :key="item.key"
-                  class="flex items-center gap-2 text-[11.5px]"
-                  :class="currentScope?.key === item.key ? 'text-white/90' : 'text-white/40'"
-                >
-                  <input
-                    type="checkbox"
-                    class="w-[13px] h-[13px] accent-brand-500"
-                    :checked="currentScope?.key === item.key"
-                    disabled
-                  />
-                  {{ item.label }}
-                  <span
-                    v-if="currentScope?.key === item.key"
-                    class="ml-auto text-[10px] font-medium text-[#9ec0ff]"
-                  >当前页</span>
-                </label>
+              <div class="scope-block" aria-label="当前同步范围">
+                <div class="scope-block__head">
+                  <span class="scope-block__label">同步范围</span>
+                  <span class="scope-block__hint">随当前页切换</span>
+                </div>
+                <div class="scope-rail" role="list">
+                  <div
+                    v-for="item in scopeItems"
+                    :key="item.key"
+                    role="listitem"
+                    class="scope-chip"
+                    :class="{ 'is-active': currentScope?.key === item.key }"
+                    :aria-current="currentScope?.key === item.key ? 'true' : undefined"
+                  >
+                    <span class="scope-chip__dot" aria-hidden="true" />
+                    <span class="scope-chip__name">{{ item.label }}</span>
+                    <span v-if="currentScope?.key === item.key" class="scope-chip__tag">当前页</span>
+                  </div>
+                </div>
               </div>
             </div>
           </aside>
@@ -735,28 +785,36 @@ onBeforeUnmount(() => {
             </div>
             <div>
               <div class="font-mono text-[28px] font-semibold tracking-tight text-white leading-none">
-                {{ syncTargetIdes.length }}
+                {{ execCountLabel }}
               </div>
               <div class="mt-1 text-[11px] text-white/60">{{ actionHint }}</div>
             </div>
             <div class="flex flex-wrap gap-1 min-h-6">
-              <template v-if="selectedIdes.length">
-                <span
-                  v-for="ide in previewIdes"
-                  :key="ide.key"
-                  class="inline-flex items-center h-5 px-1.5 rounded-full text-[10px] font-semibold text-[#dbe8ff] bg-brand-500/25 border border-brand-500/35"
-                >{{ ide.label }}</span>
-                <span
-                  v-if="previewExtra"
-                  class="inline-flex items-center h-5 px-1.5 rounded-full text-[10px] font-semibold text-[#dbe8ff] bg-brand-500/25 border border-brand-500/35"
-                >+{{ previewExtra }}</span>
+              <template v-if="needsIdeTargets">
+                <template v-if="selectedIdes.length">
+                  <span
+                    v-for="ide in previewIdes"
+                    :key="ide.key"
+                    class="inline-flex items-center h-5 px-1.5 rounded-full text-[10px] font-semibold text-[#dbe8ff] bg-brand-500/25 border border-brand-500/35"
+                  >{{ ide.label }}</span>
+                  <span
+                    v-if="previewExtra"
+                    class="inline-flex items-center h-5 px-1.5 rounded-full text-[10px] font-semibold text-[#dbe8ff] bg-brand-500/25 border border-brand-500/35"
+                  >+{{ previewExtra }}</span>
+                </template>
+                <span v-else class="text-[11px] text-white/40">尚未选择目标</span>
               </template>
-              <span v-else class="text-[11px] text-white/40">尚未选择目标</span>
+              <span v-else-if="currentScope?.kind === 'cmd'" class="text-[11px] text-white/55">
+                OpenCode / Claude / OpenClaw
+              </span>
+              <span v-else-if="currentScope?.kind === 'subagent'" class="text-[11px] text-white/55">
+                OpenCode agents
+              </span>
             </div>
             <button
               type="button"
               class="sync-cta inline-flex items-center justify-center gap-2 w-full h-10 rounded-[10px] border-0 text-[13px] font-bold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              :disabled="syncing || !syncTargetIdes.length"
+              :disabled="!canSync"
               @click="syncCurrentScope"
             >
               <svg
@@ -1150,13 +1208,173 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 
-.is-collapsed .sync-titlebar {
+.is-collapsed:not(.is-side) .sync-titlebar {
   border-bottom: 0;
+}
+
+/* 左/右收起：竖向侧轨，而不是顶部横条 */
+.sync-shell.is-side.is-collapsed {
+  overflow: hidden;
+}
+
+.sync-titlebar--rail {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  padding: 12px 6px;
+  border-bottom: 0;
+  cursor: grab;
+}
+
+.sync-titlebar--rail .traffic {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-titlebar--rail .title-center {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.sync-titlebar--rail .grab-pips {
+  writing-mode: horizontal-tb;
+  grid-template-columns: repeat(2, 3px);
+  grid-template-rows: repeat(3, 3px);
+}
+
+.sync-titlebar--rail .title-text {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.sync-titlebar--rail .title-actions {
+  flex-direction: column;
+  max-width: none;
+  width: 100%;
+  align-items: center;
+}
+
+.place-left.is-collapsed {
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.place-right.is-collapsed {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 /* 控件样式（沿用 Split Deck） */
 .sync-toggle:focus-within .sync-switch {
   box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.28);
+}
+
+/* —— 同步范围：状态轨，而非假 checkbox —— */
+.scope-block {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scope-block__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scope-block__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.scope-block__hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.scope-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.scope-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  color: rgba(255, 255, 255, 0.38);
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.scope-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.scope-chip__name {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.scope-chip__tag {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #dbe8ff;
+  background: rgba(22, 93, 255, 0.35);
+  border: 1px solid rgba(22, 93, 255, 0.45);
+  white-space: nowrap;
+}
+
+.scope-chip.is-active {
+  color: #fff;
+  background: rgba(22, 93, 255, 0.18);
+  border-color: rgba(22, 93, 255, 0.4);
+  box-shadow: inset 3px 0 0 #165dff;
+}
+
+.scope-chip.is-active .scope-chip__dot {
+  background: #165dff;
+  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scope-chip,
+  .scope-chip__dot {
+    transition: none !important;
+  }
 }
 
 .sync-switch {
