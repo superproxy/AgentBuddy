@@ -124,6 +124,7 @@ LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
 MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "template" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
+CONFIG_PLUGINS_DIR = PROJECT_ROOT / "config" / "plugins"
 SKILLS_CSV = PROJECT_ROOT / "template" / "skills" / "skills-index.csv"
 # 技能安装目标：项目根 .agents/skills/（当前目录，非用户主目录）
 AGENTS_SKILLS_INSTALL_DIR = PROJECT_ROOT / ".agents" / "skills"
@@ -1120,6 +1121,40 @@ def mcp_detail():
 
 
 # ============================================================
+# Plugin 目录辅助（template/plugins/ + config/plugins/ 双目录）
+# ============================================================
+def _plugin_search_dirs() -> list[Path]:
+    """返回插件搜索目录列表（优先级：config/plugins/ → template/plugins/）。
+
+    config/plugins/ 是用户创建/导入的运行态插件；
+    template/plugins/ 是内置预置插件（随程序分发，只读）。
+    """
+    dirs = []
+    if CONFIG_PLUGINS_DIR.exists():
+        dirs.append(CONFIG_PLUGINS_DIR)
+    if PLUGINS_DIR.exists():
+        dirs.append(PLUGINS_DIR)
+    return dirs
+
+
+def _resolve_plugin_path(fname: str) -> Path | None:
+    """在 config/plugins/ 和 template/plugins/ 中查找插件文件。
+
+    Returns:
+        Path 或 None（未找到）。config/plugins/ 优先。
+    """
+    for d in _plugin_search_dirs():
+        p = (d / fname).resolve()
+        try:
+            p.relative_to(d.resolve())
+        except ValueError:
+            continue  # 非法路径，跳过
+        if p.exists():
+            return p
+    return None
+
+
+# ============================================================
 # Plugin API
 # ============================================================
 def _collect_plugin_skill_dirs(cfg: dict) -> list:
@@ -1173,12 +1208,18 @@ def list_plugins():
     from lib.plugins import read_installed_plugins
     installed_names = set(read_installed_plugins(PROJECT_ROOT))
     plugins = []
-    if PLUGINS_DIR.exists():
-        # 支持 .plugin.yaml / .plugin.yml / .plugin.json
+    seen_files = set()  # 按文件名去重（config/plugins/ 优先覆盖 template/plugins/）
+    # 合并扫描 config/plugins/ + template/plugins/
+    for plugins_dir in _plugin_search_dirs():
+        if not plugins_dir.exists():
+            continue
         files = []
         for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-            files.extend(PLUGINS_DIR.glob(pat))
+            files.extend(plugins_dir.glob(pat))
         for f in sorted(files):
+            if f.name in seen_files:
+                continue
+            seen_files.add(f.name)
             try:
                 cfg = load_env_config_file(f)
                 if isinstance(cfg, dict) and "name" in cfg:
@@ -1217,7 +1258,7 @@ def save_plugin():
         config["scripts"] = {"install": scripts["install"].strip()}
     # 安全文件名
     safe_name = "".join(c for c in name if c.isalnum() or c in ("-", "_"))
-    out_path = PLUGINS_DIR / f"{safe_name}.plugin.yaml"
+    out_path = CONFIG_PLUGINS_DIR / f"{safe_name}.plugin.yaml"
     try:
         save_env_config_file(out_path, config)
         return jsonify({"ok": True, "path": str(out_path.relative_to(PROJECT_ROOT))})
@@ -1231,12 +1272,8 @@ def load_plugin():
     fname = request.args.get("file", "").strip()
     if not fname:
         return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
-    path = (PLUGINS_DIR / fname).resolve()
-    try:
-        path.relative_to(PLUGINS_DIR.resolve())
-    except ValueError:
-        return jsonify({"ok": False, "error": "非法路径"}), 400
-    if not path.exists():
+    path = _resolve_plugin_path(fname)
+    if path is None:
         return jsonify({"ok": False, "error": "文件不存在"}), 404
     try:
         data = load_env_config_file(path)
@@ -1252,12 +1289,8 @@ def delete_plugin():
     fname = (body.get("file") or "").strip()
     if not fname:
         return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
-    path = (PLUGINS_DIR / fname).resolve()
-    try:
-        path.relative_to(PLUGINS_DIR.resolve())
-    except ValueError:
-        return jsonify({"ok": False, "error": "非法路径"}), 400
-    if not path.exists():
+    path = _resolve_plugin_path(fname)
+    if path is None:
         return jsonify({"ok": False, "error": "文件不存在"}), 404
     try:
         path.unlink()
@@ -1281,12 +1314,8 @@ def export_plugin():
     fmt = (request.args.get("format") or "zip").strip().lower()
     if not fname:
         return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
-    path = (PLUGINS_DIR / fname).resolve()
-    try:
-        path.relative_to(PLUGINS_DIR.resolve())
-    except ValueError:
-        return jsonify({"ok": False, "error": "非法路径"}), 400
-    if not path.exists():
+    path = _resolve_plugin_path(fname)
+    if path is None:
         return jsonify({"ok": False, "error": "文件不存在"}), 404
 
     # format=yaml：仅导出 plugin.yaml（向后兼容）
@@ -1330,9 +1359,15 @@ def export_all_plugins():
     """
     buf = io.BytesIO()
     seen_skills: set[str] = set()
+    seen_files: set[str] = set()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        if PLUGINS_DIR.exists():
-            for f in PLUGINS_DIR.glob("*.plugin.yaml"):
+        for plugins_dir in _plugin_search_dirs():
+            if not plugins_dir.exists():
+                continue
+            for f in plugins_dir.glob("*.plugin.yaml"):
+                if f.name in seen_files:
+                    continue
+                seen_files.add(f.name)
                 zf.write(f, arcname=f.name)
                 try:
                     cfg = load_env_config_file(f)
@@ -1370,13 +1405,9 @@ def export_selected_plugins():
             fname = fname.strip()
             if not fname:
                 continue
-            path = (PLUGINS_DIR / fname).resolve()
-            try:
-                path.relative_to(PLUGINS_DIR.resolve())
-            except ValueError:
-                continue  # 跳过非法路径
-            if not path.exists():
-                continue
+            path = _resolve_plugin_path(fname)
+            if path is None:
+                continue  # 文件不存在，跳过
             zf.write(path, arcname=fname)
             try:
                 cfg = load_env_config_file(path)
@@ -1396,7 +1427,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
     """从 zip 导入插件配置 + skills 目录。
 
     zip 结构（由 export_plugin / export_all_plugins 生成）：
-      - *.plugin.yaml  → 写入 template/plugins/
+      - *.plugin.yaml  → 写入 config/plugins/
       - skills/<name>/... → 复制到 config/skills/<name>/
 
     Returns:
@@ -1436,11 +1467,11 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             if not isinstance(data, dict) or not data.get("name"):
                 skipped.append({"file": fname, "reason": "无效插件配置（缺少 name）"})
                 continue
-            out_path = PLUGINS_DIR / fname
+            out_path = CONFIG_PLUGINS_DIR / fname
             if out_path.exists() and not overwrite:
                 skipped.append({"file": fname, "reason": "已存在"})
                 continue
-            PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+            CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(content)
             imported_plugins.append({"file": fname, "name": data["name"]})
 
@@ -1534,13 +1565,13 @@ def import_plugin():
         return jsonify({"ok": False, "error": "yaml 顶层应为 dict"}), 400
     if not data.get("name"):
         return jsonify({"ok": False, "error": "缺少 name 字段"}), 400
-    out_path = PLUGINS_DIR / safe_name
+    out_path = CONFIG_PLUGINS_DIR / safe_name
     overwrite = bool(body.get("overwrite"))
     if out_path.exists() and not overwrite:
         return jsonify({"ok": False, "error": "exists",
                         "msg": f"{safe_name} 已存在，是否覆盖？"}), 409
     try:
-        PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+        CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")
         return jsonify({"ok": True, "path": str(out_path.relative_to(PROJECT_ROOT)),
                         "name": data.get("name")})
@@ -1571,11 +1602,11 @@ def uninstall_plugin_api():
         return jsonify({"ok": False, "error": f"移除清单失败: {e}"}), 500
 
     # 2. 删除 config/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
-    # 查找对应的 plugin.yaml
+    # 在 config/plugins/ + template/plugins/ 中查找
     plugin_file = None
-    if PLUGINS_DIR.exists():
+    for plugins_dir in _plugin_search_dirs():
         for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-            for f in PLUGINS_DIR.glob(pat):
+            for f in plugins_dir.glob(pat):
                 try:
                     cfg = load_env_config_file(f)
                     if isinstance(cfg, dict) and cfg.get("name") == name:
@@ -1585,6 +1616,8 @@ def uninstall_plugin_api():
                     continue
             if plugin_file:
                 break
+        if plugin_file:
+            break
 
     deleted_skills = []
     if plugin_file:
@@ -1823,12 +1856,8 @@ def install_plugin_sse():
     if not fname:
         return Response("data: [ERROR] 缺少 file 参数\n\n", mimetype="text/event-stream")
     target_ide = request.args.get("ide", "").strip()  # 空=所有 IDE
-    plugin_path = (PLUGINS_DIR / fname).resolve()
-    try:
-        plugin_path.relative_to(PLUGINS_DIR.resolve())
-    except ValueError:
-        return Response("data: [ERROR] 非法路径\n\n", mimetype="text/event-stream")
-    if not plugin_path.exists():
+    plugin_path = _resolve_plugin_path(fname)
+    if plugin_path is None:
         return Response(f"data: [ERROR] 文件不存在: {fname}\n\n", mimetype="text/event-stream")
 
     def gen():
