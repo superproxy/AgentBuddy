@@ -424,7 +424,8 @@ export const useEnvStore = defineStore('env', () => {
         return
       }
 
-      if (r.needs_choice || r.candidates.length > 1) {
+      // 只信后端 needs_choice（高置信唯一锁定时允许自动 Apply）
+      if (r.needs_choice) {
         smartFlow.step = 'choose'
         return
       }

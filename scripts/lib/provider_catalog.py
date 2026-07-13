@@ -93,14 +93,16 @@ KEY_FINGERPRINTS: List[Dict[str, Any]] = [
         "probe_providers": ["bigmodel", "zai", "bigmodelCoding", "zaiCoding"],
     },
     {
-        # DeepSeek 常见为 sk- + 较长 hex；优先于泛 sk-
+        # DeepSeek 官方常见 sk- + 恰好 32 hex（对齐 llm-key-validator）
         "id": "deepseek_hex",
-        "pattern": re.compile(r"^sk-[a-f0-9]{32,}$", re.I),
+        "pattern": re.compile(r"^sk-[a-f0-9]{32}$", re.I),
         "providers": ["deepseek"],
         "protocol": "openai",
         "unique": False,
-        "reason": "疑似 DeepSeek Key（sk- + hex）",
-        "probe_providers": ["deepseek", "volcengine", "openai", "moonshot"],
+        "reason": "疑似 DeepSeek Key（sk- + 32 hex）",
+        "probe_providers": [
+            "deepseek", "volcengine", "openai", "moonshot", "qwen",
+        ],
     },
     {
         # OpenAI 遗留 / DeepSeek / 火山 / Moonshot / DashScope 通用 sk-
@@ -112,19 +114,23 @@ KEY_FINGERPRINTS: List[Dict[str, Any]] = [
         "reason": "通用 sk- Key，需端点探测消歧",
         "probe_providers": [
             "openai", "deepseek", "volcengine", "moonshot", "qwen",
-            "openicu",
         ],
     },
 ]
 
-# 模糊 Key 探测时使用的默认端点（catalog 无该厂商时跳过）
-PROBE_ENDPOINTS: Dict[str, Dict[str, str]] = {
+# 模糊 Key 探测权威端点（探测一律用这里；catalog URL 仅作 Apply 写入默认值）
+# alt_base_urls: 同厂商国内外/备用域名，并联探测取最高分
+PROBE_ENDPOINTS: Dict[str, Dict[str, Any]] = {
     "openai": {"base_url": "https://api.openai.com/v1", "protocol": "openai"},
     "deepseek": {"base_url": "https://api.deepseek.com", "protocol": "openai"},
     "volcengine": {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "protocol": "openai"},
     "volcengineCoding": {"base_url": "https://ark.cn-beijing.volces.com/api/coding/v3", "protocol": "openai"},
     "volcengineAgent": {"base_url": "https://ark.cn-beijing.volces.com/api/plan/v3", "protocol": "openai"},
-    "moonshot": {"base_url": "https://api.moonshot.ai/v1", "protocol": "openai"},
+    "moonshot": {
+        "base_url": "https://api.moonshot.ai/v1",
+        "protocol": "openai",
+        "alt_base_urls": ["https://api.moonshot.cn/v1"],
+    },
     "qwen": {"base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "protocol": "openai"},
     "bigmodel": {"base_url": "https://open.bigmodel.cn/api/paas/v4", "protocol": "openai"},
     "bigmodelCoding": {"base_url": "https://open.bigmodel.cn/api/coding/paas/v4", "protocol": "openai"},
@@ -135,8 +141,28 @@ PROBE_ENDPOINTS: Dict[str, Dict[str, str]] = {
     "openicu": {"base_url": "https://rehdasu.cn/v1", "protocol": "openai"},
 }
 
+# /models 返回的 model id 签名 → 用于探测二次验真打分
+MODEL_SIGNATURES: Dict[str, Tuple[str, ...]] = {
+    "deepseek": ("deepseek",),
+    "openai": ("gpt-", "o1", "o3", "chatgpt", "text-embedding"),
+    "qwen": ("qwen", "qwq", "qwen2", "qwen3"),
+    "moonshot": ("moonshot", "kimi"),
+    "volcengine": ("doubao", "seed-"),
+    "volcengineCoding": ("doubao", "seed-"),
+    "volcengineAgent": ("doubao", "seed-"),
+    "bigmodel": ("glm-", "glm"),
+    "bigmodelCoding": ("glm-", "glm"),
+    "zai": ("glm-", "glm"),
+    "zaiCoding": ("glm-", "glm"),
+    "openrouter": ("/",),  # OpenRouter 模型多为 provider/model
+    "anthropic": ("claude",),
+}
+
 PROBE_TIMEOUT_SEC = 4.0
 PROBE_MAX_WORKERS = 6
+# 探测唯一锁定：第一名 ≥ 此分且领先第二名 ≥ 此分差
+PROBE_LOCK_MIN_SCORE = 95
+PROBE_LOCK_MIN_MARGIN = 8
 
 FAMILY_EXPAND_ON_AMBIGUOUS = {
     "bigmodel": ["bigmodel", "bigmodelCoding"],
@@ -309,12 +335,66 @@ def _models_url(base_url: str) -> str:
     return url + "/v1/models"
 
 
+def _extract_model_ids(body: Any) -> List[str]:
+    """从 /models JSON 抽取 model id 列表。"""
+    ids: List[str] = []
+    if not isinstance(body, dict):
+        return ids
+    data = body.get("data")
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                mid = item.get("id") or item.get("name")
+                if isinstance(mid, str) and mid:
+                    ids.append(mid)
+            elif isinstance(item, str):
+                ids.append(item)
+    models = body.get("models")
+    if isinstance(models, list):
+        for item in models:
+            if isinstance(item, dict):
+                mid = item.get("id") or item.get("name")
+                if isinstance(mid, str) and mid:
+                    ids.append(mid)
+            elif isinstance(item, str):
+                ids.append(item)
+    return ids
+
+
+def score_model_signature(provider: str, model_ids: List[str]) -> int:
+    """根据 /models 返回的 id 与厂商签名匹配程度打分增量。
+
+    返回：
+      15 → 强匹配（可抬到 98–100）
+      0  → 无签名可判 / 无模型列表
+     -5 → 有模型但签名明显不符（压到 ~80）
+    """
+    sigs = MODEL_SIGNATURES.get(provider) or ()
+    if not model_ids:
+        return 0
+    if not sigs:
+        return 0
+    joined = " ".join(m.lower() for m in model_ids)
+    if any(s.lower() in joined for s in sigs):
+        # OpenRouter 的 "/" 太宽，要求同时像 provider/model
+        if provider == "openrouter":
+            if any("/" in m and not m.startswith("/") for m in model_ids):
+                return 15
+            return 0
+        return 15
+    # 有模型列表但签名不命中 → 轻微降权（避免误锁）
+    return -5
+
+
 def probe_endpoint(api_key: str, base_url: str, protocol: str = "openai") -> Dict[str, Any]:
-    """对单个端点做轻量鉴权探测（GET models）。返回 {ok, status, error?}。"""
+    """对单个端点做轻量鉴权探测（GET models）。
+
+    返回 {ok, status, error?, model_ids?}。
+    """
     try:
         import requests as _req
     except ImportError:
-        return {"ok": False, "status": 0, "error": "requests 未安装"}
+        return {"ok": False, "status": 0, "error": "requests 未安装", "model_ids": []}
     url = _models_url(base_url)
     headers = {"Authorization": f"Bearer {api_key}"}
     if protocol == "anthropic":
@@ -323,12 +403,78 @@ def probe_endpoint(api_key: str, base_url: str, protocol: str = "openai") -> Dic
         r = _req.get(url, headers=headers, timeout=PROBE_TIMEOUT_SEC)
         # 200 = 有效；401/403 = 端点对但 key 无效；其它可能是路径不对
         if r.status_code == 200:
-            return {"ok": True, "status": 200}
+            model_ids: List[str] = []
+            try:
+                model_ids = _extract_model_ids(r.json())
+            except Exception:
+                model_ids = []
+            return {"ok": True, "status": 200, "model_ids": model_ids}
         if r.status_code in (401, 403):
-            return {"ok": False, "status": r.status_code, "error": "auth_failed"}
-        return {"ok": False, "status": r.status_code, "error": f"http_{r.status_code}"}
+            return {"ok": False, "status": r.status_code, "error": "auth_failed", "model_ids": []}
+        return {"ok": False, "status": r.status_code, "error": f"http_{r.status_code}", "model_ids": []}
     except Exception as e:
-        return {"ok": False, "status": 0, "error": str(e)[:120]}
+        return {"ok": False, "status": 0, "error": str(e)[:120], "model_ids": []}
+
+
+def _probe_urls_for_provider(name: str) -> List[Tuple[str, str]]:
+    """返回 [(base_url, protocol), ...]，权威端点优先，含 alt_base_urls。"""
+    ep = PROBE_ENDPOINTS.get(name)
+    if not ep:
+        return []
+    protocol = ep.get("protocol") or "openai"
+    urls: List[str] = []
+    primary = (ep.get("base_url") or "").strip()
+    if primary:
+        urls.append(primary)
+    for alt in ep.get("alt_base_urls") or []:
+        alt_s = (alt or "").strip()
+        if alt_s and alt_s not in urls:
+            urls.append(alt_s)
+    return [(u, protocol) for u in urls]
+
+
+def rank_probe_hits(
+    hits: List[Tuple[str, str, int]],
+) -> List[Tuple[str, str, int]]:
+    """按 score 降序；高置信且领先明显时只保留第一名。"""
+    if not hits:
+        return []
+    ranked = sorted(hits, key=lambda x: (-x[2], x[0]))
+    # 同 provider 多 URL 时只留最高分
+    best: Dict[str, Tuple[str, str, int]] = {}
+    for name, proto, sc in ranked:
+        prev = best.get(name)
+        if not prev or sc > prev[2]:
+            best[name] = (name, proto, sc)
+    ranked = sorted(best.values(), key=lambda x: (-x[2], x[0]))
+    if len(ranked) == 1:
+        return ranked
+    top_sc = ranked[0][2]
+    second_sc = ranked[1][2]
+    if top_sc >= PROBE_LOCK_MIN_SCORE and (top_sc - second_sc) >= PROBE_LOCK_MIN_MARGIN:
+        return [ranked[0]]
+    return ranked
+
+
+def needs_choice_for_candidates(candidates: List[Dict[str, Any]]) -> bool:
+    """是否需要用户手动选择厂商。
+
+    单候选，或第一名高置信且明显领先第二名 → 不需要选择。
+    """
+    if not candidates:
+        return False
+    if len(candidates) == 1:
+        return False
+    top = candidates[0].get("score") or 0
+    second = candidates[1].get("score") or 0
+    try:
+        top_i = int(top)
+        second_i = int(second)
+    except (TypeError, ValueError):
+        return True
+    if top_i >= PROBE_LOCK_MIN_SCORE and (top_i - second_i) >= PROBE_LOCK_MIN_MARGIN:
+        return False
+    return True
 
 
 def probe_providers(
@@ -336,27 +482,20 @@ def probe_providers(
     provider_names: List[str],
     catalog_map: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Tuple[str, str, int]]:
-    """并行探测多个厂商默认端点。返回 [(provider, protocol, score), ...] 仅 ok 的。"""
+    """并行探测多个厂商权威端点。返回 [(provider, protocol, score), ...]。
+
+    探测 URL 一律来自 PROBE_ENDPOINTS（含 alt），不使用可能不准确的 catalog URL。
+    catalog_map 仅用于确认厂商名是否已知（可选，不影响 URL 选择）。
+    """
+    del catalog_map  # 保留参数兼容调用方；探测不再读 catalog URL
     jobs: List[Tuple[str, str, str]] = []  # provider, base_url, protocol
     for name in provider_names:
-        # 优先用 catalog 里的默认 URL
-        base_url, protocol = "", "openai"
-        if catalog_map and name in catalog_map:
-            entry = catalog_map[name]
-            protos = entry.get("protocols") or {}
-            suggested = entry.get("suggested_protocol") or ("openai" if "openai" in protos else next(iter(protos), "openai"))
-            cfg = protos.get(suggested) or {}
-            base_url = (cfg.get("base_url") or "").strip()
-            protocol = suggested
-        if not base_url and name in PROBE_ENDPOINTS:
-            base_url = PROBE_ENDPOINTS[name]["base_url"]
-            protocol = PROBE_ENDPOINTS[name]["protocol"]
-        if base_url:
+        for base_url, protocol in _probe_urls_for_provider(name):
             jobs.append((name, base_url, protocol))
 
-    results: List[Tuple[str, str, int]] = []
+    raw_hits: List[Tuple[str, str, int]] = []
     if not jobs:
-        return results
+        return raw_hits
 
     with ThreadPoolExecutor(max_workers=min(PROBE_MAX_WORKERS, len(jobs))) as pool:
         futures = {
@@ -369,11 +508,15 @@ def probe_providers(
                 res = fut.result()
             except Exception:
                 continue
-            if res.get("ok"):
-                results.append((name, proto, 98))
-    results.sort(key=lambda x: (-x[2], x[0]))
-    return results
+            if not res.get("ok"):
+                continue
+            # 基分 85（鉴权通过但无签名验真）；签名命中 +15 → 100；不符 -5 → 80
+            base = 85
+            sig_delta = score_model_signature(name, res.get("model_ids") or [])
+            score = max(70, min(100, base + sig_delta))
+            raw_hits.append((name, proto, score))
 
+    return rank_probe_hits(raw_hits)
 
 def _meta(provider: str) -> Dict[str, str]:
     return PROVIDER_META.get(provider, {"label": provider, "family": provider})
@@ -514,18 +657,40 @@ def _suggest_protocol(protocols: Dict[str, Any]) -> str:
     return next(iter(protocols.keys()), "openai")
 
 
+def _host_matches(host: str, pattern: str) -> bool:
+    """host 是否匹配 pattern（精确 / 子域后缀 / 前缀标签 / DNS 标签相等）。"""
+    host = (host or "").lower().rstrip(".")
+    pattern = (pattern or "").lower().rstrip(".")
+    if not host or not pattern or pattern.startswith("/"):
+        return False
+    if host == pattern:
+        return True
+    if host.endswith("." + pattern):
+        return True
+    if host.startswith(pattern + "."):
+        return True
+    # 单标签相等，如 pattern=volcengine 对 host 中某 label
+    labels = host.split(".")
+    if pattern in labels:
+        return True
+    return False
+
+
 def _url_match(url: str, rule: Dict[str, Any]) -> bool:
+    """基于 host/path 结构化匹配，避免对整段 URL 做 substring 误伤。"""
     if not url:
         return False
+    host, path = _url_parts(url)
     includes = rule.get("url_includes") or []
-    if includes and not any(s in url for s in includes):
+    if includes and not any(_host_matches(host, s) for s in includes):
         return False
     requires = rule.get("url_requires") or []
-    if requires and not all(s in url for s in requires):
+    if requires and not all(s in path for s in requires):
         return False
     excludes = rule.get("url_excludes") or []
-    if excludes and any(s in url for s in excludes):
+    if excludes and any(s in path for s in excludes):
         return False
+    # openrouter 等规则可能用 host 关键词；无 includes 时仅靠 requires 也可
     return bool(includes or requires)
 
 
@@ -769,7 +934,10 @@ def detect_providers(
             names = FAMILY_EXPAND_ON_AMBIGUOUS[family]
         elif probe_list:
             # 模糊 sk-：给精简候选，不把 openrouter/anthropic 等已有专属指纹的混进来
-            names = [n for n in probe_list if n in cmap][:6]
+            names = [
+                n for n in probe_list
+                if n in cmap or n in PROBE_ENDPOINTS
+            ][:6]
         for name in names:
             add_provider(
                 name, 55, fp.get("reason") or "Key 指纹候选",

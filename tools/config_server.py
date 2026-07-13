@@ -95,6 +95,7 @@ from lib.provider_catalog import (
     classify_api_key,
     detect_providers,
     load_provider_catalog,
+    needs_choice_for_candidates,
 )
 
 app = Flask(__name__, static_folder=None)
@@ -480,7 +481,7 @@ def detect_llm_provider():
         return jsonify({
             "ok": True,
             "candidates": candidates,
-            "needs_choice": len(candidates) > 1,
+            "needs_choice": needs_choice_for_candidates(candidates),
             "count": len(candidates),
             "detected_provider": (top or {}).get("provider"),
             "detected_protocol": (top or {}).get("detected_protocol"),
