@@ -78,9 +78,9 @@ def disable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
 
 
 def scan_local_skills(project_root: Path) -> list:
-    """扫描本地所有技能（template/skills/ + config/skills/），返回去重的技能名列表。"""
+    """扫描本地所有技能（template/skills + config/skills + .agents/skills），返回去重的技能名列表。"""
     seen = set()
-    for d in (project_root / "template" / "skills", project_root / "config" / "skills"):
+    for d in (project_root / "template" / "skills", project_root / "config" / "skills", project_root / ".agents" / "skills"):
         if not d.exists():
             continue
         for skill_dir in sorted(d.iterdir()):

@@ -108,11 +108,14 @@ def _wait_for_server(url: str, timeout: float = 15.0) -> bool:
 
 
 def _bootstrap_from_bundle() -> None:
-    """frozen 模式首次运行：把 bundled 只读资源从 _MEIPASS 复制到 exe 目录（PROJECT_ROOT）。
+    """frozen 模式每次启动：把 bundled 只读资源从 _MEIPASS 覆盖到 exe 目录（PROJECT_ROOT）。
 
     这样所有脚本的 `source_dir = script_dir.parent` 逻辑无需改动即可工作，
     用户数据（llm.yaml/mcp.yaml/config/）也在 exe 目录可写。
-    已存在的目标不覆盖，保留用户修改；删除 exe 目录可重置。
+
+    程序资源（scripts/template/tools/AGENTS.md）每次启动都用 _internal 的新版本覆盖，
+    保证升级后顶层副本与 bundle 一致；用户数据（config/、.agents/）不在 resources 列表，
+    天然保留不被覆盖。
     """
     if not getattr(sys, "frozen", False):
         return
@@ -127,12 +130,12 @@ def _bootstrap_from_bundle() -> None:
     copied = []
     for name in resources:
         src = meipass / name
-        dst = project / name
-        if not src.exists() or dst.exists():
+        if not src.exists():
             continue
+        dst = project / name
         try:
             if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=False)
+                shutil.copytree(src, dst, dirs_exist_ok=True)
             else:
                 shutil.copy2(src, dst)
             copied.append(name)
@@ -140,7 +143,7 @@ def _bootstrap_from_bundle() -> None:
             print(f"[bootstrap][WARN] 复制 {name} 失败: {e}", file=sys.stderr)
 
     if copied:
-        print(f"[bootstrap] 首次运行，已从 bundle 复制资源到 exe 目录: {', '.join(copied)}")
+        print(f"[bootstrap] 已从 bundle 同步资源到 exe 目录: {', '.join(copied)}")
     # 写入标记，便于诊断
     try:
         (project / ".bundle_bootstrapped").write_text("1", encoding="utf-8")

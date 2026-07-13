@@ -640,10 +640,10 @@ def delete_mcp_config_key(key):
 # ============================================================
 @app.route("/api/skills/local", methods=["GET"])
 def list_local_skills():
-    """列出本地预置技能：仅返回 template/skills/ 下有 SKILL.md 的技能。
+    """列出本地预置技能：扫描三源目录（template/skills + config/skills + .agents/skills）下有 SKILL.md 的技能。
 
     CSV 提供 category/role/description 等元信息；
-    目录扫描确保所有实际存在的本地 skill 都能展示。
+    三源扫描确保所有实际存在的本地 skill 都能展示，前源优先去重。
     不含 remote 类型（远程技能在市场搜索中获取）。
     """
     rows = []
@@ -656,12 +656,19 @@ def list_local_skills():
                 if name:
                     csv_map[name] = row
 
-    # 仅扫描 template/skills/ 下有 SKILL.md 的目录
-    if AGENTS_SKILLS_CACHE.exists():
-        for d in sorted(AGENTS_SKILLS_CACHE.iterdir()):
+    # 扫描三源本地 skill 目录，前源优先，同名跳过：
+    #   template/skills/（预置缓存）→ config/skills/（项目级副本）→ .agents/skills/（安装目标）
+    seen = set()
+    for scan_dir in (AGENTS_SKILLS_CACHE, PROJECT_SKILLS_DIR, DOT_AGENTS_SKILLS):
+        if not scan_dir.exists():
+            continue
+        for d in sorted(scan_dir.iterdir()):
             if not d.is_dir() or not (d / "SKILL.md").exists():
                 continue
             name = d.name
+            if name in seen:
+                continue
+            seen.add(name)
             if name in csv_map:
                 # CSV 中有元信息，合并
                 row = dict(csv_map[name])
