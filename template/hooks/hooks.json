@@ -1,0 +1,38 @@
+{
+  "description": "AdeBuddy Hooks 配置 — 在会话关键节点自动执行脚本",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] SessionStart: 会话已开始'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] UserPromptSubmit: 用户已发送请求'",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] Stop: 会话即将结束'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -141,6 +141,11 @@ SUBAGENT_EXAMPLE = PROJECT_ROOT / "template" / "subagent" / "subagent.yaml"
 # Rules：config/rules/（用户编辑）+ template/rules/（内置预置）
 RULES_DIR = PROJECT_ROOT / "config" / "rules"
 RULES_TEMPLATE_DIR = PROJECT_ROOT / "template" / "rules"
+# Hooks：config/hooks/hooks.json（用户编辑）+ template/hooks/hooks.json（模板）
+HOOKS_DIR = PROJECT_ROOT / "config" / "hooks"
+HOOKS_FILE = HOOKS_DIR / "hooks.json"
+HOOKS_TEMPLATE_DIR = PROJECT_ROOT / "template" / "hooks"
+HOOKS_EXAMPLE = HOOKS_TEMPLATE_DIR / "hooks.json"
 
 # env.yaml 中属于 llm.yaml 的顶层键（其余归 mcp.yaml 的只有 mcp）
 LLM_TOP_KEYS = ["llm", "embedding", "tts", "asr", "vision", "misc"]
@@ -169,6 +174,7 @@ def _ensure_config_dirs() -> None:
         PROJECT_ROOT / "config" / "cmd",
         PROJECT_ROOT / "config" / "subagent",
         PROJECT_ROOT / "config" / "rules",
+        PROJECT_ROOT / "config" / "hooks",
         PROJECT_ROOT / "config" / "ide",
         PROJECT_ROOT / "config" / "ide" / "claude",
         PROJECT_ROOT / "config" / "ide" / "codex",
@@ -2733,6 +2739,116 @@ def import_rules():
         return jsonify({"ok": True, "imported": [fname], "count": 1})
     else:
         return jsonify({"ok": False, "error": "仅支持 .zip 或 .md 文件"}), 400
+
+
+# ============================================================
+# Hooks API（config/hooks/hooks.json 单文件，JSON 格式）
+# ============================================================
+def _ensure_hooks_file() -> Path:
+    """确保 config/hooks/hooks.json 存在，不存在则从模板复制。"""
+    if HOOKS_FILE.exists():
+        return HOOKS_FILE
+    HOOKS_DIR.mkdir(parents=True, exist_ok=True)
+    if HOOKS_EXAMPLE.exists():
+        import shutil
+        shutil.copy2(HOOKS_EXAMPLE, HOOKS_FILE)
+    else:
+        HOOKS_FILE.write_text(
+            json.dumps({"description": "AdeBuddy Hooks 配置", "hooks": {}}, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    return HOOKS_FILE
+
+
+@app.route("/api/hooks", methods=["GET"])
+def get_hooks():
+    """获取 hooks.json 配置。"""
+    path = _ensure_hooks_file()
+    try:
+        data = load_env_config_file(path)
+        return jsonify({"ok": True, "data": data, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/hooks", methods=["POST"])
+def save_hooks():
+    """保存 hooks.json 配置。Body: {data: {...}}"""
+    body = request.get_json(force=True)
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "data 必须是对象"}), 400
+    try:
+        path = _ensure_hooks_file()
+        save_env_config_file(path, data)
+        return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/hooks/sync", methods=["POST"])
+def sync_hooks():
+    """同步 hooks.json 到各 IDE 的 hooks 目录。
+
+    各 IDE 目标：
+    - TraeCN: ~/.trae-cn/hooks/hooks.json
+    - ZCode: ~/.zcode/hooks/hooks.json
+    - OpenCode: ~/.config/opencode/hooks/hooks.json
+    - Claude: .claude/hooks/hooks.json
+    - Cursor: .cursor/hooks/hooks.json
+    """
+    from pathlib import Path as _Path
+    import shutil
+    try:
+        path = _ensure_hooks_file()
+        # 各 IDE 的 hooks 目录
+        targets = [
+            ("TraeCN", _Path.home() / ".trae-cn" / "hooks"),
+            ("ZCode", _Path.home() / ".zcode" / "hooks"),
+            ("OpenCode", _Path.home() / ".config" / "opencode" / "hooks"),
+            ("Claude", PROJECT_ROOT / ".claude" / "hooks"),
+            ("Cursor", PROJECT_ROOT / ".cursor" / "hooks"),
+        ]
+        results = {}
+        for ide_name, hooks_dir in targets:
+            hooks_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(path), str(hooks_dir / "hooks.json"))
+            results[ide_name] = 1
+        total_ides = len(results)
+        return jsonify({
+            "ok": True,
+            "results": results,
+            "message": f"已同步 hooks.json 到 {total_ides} 个 IDE",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/hooks/export", methods=["GET"])
+def export_hooks():
+    """导出 hooks.json。"""
+    path = _ensure_hooks_file()
+    return send_file(path, as_attachment=True, download_name="hooks.json",
+                     mimetype="application/json")
+
+
+@app.route("/api/hooks/import", methods=["POST"])
+def import_hooks():
+    """导入 hooks.json。Body: {content: '...'}"""
+    body = request.get_json(force=True)
+    content = body.get("content", "")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": f"JSON 解析失败: {e}"}), 400
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "JSON 顶层应为 dict"}), 400
+    try:
+        path = _ensure_hooks_file()
+        save_env_config_file(path, data)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/subagent", methods=["GET"])

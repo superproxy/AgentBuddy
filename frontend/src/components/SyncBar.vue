@@ -24,7 +24,7 @@ const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
 type FilterMode = 'all' | 'selected' | 'cn'
 type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
-type ScopeKind = 'init-ide' | 'cmd' | 'subagent' | 'rules'
+type ScopeKind = 'init-ide' | 'cmd' | 'subagent' | 'rules' | 'hooks'
 const filterMode = ref<FilterMode>('all')
 const panelRef = ref<HTMLElement | null>(null)
 const collapsed = ref(false)
@@ -41,6 +41,7 @@ const SCOPE_META: Record<string, { key: string; label: string; kind: ScopeKind }
   subagent: { key: 'subagent', label: 'Subagent', kind: 'subagent' },
   plugin: { key: 'plugin', label: 'Plugin', kind: 'init-ide' },
   rules: { key: 'rules', label: 'Rules', kind: 'rules' },
+  hooks: { key: 'hooks', label: 'Hooks', kind: 'hooks' },
 }
 
 const currentScope = computed(() => SCOPE_META[props.tab] ?? null)
@@ -76,6 +77,7 @@ const actionHint = computed(() => {
   if (currentScope.value.kind === 'cmd') return '将同步自定义命令到支持的 IDE'
   if (currentScope.value.kind === 'subagent') return '将同步 Subagent 到支持的 IDE'
   if (currentScope.value.kind === 'rules') return '将同步 Rules 到支持的 IDE'
+  if (currentScope.value.kind === 'hooks') return '将同步 Hooks 到支持的 IDE'
   return `个目标将接收当前 ${currentScope.value.label} 配置`
 })
 
@@ -90,7 +92,7 @@ const canSync = computed(() => {
 
 const execCountLabel = computed(() => {
   if (!currentScope.value) return '—'
-  if (currentScope.value.kind === 'cmd' || currentScope.value.kind === 'subagent' || currentScope.value.kind === 'rules') return '✓'
+  if (currentScope.value.kind === 'cmd' || currentScope.value.kind === 'subagent' || currentScope.value.kind === 'rules' || currentScope.value.kind === 'hooks') return '✓'
   return String(syncTargetIdes.value.length)
 })
 
@@ -229,6 +231,12 @@ async function syncCurrentScope() {
         '/api/rules/sync', { method: 'POST' },
       )
       if (r.ok) ui.toast(r.message || `已同步 ${r.count} 个规则`)
+      else ui.toast('同步失败: ' + (r.error || ''), 'err')
+    } else if (meta.kind === 'hooks') {
+      const r = await api<{ ok: boolean; message?: string; error?: string }>(
+        '/api/hooks/sync', { method: 'POST' },
+      )
+      if (r.ok) ui.toast(r.message || '已同步 hooks')
       else ui.toast('同步失败: ' + (r.error || ''), 'err')
     } else {
       for (const ide of syncTargetIdes.value) {
