@@ -29,8 +29,8 @@ export const usePluginStore = defineStore('plugin', () => {
     const r = await api<{ ok: boolean; data?: PluginItem[] }>('/api/plugins')
     if (r.ok) plugins.value = r.data || []
   }
-  function exportPlugin(file: string) {
-    window.location.href = '/api/plugin/export?file=' + encodeURIComponent(file)
+  function exportPlugin(file: string, format: 'zip' | 'yaml' = 'zip') {
+    window.location.href = '/api/plugin/export?file=' + encodeURIComponent(file) + '&format=' + format
   }
   function exportAllPlugins() {
     window.location.href = '/api/plugin/export-all'
@@ -42,22 +42,42 @@ export const usePluginStore = defineStore('plugin', () => {
     const input = e.target as HTMLInputElement
     const f = input.files && input.files[0]
     if (!f) return
-    const content = await f.text()
-    const filename = f.name
-    const r = await api<{ ok: boolean; name?: string; error?: string; msg?: string }>('/api/plugin/import', {
-      method: 'POST', body: JSON.stringify({ filename, content }),
-    })
+    // 统一用 FormData 上传（支持 .zip 含 skills 包 和 .yaml 单文件）
+    const fd = new FormData()
+    fd.append('file', f)
+    const r = await fetch('/api/plugin/import', { method: 'POST', body: fd })
+    const res = await r.json() as {
+      ok: boolean; name?: string; error?: string; msg?: string
+      plugin_count?: number; skill_count?: number; skipped?: any[]
+    }
     input.value = ''
-    if (r.ok) { ui.toast('导入成功: ' + r.name); refreshPluginList() }
-    else if (r.error === 'exists') {
-      if (confirm(r.msg || '已存在，是否覆盖？')) {
-        const r2 = await api<{ ok: boolean; name?: string; error?: string }>('/api/plugin/import', {
-          method: 'POST', body: JSON.stringify({ filename, content, overwrite: true }),
-        })
-        if (r2.ok) { ui.toast('已覆盖导入: ' + r2.name); refreshPluginList() }
-        else ui.toast('导入失败: ' + (r2.error || ''), 'err')
+    if (res.ok) {
+      // 构建 toast 摘要
+      const parts: string[] = []
+      if (res.plugin_count) parts.push(`${res.plugin_count} 个插件`)
+      if (res.skill_count) parts.push(`${res.skill_count} 个技能`)
+      const detail = parts.length ? '：' + parts.join('、') : ''
+      const skippedNote = res.skipped?.length ? `，跳过 ${res.skipped.length} 项` : ''
+      ui.toast('导入成功' + detail + skippedNote)
+      refreshPluginList()
+      skill.loadInstalledSkills()
+    } else if (res.error === 'exists') {
+      if (confirm(res.msg || '已存在，是否覆盖？')) {
+        const fd2 = new FormData()
+        fd2.append('file', f)
+        fd2.append('overwrite', 'true')
+        const r2 = await fetch('/api/plugin/import', { method: 'POST', body: fd2 })
+        const res2 = await r2.json() as { ok: boolean; error?: string; plugin_count?: number; skill_count?: number }
+        if (res2.ok) {
+          const parts: string[] = []
+          if (res2.plugin_count) parts.push(`${res2.plugin_count} 个插件`)
+          if (res2.skill_count) parts.push(`${res2.skill_count} 个技能`)
+          ui.toast('已覆盖导入' + (parts.length ? '：' + parts.join('、') : ''))
+          refreshPluginList()
+          skill.loadInstalledSkills()
+        } else ui.toast('导入失败: ' + (res2.error || ''), 'err')
       }
-    } else ui.toast('导入失败: ' + (r.error || ''), 'err')
+    } else ui.toast('导入失败: ' + (res.error || ''), 'err')
   }
   async function onTogglePlugin(p: PluginItem, checked: boolean) {
     if (installingPlugin.value) { ui.toast('正在安装其他插件，请稍候', 'warn'); return }

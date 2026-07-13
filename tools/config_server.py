@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import webbrowser
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -998,6 +999,52 @@ def mcp_detail():
 # ============================================================
 # Plugin API
 # ============================================================
+def _collect_plugin_skill_dirs(cfg: dict) -> list:
+    """从插件配置中收集本地存在的 skill 目录列表。
+
+    遍历 plugin.yaml 的 skills 字段，在三个 skill 目录中搜索匹配的目录：
+      1. config/skills/      - 项目级复制的技能（优先）
+      2. .agents/skills/     - 项目级安装的技能（下载/插件安装目标）
+      3. template/skills/    - 内置预置技能（只读缓存）
+
+    Returns:
+        [(skill_name, Path), ...]  仅返回实际存在的目录。
+    """
+    skills_list = cfg.get("skills", []) or []
+    result: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    for s in skills_list:
+        if isinstance(s, dict):
+            name = s.get("skill") or s.get("name") or ""
+        else:
+            name = str(s)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        for base in (PROJECT_SKILLS_DIR, DOT_AGENTS_SKILLS, AGENTS_SKILLS_CACHE):
+            skill_dir = base / name
+            if skill_dir.exists() and skill_dir.is_dir():
+                result.append((name, skill_dir))
+                break
+    return result
+
+
+def _add_dir_to_zip(zf: zipfile.ZipFile, src_dir: Path, arc_prefix: str) -> int:
+    """将 src_dir 下的所有文件写入 zip，arc 路径前缀为 arc_prefix。返回文件数。"""
+    count = 0
+    for f in src_dir.rglob("*"):
+        if not f.is_file():
+            continue
+        # 跳过 .git 目录
+        if ".git" in f.parts:
+            continue
+        rel = f.relative_to(src_dir)
+        arc = str(Path(arc_prefix) / rel)
+        zf.write(f, arcname=arc)
+        count += 1
+    return count
+
+
 @app.route("/api/plugins", methods=["GET"])
 def list_plugins():
     from lib.plugins import read_installed_plugins
@@ -1098,8 +1145,17 @@ def delete_plugin():
 
 @app.route("/api/plugin/export", methods=["GET"])
 def export_plugin():
-    """导出单个插件 yaml。query: file=xxx.plugin.yaml"""
+    """导出单个插件。支持两种格式：
+
+    query:
+      - file=xxx.plugin.yaml  （必填）
+      - format=zip|yaml       （可选，默认 zip）
+
+    format=zip:  返回 <plugin_name>.zip，含 plugin.yaml + skills/<name>/ 目录
+    format=yaml: 返回原始 plugin.yaml 文件（不含 skills）
+    """
     fname = (request.args.get("file") or "").strip()
+    fmt = (request.args.get("format") or "zip").strip().lower()
     if not fname:
         return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
     path = (PLUGINS_DIR / fname).resolve()
@@ -1109,36 +1165,190 @@ def export_plugin():
         return jsonify({"ok": False, "error": "非法路径"}), 400
     if not path.exists():
         return jsonify({"ok": False, "error": "文件不存在"}), 404
+
+    # format=yaml：仅导出 plugin.yaml（向后兼容）
+    if fmt == "yaml":
+        try:
+            buf = io.BytesIO(path.read_bytes())
+            buf.seek(0)
+            return send_file(buf, as_attachment=True, download_name=fname,
+                             mimetype="application/yaml")
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    # format=zip（默认）：plugin.yaml + 关联 skills 目录
     try:
-        import io
-        buf = io.BytesIO(path.read_bytes())
+        cfg = load_env_config_file(path)
+        plugin_name = cfg.get("name", path.stem)
+        skill_dirs = _collect_plugin_skill_dirs(cfg)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(path, arcname=fname)
+            for skill_name, skill_dir in skill_dirs:
+                _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
+
         buf.seek(0)
-        return send_file(buf, as_attachment=True, download_name=fname,
-                         mimetype="application/yaml")
+        safe_name = "".join(c for c in plugin_name if c.isalnum() or c in ("-", "_"))
+        download = f"{safe_name or 'plugin'}.zip"
+        return send_file(buf, as_attachment=True, download_name=download,
+                         mimetype="application/zip")
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/plugin/export-all", methods=["GET"])
 def export_all_plugins():
-    """导出全部预定义插件为 zip。"""
-    import io, zipfile
+    """导出全部预定义插件 + 关联 skills 为 zip。
+
+    zip 结构：
+      - *.plugin.yaml  （所有插件配置）
+      - skills/<skill_name>/...  （去重后的所有本地 skill）
+    """
     buf = io.BytesIO()
+    seen_skills: set[str] = set()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if PLUGINS_DIR.exists():
             for f in PLUGINS_DIR.glob("*.plugin.yaml"):
                 zf.write(f, arcname=f.name)
+                try:
+                    cfg = load_env_config_file(f)
+                    for skill_name, skill_dir in _collect_plugin_skill_dirs(cfg):
+                        if skill_name in seen_skills:
+                            continue
+                        seen_skills.add(skill_name)
+                        _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
+                except Exception:
+                    pass  # 单个插件解析失败不阻塞
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name="plugins-export.zip",
                      mimetype="application/zip")
 
 
+def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
+    """从 zip 导入插件配置 + skills 目录。
+
+    zip 结构（由 export_plugin / export_all_plugins 生成）：
+      - *.plugin.yaml  → 写入 template/plugins/
+      - skills/<name>/... → 复制到 config/skills/<name>/
+
+    Returns:
+        (response_dict, http_status)
+    """
+    imported_plugins: list[dict] = []
+    imported_skills: list[str] = []
+    skipped: list[dict] = []
+
+    with zipfile.ZipFile(buf, "r") as zf:
+        plugin_entries: list[tuple[str, bytes]] = []  # (arcname, content)
+        skill_entries: dict[str, list[str]] = {}     # skill_name -> [arcname, ...]
+
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            name = info.filename
+            # 跳过 macOS 元数据和隐藏文件
+            if "__MACOSX" in name or Path(name).name.startswith("."):
+                continue
+            if name.endswith(".plugin.yaml") or name.endswith(".plugin.yml"):
+                plugin_entries.append((name, zf.read(name)))
+            elif name.startswith("skills/"):
+                parts = Path(name).parts
+                if len(parts) >= 2:
+                    skill_name = parts[1]
+                    skill_entries.setdefault(skill_name, []).append(name)
+
+        # 导入 plugin yaml
+        for arc, content in plugin_entries:
+            fname = Path(arc).name
+            try:
+                data = yaml.safe_load(content.decode("utf-8"))
+            except (yaml.YAMLError, UnicodeDecodeError):
+                skipped.append({"file": fname, "reason": "YAML 解析失败"})
+                continue
+            if not isinstance(data, dict) or not data.get("name"):
+                skipped.append({"file": fname, "reason": "无效插件配置（缺少 name）"})
+                continue
+            out_path = PLUGINS_DIR / fname
+            if out_path.exists() and not overwrite:
+                skipped.append({"file": fname, "reason": "已存在"})
+                continue
+            PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(content)
+            imported_plugins.append({"file": fname, "name": data["name"]})
+
+        # 导入 skills 目录
+        for skill_name, arc_list in skill_entries.items():
+            target = PROJECT_SKILLS_DIR / skill_name
+            if target.exists() and not overwrite:
+                skipped.append({"skill": skill_name, "reason": "已存在"})
+                continue
+            if target.exists():
+                shutil.rmtree(target, ignore_errors=True)
+            target.mkdir(parents=True, exist_ok=True)
+            for arc in arc_list:
+                rel_parts = Path(arc).parts[2:]  # 去掉 "skills/" 和 skill_name
+                if not rel_parts:
+                    continue
+                dst = target.joinpath(*rel_parts)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(zf.read(arc))
+            imported_skills.append(skill_name)
+
+    result = {
+        "ok": True,
+        "plugins": imported_plugins,
+        "skills": imported_skills,
+        "skipped": skipped,
+        "plugin_count": len(imported_plugins),
+        "skill_count": len(imported_skills),
+    }
+    return (jsonify(result), 200)
+
+
 @app.route("/api/plugin/import", methods=["POST"])
 def import_plugin():
-    """导入插件 yaml。Body: {filename: 'xxx.plugin.yaml', content: '...'}
-    会校验 yaml 合法性 + 文件名安全 + 是否重名。
+    """导入插件（支持 zip 包或 yaml 文本）。
+
+    支持两种请求格式：
+    1. multipart/form-data（推荐）：上传文件（.zip 或 .yaml/.yml）
+       - file: 文件字段
+       - overwrite: 可选，"true" 时覆盖同名文件
+       zip 包含 plugin.yaml + skills/ 目录时一并导入。
+    2. application/json（向后兼容）：{filename, content, overwrite}
     """
-    body = request.get_json(force=True)
+    content_type = request.content_type or ""
+
+    # ---- multipart/form-data：文件上传模式 ----
+    if "multipart/form-data" in content_type:
+        uploaded = request.files.get("file")
+        if not uploaded:
+            return jsonify({"ok": False, "error": "缺少 file 字段"}), 400
+        fname = uploaded.filename or ""
+        overwrite = request.form.get("overwrite", "").lower() in ("true", "1", "yes")
+
+        if fname.lower().endswith(".zip"):
+            try:
+                buf = io.BytesIO(uploaded.read())
+                return _import_plugin_zip(buf, overwrite)
+            except zipfile.BadZipFile:
+                return jsonify({"ok": False, "error": "无效的 zip 文件"}), 400
+            except Exception as e:
+                return jsonify({"ok": False, "error": str(e)}), 500
+        elif fname.endswith((".plugin.yaml", ".plugin.yml", ".yaml", ".yml")):
+            try:
+                content = uploaded.read().decode("utf-8")
+            except UnicodeDecodeError:
+                return jsonify({"ok": False, "error": "文件编码不是 UTF-8"}), 400
+        else:
+            return jsonify({"ok": False, "error": "仅支持 .zip / .yaml / .yml 文件"}), 400
+
+        # 走 yaml 文本导入流程（与 JSON 模式共用下方逻辑）
+        body = {"filename": fname, "content": content, "overwrite": overwrite}
+    else:
+        # ---- application/json：向后兼容 ----
+        body = request.get_json(force=True)
+
     fname = (body.get("filename") or "").strip()
     content = body.get("content") or ""
     if not fname:
@@ -1500,12 +1710,15 @@ def install_plugin_sse():
                     or (' add ' in cmd and '/' in cmd.split(' add ', 1)[1].split(' ', 1)[0])
                 )
 
+                def _skill_exists(name):
+                    """检查 skill 是否已存在于 config/skills/ 或 .agents/skills/。"""
+                    return (PROJECT_ROOT / "config" / "skills" / name).exists() or \
+                           (DOT_AGENTS_SKILLS / name).exists()
+
                 # Step 1: 已存在则跳过（仅单技能）
-                if not is_whole_repo:
-                    target = PROJECT_ROOT / "config" / "skills" / skill_name
-                    if target.exists():
-                        yield f"data: [-] Skill already exists: {skill_name}, skipping\n\n"
-                        continue
+                if not is_whole_repo and _skill_exists(skill_name):
+                    yield f"data: [-] Skill already exists: {skill_name}, skipping\n\n"
+                    continue
 
                 # Step 2: source 有效 → 执行 source 命令
                 rc = None
@@ -1513,7 +1726,7 @@ def install_plugin_sse():
                     rc = yield from _stream_process_rc(cmd, cwd=PROJECT_ROOT)
                     if rc == 0:
                         # 验证（整仓库跳过目录验证）
-                        if is_whole_repo or (PROJECT_ROOT / "config" / "skills" / skill_name).exists():
+                        if is_whole_repo or _skill_exists(skill_name):
                             yield f"data: [OK] Skill installed via source: {skill_name}\n\n"
                             continue
                         yield f"data: [!] source 命令成功但目录未找到，尝试 find-skills\n\n"
@@ -1523,19 +1736,29 @@ def install_plugin_sse():
                 # Step 3: find-skills 按名查找
                 find_cmd = f"npx skills add {skill_name} -y"
                 rc = yield from _stream_process_rc(find_cmd, cwd=PROJECT_ROOT)
-                if rc == 0 and (is_whole_repo or (PROJECT_ROOT / "config" / "skills" / skill_name).exists()):
+                if rc == 0 and (is_whole_repo or _skill_exists(skill_name)):
                     yield f"data: [OK] Skill installed from marketplace: {skill_name}\n\n"
                     continue
 
-                # Step 4: 本地缓存（仅单技能）
+                # Step 4: 本地缓存（仅单技能）→ config/skills/
+                # 搜索五个缓存源（优先级：项目级 → 全局 IDE 目录 → template 预置）
                 if not is_whole_repo:
-                    cache = PROJECT_ROOT / "template" / "skills" / skill_name
-                    if cache.exists():
+                    cache_dirs = [
+                        PROJECT_ROOT / "config" / "skills" / skill_name,
+                        DOT_AGENTS_SKILLS / skill_name,
+                        PROJECT_ROOT / "template" / "skills" / skill_name,
+                        Path.home() / ".zcode" / "skills" / skill_name,
+                        Path.home() / ".config" / "skills" / skill_name,
+                    ]
+                    cache = next((d for d in cache_dirs if d.exists()), None)
+                    if cache:
                         yield f"data: [-] Copying from local cache: {skill_name}\n\n"
                         try:
                             import shutil
                             target = PROJECT_ROOT / "config" / "skills" / skill_name
                             target.parent.mkdir(parents=True, exist_ok=True)
+                            if target.exists():
+                                shutil.rmtree(target, ignore_errors=True)
                             shutil.copytree(cache, target, ignore=shutil.ignore_patterns('.git'))
                             yield f"data: [OK] Skill copied from cache: {skill_name}\n\n"
                             continue

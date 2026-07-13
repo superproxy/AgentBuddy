@@ -429,12 +429,12 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     """安装技能：source 有效则先用 source；否则 find-skills 按名查找；再找本地缓存；都不行则失败。
 
     流程：
-      1. 已存在于 config/skills/ → 跳过（成功）
+      1. 已存在于 config/skills/ 或 .agents/skills/ → 跳过（成功）
       2. source 有效（owner/repo 或 url）→ npx skills add <source> [--skill <name>]
          - 有 --skill → 安装指定技能，按 <name> 验证
          - 无 --skill（整个仓库）→ returncode==0 即视为成功
       3. find-skills 按名查找：npx skills add <name> -y（市场搜索）
-      4. 本地缓存 template/skills/<name> → 复制
+      4. 本地缓存 template/skills/<name> → 复制到 config/skills/
       5. 仍未成功 → 返回 False（失败）
 
     Returns:
@@ -456,22 +456,35 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
 
     install_cwd = source_dir if source_dir else None
 
-    # Step 1: 已存在于 config/skills/ → 跳过（仅对单技能安装有效）
+    def _skill_exists(name):
+        """检查 skill 是否已存在于 config/skills/ 或 .agents/skills/。"""
+        if source_dir:
+            if (source_dir / "config" / "skills" / name).exists():
+                return True
+            if (source_dir / ".agents" / "skills" / name).exists():
+                return True
+        return False
+
+    # Step 1: 已存在于 config/skills/ 或 .agents/skills/ → 跳过（仅对单技能安装有效）
     if source_dir and not is_whole_repo:
-        dot_agents_skills_dir = source_dir / "config" / "skills"
-        dot_agents_skills_dir.mkdir(parents=True, exist_ok=True)
-        target_skill_dir = dot_agents_skills_dir / skill_name
-        if target_skill_dir.exists():
-            print(f"{COLOR_DARKGRAY}[-] Skill already exists in config/skills: {skill_name}, skipping update{COLOR_RESET}")
+        if _skill_exists(skill_name):
+            print(f"{COLOR_DARKGRAY}[-] Skill already exists: {skill_name}, skipping update{COLOR_RESET}")
             return True
 
     def _verify_installed():
-        """检查技能是否已落到 config/skills 或全局目录。整个仓库安装时跳过此检查。"""
+        """检查技能是否已落到 config/skills/、.agents/skills/ 或全局目录。
+
+        整个仓库安装时跳过此检查（returncode==0 即视为成功）。
+        """
         if is_whole_repo:
-            return True  # 整个仓库安装，returncode==0 即视为成功
+            return True
         if source_dir:
             expected = source_dir / "config" / "skills" / skill_name
             if expected.exists():
+                return True
+            agents_skill = source_dir / ".agents" / "skills" / skill_name
+            if agents_skill.exists():
+                print(f"{COLOR_YELLOW}[!] Skill installed to .agents/skills: {agents_skill}{COLOR_RESET}")
                 return True
             home_skill = Path.home() / ".config" / "skills" / skill_name
             if home_skill.exists():
@@ -520,15 +533,27 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     except Exception as e:
         print(f"{COLOR_YELLOW}[!] find-skills 错误: {e}，尝试本地缓存{COLOR_RESET}")
 
-    # Step 4: 本地缓存 template/skills/<name> → 复制（仅对单技能安装有效）
+    # Step 4: 本地缓存 → 复制到 config/skills/（仅对单技能安装有效）
+    # 搜索五个缓存源（优先级：项目级 → 全局 IDE 目录 → template 预置）
     if source_dir and not is_whole_repo:
-        cache_skill_dir = source_dir / "template" / "skills" / skill_name
-        if cache_skill_dir.exists():
+        cache_dirs = [
+            source_dir / "config" / "skills" / skill_name,
+            source_dir / ".agents" / "skills" / skill_name,
+            source_dir / "template" / "skills" / skill_name,
+            Path.home() / ".zcode" / "skills" / skill_name,
+            Path.home() / ".config" / "skills" / skill_name,
+        ]
+        cache_skill_dir = next((d for d in cache_dirs if d.exists()), None)
+        if cache_skill_dir:
             print(f"{COLOR_MAGENTA}[-] Installing skill from local cache: {skill_name}{COLOR_RESET}")
+            print(f"    缓存源: {cache_skill_dir}{COLOR_RESET}")
             try:
-                dot_agents_skills_dir = source_dir / "config" / "skills"
-                dot_agents_skills_dir.mkdir(parents=True, exist_ok=True)
-                target_skill_dir = dot_agents_skills_dir / skill_name
+                target_skills_dir = source_dir / "config" / "skills"
+                target_skills_dir.mkdir(parents=True, exist_ok=True)
+                target_skill_dir = target_skills_dir / skill_name
+                # 如果目标已存在（可能来自 .agents/skills/），先删除再复制
+                if target_skill_dir.exists():
+                    shutil.rmtree(target_skill_dir, ignore_errors=True)
                 shutil.copytree(cache_skill_dir, target_skill_dir, ignore=shutil.ignore_patterns('.git'))
                 print(f"{COLOR_GREEN}[OK] Skill copied from local cache: {skill_name}{COLOR_RESET}")
                 return True

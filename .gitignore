@@ -62,6 +62,9 @@ tools/dist-ui/
 # npx skills add 全局安装的远程技能缓存（项目根 skills/，非 template/skills）
 /skills/
 
+# 本地测试插件配置（含真实密钥，禁止提交）
+template/plugins/Plugin.plugin.yaml
+
 # PyInstaller 构建产物
 /build/
 /dist/

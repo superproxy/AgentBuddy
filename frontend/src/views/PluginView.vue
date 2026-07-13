@@ -6,6 +6,15 @@ const plugin = usePluginStore()
 const { plugins, installingPlugin } = storeToRefs(plugin)
 const { refreshPluginList, exportPlugin, exportAllPlugins, onImportPluginFile, onTogglePlugin, editPlugin } = plugin
 const inputRef = ref<HTMLInputElement | null>(null)
+// 导出下拉菜单状态
+const exportMenu = ref<string | null>(null)
+function toggleExportMenu(file: string) {
+  exportMenu.value = exportMenu.value === file ? null : file
+}
+function doExport(file: string, format: 'zip' | 'yaml') {
+  exportPlugin(file, format)
+  exportMenu.value = null
+}
 function triggerImport() { inputRef.value?.click() }
 onMounted(() => { refreshPluginList() })
 </script>
@@ -19,9 +28,9 @@ onMounted(() => { refreshPluginList() })
           <span v-if="installingPlugin" class="text-[10px] text-brand-600 font-normal">安装中: {{ installingPlugin }}</span>
         </h3>
         <div class="flex items-center gap-2">
-          <button @click="exportAllPlugins" class="text-[11px] text-ink-600 hover:text-brand-600">导出全部</button>
-          <button @click="triggerImport" class="text-[11px] text-brand-600 hover:underline">导入</button>
-          <input ref="inputRef" type="file" accept=".yaml,.yml" @change="onImportPluginFile" class="hidden">
+          <button @click="exportAllPlugins" class="text-[11px] text-ink-600 hover:text-brand-600" title="导出全部插件及关联 Skills 为 zip">导出全部</button>
+          <button @click="triggerImport" class="text-[11px] text-brand-600 hover:underline" title="导入插件（支持 .zip 含 Skills 包 或 .yaml）">导入</button>
+          <input ref="inputRef" type="file" accept=".yaml,.yml,.zip" @change="onImportPluginFile" class="hidden">
           <button @click="refreshPluginList" class="text-[11px] text-brand-600 hover:underline">刷新</button>
         </div>
       </div>
@@ -41,7 +50,18 @@ onMounted(() => { refreshPluginList() })
             <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.skills_count }} skills</span>
             <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.mcp_count }} mcp</span>
           </div>
-          <button @click="exportPlugin(p.file)" class="text-[10px] text-ink-500 hover:text-brand-600 flex-shrink-0">导出</button>
+          <!-- 导出下拉菜单 -->
+          <div class="relative flex-shrink-0">
+            <button @click="toggleExportMenu(p.file)" class="text-[10px] text-ink-500 hover:text-brand-600">导出 ▾</button>
+            <div v-if="exportMenu === p.file" class="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[120px]">
+              <button @click="doExport(p.file, 'zip')" class="block w-full text-left px-3 py-1.5 text-[10px] text-ink-700 hover:bg-brand-50 hover:text-brand-600">
+                📦 ZIP（含 Skills）
+              </button>
+              <button @click="doExport(p.file, 'yaml')" class="block w-full text-left px-3 py-1.5 text-[10px] text-ink-700 hover:bg-brand-50 hover:text-brand-600 border-t border-gray-100">
+                📄 YAML（仅配置）
+              </button>
+            </div>
+          </div>
           <button @click="editPlugin(p.file)" class="text-[10px] text-brand-600 hover:underline flex-shrink-0">编辑</button>
         </div>
         <div v-if="!plugins.length" class="text-center text-ink-500 text-xs py-6">暂无可用插件</div>

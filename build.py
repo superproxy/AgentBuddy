@@ -68,6 +68,8 @@ SENSITIVE_FILES = {
     "auth.json",         # codex: auth.template.json
     "config.toml",       # codex: config.template.toml
     "config.yaml",       # proxy: config.template.yaml
+    # 本地测试插件配置（含真实密钥，仅本地使用，禁止打包）
+    "Plugin.plugin.yaml",
 }
 # 绝不允许出现的密钥明文片段（命中即失败）
 # 分两类：
