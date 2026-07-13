@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePluginStore } from '../stores/plugin'
 const plugin = usePluginStore()
-const { plugins, installingPlugin } = storeToRefs(plugin)
-const { refreshPluginList, exportPlugin, exportAllPlugins, onImportPluginFile, onTogglePlugin, editPlugin } = plugin
+const { plugins, installingPlugin, selectedForExport } = storeToRefs(plugin)
+const { refreshPluginList, exportPlugin, onImportPluginFile, onTogglePlugin, editPlugin,
+  toggleSelectForExport, toggleSelectAllForExport, exportSelectedPlugins } = plugin
 const inputRef = ref<HTMLInputElement | null>(null)
 // 导出下拉菜单状态
 const exportMenu = ref<string | null>(null)
@@ -16,6 +17,8 @@ function doExport(file: string, format: 'zip' | 'yaml') {
   exportMenu.value = null
 }
 function triggerImport() { inputRef.value?.click() }
+const allSelected = computed(() => plugins.value.length > 0 && selectedForExport.value.size === plugins.value.length)
+const someSelected = computed(() => selectedForExport.value.size > 0 && selectedForExport.value.size < plugins.value.length)
 onMounted(() => { refreshPluginList() })
 </script>
 <template>
@@ -27,8 +30,14 @@ onMounted(() => { refreshPluginList() })
           <span class="text-[10px] text-ink-500 font-normal">{{ plugins.length }} 个</span>
           <span v-if="installingPlugin" class="text-[10px] text-brand-600 font-normal">安装中: {{ installingPlugin }}</span>
         </h3>
-        <div class="flex items-center gap-2">
-          <button @click="exportAllPlugins" class="text-[11px] text-ink-600 hover:text-brand-600" title="导出全部插件及关联 Skills 为 zip">导出全部</button>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-1 cursor-pointer text-[11px] text-ink-600 hover:text-brand-600">
+            <input type="checkbox" :checked="allSelected" :indeterminate.prop="someSelected" @change="toggleSelectAllForExport" class="w-3.5 h-3.5 accent-brand-500 cursor-pointer">
+            全选
+          </label>
+          <button @click="exportSelectedPlugins" class="text-[11px] text-brand-600 hover:underline" title="导出勾选的插件及关联 Skills 为 zip">
+            导出选中<span v-if="selectedForExport.size" class="text-[10px] text-ink-500"> ({{ selectedForExport.size }})</span>
+          </button>
           <button @click="triggerImport" class="text-[11px] text-brand-600 hover:underline" title="导入插件（支持 .zip 含 Skills 包 或 .yaml）">导入</button>
           <input ref="inputRef" type="file" accept=".yaml,.yml,.zip" @change="onImportPluginFile" class="hidden">
           <button @click="refreshPluginList" class="text-[11px] text-brand-600 hover:underline">刷新</button>
@@ -37,7 +46,7 @@ onMounted(() => { refreshPluginList() })
       <div class="space-y-1.5">
         <div v-for="p in plugins" :key="p.file"
              :class="['flex items-center gap-3 border rounded-lg px-3 py-2 transition', p.installed ? 'border-green-400 bg-green-50/30' : 'border-ink-300 hover:border-brand-500']">
-          <input type="checkbox" :checked="p.installed" @change="onTogglePlugin(p, $event.target.checked)" :disabled="installingPlugin === p.file" class="w-4 h-4 accent-brand-500 cursor-pointer flex-shrink-0">
+          <input type="checkbox" :checked="selectedForExport.has(p.file)" @change="toggleSelectForExport(p.file)" class="w-4 h-4 accent-brand-500 cursor-pointer flex-shrink-0" title="勾选导出">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-medium text-xs text-ink-900 truncate">{{ p.name }}</span>
@@ -50,6 +59,15 @@ onMounted(() => { refreshPluginList() })
             <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.skills_count }} skills</span>
             <span class="px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{{ p.mcp_count }} mcp</span>
           </div>
+          <!-- 安装/卸载按钮 -->
+          <button v-if="!p.installed" @click="onTogglePlugin(p, true)" :disabled="installingPlugin === p.file"
+                  class="text-[10px] text-brand-600 hover:underline flex-shrink-0 disabled:opacity-50">
+            {{ installingPlugin === p.file ? '安装中…' : '安装' }}
+          </button>
+          <button v-else @click="onTogglePlugin(p, false)" :disabled="installingPlugin === p.file"
+                  class="text-[10px] text-red-500 hover:underline flex-shrink-0 disabled:opacity-50">
+            卸载
+          </button>
           <!-- 导出下拉菜单 -->
           <div class="relative flex-shrink-0">
             <button @click="toggleExportMenu(p.file)" class="text-[10px] text-ink-500 hover:text-brand-600">导出 ▾</button>

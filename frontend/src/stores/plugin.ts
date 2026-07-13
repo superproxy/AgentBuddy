@@ -24,16 +24,66 @@ export const usePluginStore = defineStore('plugin', () => {
   const selectedPluginFile = ref('')
   const installingPlugin = ref('')
   const importPluginInput = ref<HTMLInputElement | null>(null)
+  // 导出选中相关
+  const selectedForExport = ref<Set<string>>(new Set())
+
+  /**
+   * 通用下载：pywebview 下用 JS-Python 桥接弹出原生保存对话框；浏览器回退到 location.href。
+   * pywebview 不处理 Content-Disposition: attachment，必须走桥接才能触发下载。
+   */
+  async function doDownload(url: string, filename: string) {
+    const pw = (window as any).pywebview
+    if (pw?.api?.save_file) {
+      try {
+        const r = await fetch(url)
+        if (!r.ok) { ui.toast('导出失败: HTTP ' + r.status, 'err'); return }
+        const blob = await r.blob()
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve((reader.result as string).split(',')[1])
+          reader.onerror = reject
+          reader.readAsDataURL(blob)
+        })
+        const res = await pw.api.save_file(filename, b64)
+        if (res?.ok) ui.toast(`已保存到: ${res.path}`)
+        else if (res?.error !== 'cancelled') ui.toast('保存失败: ' + (res?.error || ''), 'err')
+      } catch (e: any) {
+        ui.toast('导出失败: ' + (e?.message || e), 'err')
+      }
+    } else {
+      window.location.href = url
+    }
+  }
 
   async function refreshPluginList() {
     const r = await api<{ ok: boolean; data?: PluginItem[] }>('/api/plugins')
     if (r.ok) plugins.value = r.data || []
   }
   function exportPlugin(file: string, format: 'zip' | 'yaml' = 'zip') {
-    window.location.href = '/api/plugin/export?file=' + encodeURIComponent(file) + '&format=' + format
+    doDownload('/api/plugin/export?file=' + encodeURIComponent(file) + '&format=' + format,
+               format === 'zip' ? `${file.replace('.plugin.yaml', '')}.zip` : file)
   }
-  function exportAllPlugins() {
-    window.location.href = '/api/plugin/export-all'
+  function toggleSelectForExport(file: string) {
+    const s = new Set(selectedForExport.value)
+    if (s.has(file)) s.delete(file)
+    else s.add(file)
+    selectedForExport.value = s
+  }
+  function toggleSelectAllForExport() {
+    if (selectedForExport.value.size === plugins.value.length) {
+      selectedForExport.value = new Set()
+    } else {
+      selectedForExport.value = new Set(plugins.value.map(p => p.file))
+    }
+  }
+  async function exportSelectedPlugins() {
+    const files = Array.from(selectedForExport.value)
+    if (!files.length) {
+      ui.toast('请先勾选要导出的插件', 'warn')
+      return
+    }
+    const params = files.map(f => 'files=' + encodeURIComponent(f)).join('&')
+    await doDownload('/api/plugin/export-selected?' + params, 'plugins-selected.zip')
   }
   function triggerImportPlugin() {
     importPluginInput.value && importPluginInput.value.click()
@@ -106,7 +156,9 @@ export const usePluginStore = defineStore('plugin', () => {
 
   return {
     plugins, selectedPluginFile, installingPlugin, importPluginInput,
-    refreshPluginList, exportPlugin, exportAllPlugins, triggerImportPlugin,
+    selectedForExport,
+    refreshPluginList, exportPlugin, triggerImportPlugin,
+    toggleSelectForExport, toggleSelectAllForExport, exportSelectedPlugins,
     onImportPluginFile, onTogglePlugin, editPlugin,
   }
 })

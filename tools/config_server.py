@@ -1275,6 +1275,50 @@ def export_all_plugins():
                      mimetype="application/zip")
 
 
+@app.route("/api/plugin/export-selected", methods=["GET"])
+def export_selected_plugins():
+    """导出选中的插件 + 关联 skills 为 zip。
+
+    query:
+      - files=a.plugin.yaml&files=b.plugin.yaml  （必填，可重复）
+
+    zip 结构：
+      - *.plugin.yaml  （选中的插件配置）
+      - skills/<skill_name>/...  （去重后的所有关联 skill）
+    """
+    files = request.args.getlist("files")
+    if not files:
+        return jsonify({"ok": False, "error": "未选择任何插件"}), 400
+
+    buf = io.BytesIO()
+    seen_skills: set[str] = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in files:
+            fname = fname.strip()
+            if not fname:
+                continue
+            path = (PLUGINS_DIR / fname).resolve()
+            try:
+                path.relative_to(PLUGINS_DIR.resolve())
+            except ValueError:
+                continue  # 跳过非法路径
+            if not path.exists():
+                continue
+            zf.write(path, arcname=fname)
+            try:
+                cfg = load_env_config_file(path)
+                for skill_name, skill_dir in _collect_plugin_skill_dirs(cfg):
+                    if skill_name in seen_skills:
+                        continue
+                    seen_skills.add(skill_name)
+                    _add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
+            except Exception:
+                pass  # 单个插件解析失败不阻塞
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name="plugins-selected.zip",
+                     mimetype="application/zip")
+
+
 def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
     """从 zip 导入插件配置 + skills 目录。
 

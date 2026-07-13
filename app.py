@@ -164,6 +164,50 @@ def start_flask_thread(host: str, port: int) -> threading.Thread:
     return t
 
 
+class _DownloadApi:
+    """暴露给前端的文件保存接口（pywebview JS-Python 桥接）。
+
+    前端 fetch 导出接口拿到 blob → 转 base64 → 调用 window.pywebview.api.save_file()
+    → 原生保存对话框 → 写盘，规避 pywebview 不处理 attachment 下载的问题。
+    """
+    def save_file(self, filename, data_base64):
+        import base64 as _b64
+        import tkinter as _tk
+        from tkinter import filedialog as _fd
+
+        root = _tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+
+        # 根据扩展名推断文件类型过滤器
+        ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ".zip"
+        if ext == ".zip":
+            filetypes = [("ZIP 压缩包", "*.zip"), ("所有文件", "*.*")]
+        elif ext in (".yaml", ".yml"):
+            filetypes = [("YAML 文件", "*.yaml *.yml"), ("所有文件", "*.*")]
+        else:
+            filetypes = [("所有文件", "*.*")]
+
+        path = _fd.asksaveasfilename(
+            defaultextension=ext,
+            initialfile=filename,
+            filetypes=filetypes,
+            parent=root,
+        )
+        root.destroy()
+
+        if not path:
+            return {"ok": False, "error": "cancelled"}
+
+        try:
+            raw = _b64.b64decode(data_base64)
+            with open(path, "wb") as f:
+                f.write(raw)
+            return {"ok": True, "path": path}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+
 def open_with_pywebview(url: str, title: str = "AdeBuddy 配置工具", width: int = 1400, height: int = 900) -> bool:
     """用 pywebview 打开窗口，成功返回 True。"""
     try:
@@ -171,8 +215,9 @@ def open_with_pywebview(url: str, title: str = "AdeBuddy 配置工具", width: i
     except ImportError:
         return False
 
+    api = _DownloadApi()
     window = webview.create_window(title, url, width=width, height=height,
-                                   min_size=(1000, 680), text_select=True)
+                                   min_size=(1000, 680), text_select=True, js_api=api)
     webview.start()
     # webview.start 阻塞直到窗口关闭
     try:
