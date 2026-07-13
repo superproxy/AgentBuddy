@@ -1,0 +1,12 @@
+name: openspec
+version: 1.0.0
+description: OpenSpec 插件 - 规范驱动的开发工作流（探索/提议/实施/同步/归档）
+author: AdeBuddy
+mcpServers: {}
+skills:
+  - { name: openspec, source: https://github.com/Fission-AI/OpenSpec/tree/main/.agents/skills/release-openspec, description: OpenSpec 完整技能组 }
+  - { name: openspec-explore, source: openspec-explore, description: OpenSpec 探索模式 }
+  - { name: openspec-propose, source: openspec-propose, description: OpenSpec 提案 }
+  - { name: openspec-apply-change, source: openspec-apply-change, description: OpenSpec 实施变更 }
+  - { name: openspec-archive-change, source: openspec-archive-change, description: OpenSpec 归档变更 }
+  - { name: openspec-sync-specs, source: openspec-sync-specs, description: OpenSpec 同步规范 }
