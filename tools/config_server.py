@@ -2588,7 +2588,7 @@ def sync_subagent():
     """同步 subagent.yaml 到所有支持 agent 的 IDE。
 
     支持 agent 的 IDE：
-    - OpenCode: opencode.json 的 agent 字段
+    - OpenCode: ~/.config/opencode/agents/<name>.md（frontmatter + body）
     - ZCode: ~/.zcode/agents/<name>.md（frontmatter + body）
     """
     import json as _json
@@ -2599,50 +2599,19 @@ def sync_subagent():
         subagents = data.get("subagents", []) if isinstance(data, dict) else []
         results = {}
 
-        # OpenCode: opencode.json agent 字段
-        oc_config = _Path.home() / ".config" / "opencode" / "opencode.json"
-        oc_config.parent.mkdir(parents=True, exist_ok=True)
-        existing = {}
-        if oc_config.exists():
-            try:
-                existing = _json.loads(oc_config.read_text(encoding="utf-8"))
-            except Exception:
-                existing = {}
-        agents = existing.get("agent", {})
-        if not isinstance(agents, dict):
-            agents = {}
-        for sa in subagents:
+        def _write_agent_md(agents_dir: _Path, sa: dict) -> bool:
+            """将一个 subagent 写为 <name>.md（frontmatter + body），成功返回 True。"""
             name = sa.get("name", "").strip()
             if not name:
-                continue
+                return False
             safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
             if not safe_name:
-                continue
-            agents[safe_name] = {
-                "name": sa.get("role", name),
-                "description": sa.get("desc", ""),
-                "prompt": sa.get("prompt", ""),
-            }
-        existing["agent"] = agents
-        oc_config.write_text(_json.dumps(existing, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        results["OpenCode"] = len(subagents)
-
-        # ZCode: ~/.zcode/agents/<name>.md
-        zcode_agents_dir = _Path.home() / ".zcode" / "agents"
-        zcode_agents_dir.mkdir(parents=True, exist_ok=True)
-        zcode_count = 0
-        for sa in subagents:
-            name = sa.get("name", "").strip()
-            if not name:
-                continue
-            safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
-            if not safe_name:
-                continue
-            # 字段映射：subagent.yaml → zcode agent .md
+                return False
+            # 字段映射：subagent.yaml → agent .md
             #   name → name
             #   desc → description（desc 为空时用 role）
             #   role → 拼入 description（"角色: <role>"）
-            #   category → color（映射为 zcode 的 color 值）
+            #   category → color（映射为 color 值）
             #   prompt → md body
             description = sa.get("desc", "").strip()
             role = sa.get("role", "").strip()
@@ -2650,17 +2619,11 @@ def sync_subagent():
                 description = f"{description}（角色: {role}）"
             elif role:
                 description = f"角色: {role}"
-            # category → color 映射
             category = sa.get("category", "").strip()
-            color_map = {
-                "开发": "yellow",
-                "产品": "blue",
-                "通用": "green",
-            }
+            color_map = {"开发": "yellow", "产品": "blue", "通用": "green"}
             color = color_map.get(category, "yellow")
             prompt = sa.get("prompt", "").strip()
 
-            # 生成 frontmatter + body
             lines = [
                 "---",
                 f'name: "{safe_name}"',
@@ -2681,9 +2644,18 @@ def sync_subagent():
                 prompt,
                 "",
             ]
-            agent_md = zcode_agents_dir / f"{safe_name}.md"
-            agent_md.write_text("\n".join(lines), encoding="utf-8")
-            zcode_count += 1
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            (agents_dir / f"{safe_name}.md").write_text("\n".join(lines), encoding="utf-8")
+            return True
+
+        # OpenCode: ~/.config/opencode/agents/<name>.md
+        oc_agents_dir = _Path.home() / ".config" / "opencode" / "agents"
+        oc_count = sum(1 for sa in subagents if _write_agent_md(oc_agents_dir, sa))
+        results["OpenCode"] = oc_count
+
+        # ZCode: ~/.zcode/agents/<name>.md
+        zcode_agents_dir = _Path.home() / ".zcode" / "agents"
+        zcode_count = sum(1 for sa in subagents if _write_agent_md(zcode_agents_dir, sa))
         results["ZCode"] = zcode_count
 
         return jsonify({"ok": True, "count": len(subagents), "results": results,
