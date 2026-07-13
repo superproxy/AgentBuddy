@@ -356,6 +356,237 @@ def parse_shorthand(source_str: str) -> tuple:
     return (stripped, "")
 
 
+def resolve_github_owner_repo(source_str: str) -> tuple:
+    """从 owner/repo、GitHub URL、tree URL 解析 (owner, repo)，失败返回 ('', '')。"""
+    raw = (source_str or "").strip()
+    if not raw:
+        return ("", "")
+    # 去掉 @skill
+    src, _ = parse_shorthand(raw)
+    raw = src or raw
+    m = re.match(
+        r"(?:https?://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+        r"([^/]+)/([^/#?\s]+)",
+        raw,
+        re.I,
+    )
+    if m:
+        return m.group(1), re.sub(r"\.git$", "", m.group(2))
+    if re.match(r"^[^/\s]+/[^/@\s]+$", raw):
+        owner, repo = raw.split("/", 1)
+        return owner, repo
+    return ("", "")
+
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\r")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text or "")
+
+
+def _parse_skills_cli_list(output: str) -> list:
+    """解析 `npx skills add <src> -l` 的终端输出为 [{name, description}]。"""
+    clean = _strip_ansi(output)
+    skills = []
+    # 定位 Available Skills 段
+    idx = clean.find("Available Skills")
+    body = clean[idx:] if idx >= 0 else clean
+    lines = body.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        # 名称行：|    name   （4 空格，非 6 空格描述）
+        m = re.match(r"^\|\s{4}([a-zA-Z0-9][\w.:+-]*)\s*$", line)
+        if m:
+            name = m.group(1)
+            desc_parts = []
+            j = i + 1
+            while j < len(lines):
+                dm = re.match(r"^\|\s{6}(.+?)\s*$", lines[j])
+                if dm:
+                    desc_parts.append(dm.group(1).strip())
+                    j += 1
+                    continue
+                if re.match(r"^\|\s*$", lines[j]) or lines[j].strip() in ("|",):
+                    j += 1
+                    # 空行后若下一条是新名称则结束
+                    if j < len(lines) and re.match(r"^\|\s{4}[a-zA-Z0-9]", lines[j]):
+                        break
+                    continue
+                break
+            skills.append({"name": name, "description": " ".join(desc_parts).strip()})
+            i = j
+            continue
+        i += 1
+    # 去重保序
+    seen = set()
+    out = []
+    for s in skills:
+        if s["name"] in seen:
+            continue
+        seen.add(s["name"])
+        out.append(s)
+    return out
+
+
+def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
+    """通过 GitHub Trees API 发现仓库内 SKILL.md。"""
+    import os
+    import requests
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AdeBuddy/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    tree = None
+    last_err = None
+    for ref in ("HEAD", "main", "master"):
+        try:
+            url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{ref}"
+            resp = requests.get(url, params={"recursive": "1"}, headers=headers, timeout=timeout)
+            if resp.status_code == 404:
+                continue
+            resp.raise_for_status()
+            tree = resp.json()
+            break
+        except Exception as e:
+            last_err = e
+            continue
+    if tree is None:
+        raise RuntimeError(f"无法读取 GitHub 仓库树: {owner}/{repo}" + (f" ({last_err})" if last_err else ""))
+
+    items = []
+    for node in tree.get("tree") or []:
+        path = node.get("path") or ""
+        if node.get("type") != "blob":
+            continue
+        if not path.replace("\\", "/").lower().endswith("/skill.md") and path.lower() != "skill.md":
+            continue
+        parts = path.replace("\\", "/").split("/")
+        if path.lower() == "skill.md":
+            folder_name = repo
+        else:
+            folder_name = parts[-2] if len(parts) >= 2 else parts[0]
+        items.append({
+            "name": folder_name,
+            "folder": folder_name,
+            "description": "",
+            "path": path,
+        })
+
+    # 补 name/description：优先读 frontmatter name（与 npx skills --skill 一致）
+    for it in items:
+        try:
+            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{it['path']}"
+            r = requests.get(raw_url, headers={"User-Agent": "AdeBuddy/1.0"}, timeout=8)
+            if r.status_code != 200:
+                continue
+            text = r.text[:5000]
+            nm = re.search(r"(?m)^name:\s*[\"']?([^\n\"']+)", text)
+            if nm:
+                it["name"] = nm.group(1).strip()
+            dm = re.search(r"(?m)^description:\s*[>\-|]*\s*(.+?)(?:\n\w|\n---|\Z)", text, re.S)
+            if not dm:
+                dm = re.search(r'(?m)^description:\s*["\'](.+?)["\']', text)
+            if dm:
+                desc = re.sub(r"\s+", " ", dm.group(1)).strip()
+                it["description"] = desc[:240]
+        except Exception:
+            pass
+    return items
+
+
+def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
+    """回退：调用 npx skills add <source> -l 列出技能。"""
+    cmd = [
+        "npx", "--yes", "skills",
+        "add", source,
+        "-l", "-y",
+        "--agent", "cursor",
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            shell=(sys.platform == "win32"),
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("列出技能超时，请检查网络或仓库地址")
+    except FileNotFoundError:
+        raise RuntimeError("未找到 npx，请先安装 Node.js")
+    text = (result.stdout or "") + "\n" + (result.stderr or "")
+    skills = _parse_skills_cli_list(text)
+    if not skills and result.returncode != 0:
+        raise RuntimeError("无法列出技能，请确认仓库地址是否正确")
+    return skills
+
+
+def list_remote_skills(source_str: str) -> dict:
+    """预览远程源中的技能列表，供手动安装勾选。
+
+    返回:
+      {
+        source, skill_filter, skills:[{name,description,path?}],
+        method: 'github'|'cli'|'explicit', count
+      }
+    """
+    raw = (source_str or "").strip()
+    if not raw:
+        raise ValueError("缺少 source")
+
+    src, skill_filter = parse_shorthand(raw)
+    effective = src or raw
+
+    # 已指定 @skill → 单技能确认态
+    if skill_filter:
+        return {
+            "source": effective,
+            "skill_filter": skill_filter,
+            "skills": [{"name": skill_filter, "description": f"将安装指定技能 {skill_filter}"}],
+            "method": "explicit",
+            "count": 1,
+        }
+
+    owner, repo = resolve_github_owner_repo(effective)
+    skills = []
+    method = "cli"
+    err = None
+    if owner and repo:
+        try:
+            skills = _list_skills_via_github(owner, repo)
+            method = "github"
+        except Exception as e:
+            err = str(e)
+            skills = []
+
+    if not skills:
+        try:
+            skills = _list_skills_via_cli(effective)
+            method = "cli"
+            err = None
+        except Exception as e:
+            if not skills:
+                raise RuntimeError(err or str(e))
+
+    return {
+        "source": effective,
+        "skill_filter": "",
+        "skills": skills,
+        "method": method,
+        "count": len(skills),
+    }
+
+
 def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
     """构建安装命令，返回 (skill_name, install_command)。
 

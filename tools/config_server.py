@@ -84,7 +84,7 @@ def _load_script_module(module_name: str, file_path: Path):
 # 从 lib/ 公共库导入（替代旧脚本的 importlib 加载）
 sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills
+from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills, list_remote_skills
 from lib.plugins import install_plugin, update_env_file, add_to_installed
 from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
@@ -102,6 +102,11 @@ from lib.mcp_market import (
     SOURCE_PRIORITY,
     resolve_mcp_install,
     search_mcp_market,
+)
+from lib.skill_market import (
+    SOURCE_LABELS as SKILL_SOURCE_LABELS,
+    SOURCE_PRIORITY as SKILL_SOURCE_PRIORITY,
+    search_skill_market,
 )
 
 app = Flask(__name__, static_folder=None)
@@ -765,79 +770,106 @@ def toggle_skill_enabled(name):
 
 @app.route("/api/skills/search", methods=["GET"])
 def search_skills():
-    """聚合搜索: source=modelscope|skillssh|all"""
+    """多源 Skills 市场聚合搜索。
+
+    Query:
+      q         关键词（必填）
+      sources   逗号分隔源过滤，默认全部：
+                skillssh,smithery,modelscope,skillsmp,clawhub,anthropics,github
+      source    兼容旧参数：modelscope|skillssh|smithery|all
+      limit     每源条数，默认 12
+    """
     q = request.args.get("q", "").strip()
-    source = request.args.get("source", "all")
     if not q:
         return jsonify({"ok": False, "error": "缺少 q 参数"}), 400
 
-    results = []
-    errors = []
+    sources_raw = request.args.get("sources", "").strip()
+    legacy = request.args.get("source", "").strip().lower()
+    if sources_raw:
+        sources = [s.strip() for s in sources_raw.split(",") if s.strip()]
+    elif legacy in ("modelscope", "skillssh", "smithery", "skillsmp", "clawhub", "anthropics", "github"):
+        sources = [legacy]
+    elif legacy == "all" or not legacy:
+        sources = None
+    else:
+        sources = [s.strip() for s in legacy.split(",") if s.strip()] or None
 
-    if source in ("modelscope", "all"):
-        try:
-            resp = requests.get(
-                MODELSCOPE_SKILLS_API,
-                params={"page_number": 1, "page_size": 30, "search": q},
-                timeout=HTTP_TIMEOUT,
-                headers={"Content-Type": "application/json"},
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-            data = payload.get("data") or payload
-            items = data.get("skills") or data.get("list") or []
-            for it in items:
-                results.append({
-                    "source": "modelscope",
-                    "name": it.get("name") or it.get("skill_name") or "",
-                    "description": it.get("description") or it.get("chinese_description") or "",
-                    "install_command": it.get("install_command") or "",
-                    "install_count": it.get("install_count") or it.get("download_count") or 0,
-                    "author": it.get("owner") or it.get("author") or "",
-                    "license": it.get("license") or "",
-                    "raw": it,
-                })
-        except Exception as e:
-            errors.append(f"ModelScope: {e}")
+    try:
+        limit = int(request.args.get("limit", 12))
+    except ValueError:
+        limit = 12
 
-    if source in ("skillssh", "all"):
-        try:
-            resp = requests.get(
-                SKILLS_SH_API,
-                params={"q": q},
-                timeout=HTTP_TIMEOUT,
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-            items = payload.get("skills") or payload.get("data") or []
-            if isinstance(items, dict):
-                items = list(items.values())
-            for it in items:
-                if not isinstance(it, dict):
-                    continue
-                results.append({
-                    "source": "skillssh",
-                    "name": it.get("name") or it.get("title") or "",
-                    "description": it.get("description") or "",
-                    "install_command": f"npx skills add {it.get('source', '')}".strip(),
-                    "install_count": it.get("install_count") or 0,
-                    "author": it.get("owner") or "",
-                    "license": "",
-                    "raw": it,
-                })
-        except Exception as e:
-            errors.append(f"skills.sh: {e}")
+    try:
+        result = search_skill_market(q, sources=sources, limit_per_source=max(1, min(limit, 30)))
+        result["source_labels"] = SKILL_SOURCE_LABELS
+        result["source_order"] = list(SKILL_SOURCE_PRIORITY)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
-    return jsonify({"ok": True, "data": results, "errors": errors})
+
+@app.route("/api/skills/market-status", methods=["GET"])
+def skills_market_status():
+    """返回 Skills 市场源依赖状态。"""
+    import os
+    gh = bool(os.environ.get("GITHUB_TOKEN", "").strip())
+    smp = bool(os.environ.get("SKILLSMP_API_KEY", "").strip())
+    smithery = bool(os.environ.get("SMITHERY_API_KEY", "").strip())
+    return jsonify({
+        "ok": True,
+        "sources": {
+            "skillssh": {"configured": True, "note": "公开 API"},
+            "smithery": {
+                "configured": True,
+                "authenticated": smithery,
+                "note": "公开 GET /skills；配置 SMITHERY_API_KEY 可选",
+                "docs_url": "https://smithery.ai/docs/api-reference/skills/list-or-search-skills",
+            },
+            "modelscope": {"configured": True, "note": "公开 API"},
+            "skillsmp": {
+                "configured": True,
+                "authenticated": smp,
+                "note": "匿名配额有限；配置 SKILLSMP_API_KEY 可提高限额",
+            },
+            "clawhub": {"configured": True, "note": "公开语义搜索"},
+            "anthropics": {"configured": True, "note": "anthropics/skills 官方库"},
+            "github": {
+                "configured": True,
+                "code_search": gh,
+                "note": "仓库搜索始终可用；配置 GITHUB_TOKEN 启用 filename:SKILL.md code search",
+            },
+        },
+        "source_order": list(SKILL_SOURCE_PRIORITY),
+        "source_labels": SKILL_SOURCE_LABELS,
+    })
+
+
+@app.route("/api/skills/preview", methods=["GET"])
+def preview_skills_source():
+    """预览远程源中的技能列表（手动安装勾选前）。
+
+    Query: source=owner/repo 或 GitHub URL 或 owner/repo@skill
+    """
+    source = request.args.get("source", "").strip()
+    if not source:
+        return jsonify({"ok": False, "error": "缺少 source 参数"}), 400
+    try:
+        data = list_remote_skills(source)
+        return jsonify({"ok": True, **data})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 @app.route("/api/skills/install", methods=["GET"])
 def install_skill_sse():
     """SSE: 流式安装 skill。
-    Query: source=owner/repo[&skill=name] 或 command=完整 npx 命令
+    Query:
+      source=owner/repo[&skill=name] 或 skills=a,b,c（多选）
+      或 command=完整 npx 命令
     """
     source = request.args.get("source", "").strip()
     skill = request.args.get("skill", "").strip()
+    skills_csv = request.args.get("skills", "").strip()
     command = request.args.get("command", "").strip()
 
     # 本地预置技能：直接从 template/skills/ 复制到 config/skills/
@@ -870,15 +902,22 @@ def install_skill_sse():
     else:
         if not source:
             return Response("data: [ERROR] 缺少 source 或 command\n\n", mimetype="text/event-stream")
-        # 构造 npx skills add 命令（强制 --copy）
         parsed_source, parsed_skill = parse_shorthand(source)
         effective_source = parsed_source or source
-        effective_skill = skill or parsed_skill
-        if effective_skill:
-            cmd = f"npx skills add {effective_source} --skill {effective_skill} --copy -y"
+        selected = [s.strip() for s in skills_csv.split(",") if s.strip()]
+        if skill:
+            selected = [skill] + [s for s in selected if s != skill]
+        elif parsed_skill and not selected:
+            selected = [parsed_skill]
+
+        if selected:
+            skill_flags = " ".join(f'--skill {s}' for s in selected)
+            cmd = f"npx skills add {effective_source} {skill_flags} --copy -y"
+            skill_name = ",".join(selected)
         else:
+            # 未指定技能：仍允许安装全部（兼容旧行为）；UI 会先引导勾选
             cmd = f"npx skills add {effective_source} --copy -y"
-        skill_name = effective_skill or effective_source
+            skill_name = effective_source
 
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
@@ -888,25 +927,52 @@ def install_skill_sse():
 
 @app.route("/api/skills/<name>", methods=["DELETE"])
 def uninstall_skill(name):
-    target = DOT_AGENTS_SKILLS / name
-    if not target.exists() or not target.is_dir():
+    """卸载技能：同时清理 .agents/skills/ 与 config/skills/，并从启用清单移除。"""
+    name = (name or "").strip()
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        return jsonify({"ok": False, "error": "非法技能名"}), 400
+
+    targets = []
+    for base in (DOT_AGENTS_SKILLS, PROJECT_SKILLS_DIR):
+        cand = base / name
+        if not cand.exists() or not cand.is_dir():
+            continue
+        try:
+            cand.resolve().relative_to(base.resolve())
+        except ValueError:
+            return jsonify({"ok": False, "error": "非法路径"}), 400
+        targets.append(cand)
+
+    if not targets:
         return jsonify({"ok": False, "error": f"未找到技能: {name}"}), 404
-    # 防路径穿越
+
+    removed = []
     try:
-        target.resolve().relative_to(DOT_AGENTS_SKILLS.resolve())
-    except ValueError:
-        return jsonify({"ok": False, "error": "非法路径"}), 400
-    try:
-        shutil.rmtree(target)
-        return jsonify({"ok": True})
+        for t in targets:
+            shutil.rmtree(t)
+            removed.append(str(t.relative_to(PROJECT_ROOT)))
+        # 从启用清单移除（若存在）
+        try:
+            disable_skill(SKILL_YAML, name)
+        except Exception:
+            pass
+        return jsonify({"ok": True, "removed": removed})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/skills/<name>/skillmd", methods=["GET"])
 def get_skill_md(name):
-    target = DOT_AGENTS_SKILLS / name / "SKILL.md"
-    if not target.exists():
+    name = (name or "").strip()
+    if not name or "/" in name or "\\" in name:
+        return jsonify({"ok": False, "error": "非法技能名"}), 400
+    target = None
+    for base in (DOT_AGENTS_SKILLS, PROJECT_SKILLS_DIR, PROJECT_ROOT / "template" / "skills"):
+        cand = base / name / "SKILL.md"
+        if cand.exists():
+            target = cand
+            break
+    if not target:
         return jsonify({"ok": False, "error": "SKILL.md 不存在"}), 404
     try:
         content = target.read_text(encoding="utf-8")
