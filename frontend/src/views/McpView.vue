@@ -13,7 +13,7 @@ const { searchMcpMarket, getMcpDetail, addMarketMcpToTemplate, parsePastedMcp, a
           <button @click="mcpTab = 'market'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', mcpTab === 'market' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">市场搜索</button>
           <button @click="mcpTab = 'manual'" :class="['px-3 py-1 text-xs font-medium rounded-t border-b-2 -mb-px', mcpTab === 'manual' ? 'border-brand-500 text-brand-600' : 'border-transparent text-ink-500 hover:text-ink-700']">手动添加</button>
         </div>
-        <span class="text-[10px] text-ink-500">{{ mcpTab === 'market' ? 'ModelScope 市场' : '填写表单或粘贴 Smithery 配置' }}</span>
+        <span class="text-[10px] text-ink-500">{{ mcpTab === 'market' ? '多源聚合：Registry / Smithery / ModelScope / PulseMCP / Glama' : '填写表单或粘贴 Smithery 配置' }}</span>
       </div>
       <div v-show="mcpTab === 'market'">
         <div class="flex gap-2 mb-3">
@@ -21,16 +21,19 @@ const { searchMcpMarket, getMcpDetail, addMarketMcpToTemplate, parsePastedMcp, a
           <button @click="searchMcpMarket" class="px-4 py-1.5 text-xs bg-brand-500 text-white rounded-md hover:bg-brand-600">搜索</button>
         </div>
         <div class="grid grid-cols-2 gap-2">
-          <div v-for="s in mcpMarketResults" :key="s.id" class="border border-ink-300 rounded-md p-3 hover:border-brand-500 hover:shadow-sm transition">
-            <div class="flex justify-between items-start mb-1">
-              <div class="font-medium text-sm">{{ s.name }}</div>
-              <span v-if="s.is_hosted" class="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">Hosted</span>
+          <div v-for="s in mcpMarketResults" :key="(s.source || '') + ':' + s.id" class="border border-ink-300 rounded-md p-3 hover:border-brand-500 hover:shadow-sm transition">
+            <div class="flex justify-between items-start mb-1 gap-2">
+              <div class="font-medium text-sm truncate" :title="s.name">{{ s.name }}</div>
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="px-1.5 py-0.5 text-[10px] bg-ink-100 text-ink-600 rounded">{{ s.source_label || s.source }}</span>
+                <span v-if="s.is_hosted" class="px-1.5 py-0.5 text-[10px] bg-green-50 text-green-600 rounded">Hosted</span>
+              </div>
             </div>
-            <div class="text-[11px] text-ink-500 mb-1">{{ s.id }} · {{ s.author }}</div>
+            <div class="text-[11px] text-ink-500 mb-1 truncate" :title="s.id">{{ s.id }} · {{ s.author || s.owner || '-' }}</div>
             <div class="text-xs text-ink-700 line-clamp-2 mb-2">{{ s.description }}</div>
             <div class="flex gap-1">
-              <button @click="getMcpDetail(s.owner, s.name)" class="px-2 py-1 text-[11px] bg-ink-100 rounded hover:bg-ink-300">查看配置</button>
-              <button @click="addMarketMcpToTemplate(s.owner, s.name, s.name)" class="px-2 py-1 text-[11px] bg-brand-50 text-brand-600 rounded hover:bg-brand-100">添加到已配置</button>
+              <button @click="getMcpDetail(s)" class="px-2 py-1 text-[11px] bg-ink-100 rounded hover:bg-ink-300">查看配置</button>
+              <button @click="addMarketMcpToTemplate(s)" class="px-2 py-1 text-[11px] bg-brand-50 text-brand-600 rounded hover:bg-brand-100">添加到已配置</button>
             </div>
           </div>
           <div v-if="!mcpMarketResults.length && mcpSearched" class="col-span-2 text-center text-ink-500 py-6 text-xs">无结果</div>

@@ -97,6 +97,12 @@ from lib.provider_catalog import (
     load_provider_catalog,
     needs_choice_for_candidates,
 )
+from lib.mcp_market import (
+    SOURCE_LABELS,
+    SOURCE_PRIORITY,
+    resolve_mcp_install,
+    search_mcp_market,
+)
 
 app = Flask(__name__, static_folder=None)
 
@@ -936,65 +942,90 @@ def mcp_save():
 
 @app.route("/api/mcp/search", methods=["GET"])
 def mcp_search():
+    """多源 MCP 市场搜索。
+
+    Query:
+      q         关键词（必填）
+      sources   逗号分隔源过滤，默认全部：
+                registry,smithery,modelscope,pulsemcp,glama
+      limit     每源条数，默认 12
+    """
     q = request.args.get("q", "").strip()
-    page = int(request.args.get("page", 1))
     if not q:
         return jsonify({"ok": False, "error": "缺少 q 参数"}), 400
+    sources_raw = request.args.get("sources", "").strip()
+    sources = [s.strip() for s in sources_raw.split(",") if s.strip()] or None
     try:
-        # ModelScope 列表用 PUT
-        resp = requests.put(
-            MODELSCOPE_MCP_LIST_API,
-            json={"page_number": page, "page_size": 20, "search": q},
-            headers={"Content-Type": "application/json"},
-            timeout=HTTP_TIMEOUT,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-        data = payload.get("data") or payload
-        servers = data.get("servers") or data.get("list") or []
-        results = []
-        for s in servers:
-            sid = s.get("id") or s.get("mcp_server_id") or ""
-            # id 格式 @owner/name
-            owner = ""
-            name = s.get("name") or s.get("en_name") or ""
-            if sid.startswith("@") and "/" in sid:
-                owner = sid[1:].split("/")[0]
-            results.append({
-                "id": sid,
-                "name": name,
-                "owner": owner,
-                "description": s.get("description") or s.get("chinese_description") or "",
-                "author": s.get("author") or owner,
-                "categories": s.get("categories") or [],
-                "is_hosted": s.get("is_hosted", False),
-                "raw": s,
-            })
-        return jsonify({"ok": True, "data": results, "total": data.get("total_count", 0)})
+        limit = int(request.args.get("limit", 12))
+    except ValueError:
+        limit = 12
+    try:
+        result = search_mcp_market(q, sources=sources, limit_per_source=max(1, min(limit, 30)))
+        result["source_labels"] = SOURCE_LABELS
+        result["source_order"] = list(SOURCE_PRIORITY)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/mcp/detail", methods=["GET"])
 def mcp_detail():
+    """获取 MCP 详情 / 可安装配置。
+
+    兼容旧参数 owner+name（默认 modelscope）；
+    新参数：source + id（及可选 owner/name）。
+    """
+    source = (request.args.get("source") or "").strip().lower() or "modelscope"
+    sid = request.args.get("id", "").strip()
     owner = request.args.get("owner", "").strip()
     name = request.args.get("name", "").strip()
-    if not owner or not name:
-        return jsonify({"ok": False, "error": "缺少 owner/name"}), 400
+    if source == "modelscope" and (not owner or not name) and not sid:
+        return jsonify({"ok": False, "error": "缺少 owner/name 或 id"}), 400
+    if source != "modelscope" and not sid and not (owner and name) and not name:
+        return jsonify({"ok": False, "error": "缺少 id 或 owner/name"}), 400
+
+    detail_data: Any = None
+    install_info: Any = None
+    install_error: Optional[str] = None
+
+    # 先尽量拉取原始详情（便于「查看配置」）
     try:
-        url = MODELSCOPE_MCP_DETAIL_API.format(owner=owner, name=name)
-        resp = requests.get(
-            url,
-            params={"get_operational_url": "true"},
-            headers={"Content-Type": "application/json"},
-            timeout=HTTP_TIMEOUT,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-        data = payload.get("data") or payload
-        return jsonify({"ok": True, "data": data})
+        if source == "modelscope":
+            from lib.mcp_market import ModelScopeClient
+            o, n = owner, name
+            if (not o or not n) and sid.startswith("@") and "/" in sid:
+                o, n = sid[1:].split("/", 1)
+            detail_data = ModelScopeClient().detail(o, n)
+        elif source == "registry":
+            from lib.mcp_market import RegistryClient
+            detail_data = RegistryClient().detail(sid or name)
+        elif source == "smithery":
+            from lib.mcp_market import SmitheryClient
+            detail_data = SmitheryClient().detail(sid or name)
+        elif source == "glama":
+            from lib.mcp_market import GlamaClient
+            ns, slug = owner, name
+            if (not ns or not slug) and "/" in (sid or ""):
+                ns, slug = sid.split("/", 1)
+            detail_data = GlamaClient().detail(ns, slug)
+        elif source == "pulsemcp":
+            from lib.mcp_market import PulseMCPClient
+            hits = PulseMCPClient().search(sid or name, limit=5)
+            detail_data = (hits[0].get("raw") if hits else None) or {"id": sid or name}
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": f"获取详情失败: {e}"}), 500
+
+    try:
+        install_info = resolve_mcp_install(source=source, id=sid, owner=owner, name=name)
+    except Exception as e:
+        install_error = str(e)
+
+    return jsonify({
+        "ok": True,
+        "data": detail_data,
+        "install": install_info,
+        "install_error": install_error,
+    })
 
 
 # ============================================================
