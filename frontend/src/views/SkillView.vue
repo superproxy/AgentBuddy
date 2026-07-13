@@ -33,7 +33,7 @@ const SUGGESTS = ['react', '设计', 'API', 'testing', 'docx']
 
 const drawerSub = computed(() => {
   if (skillTab.value === 'market') return '多源聚合 · skills.sh / Smithery / ModelScope / SkillsMP / ClawHub / Anthropic / GitHub'
-  if (skillTab.value === 'local') return 'template/skills 本地预置'
+  if (skillTab.value === 'local') return '本地预置（template + config + .agents 三源合并）'
   return '先解析仓库技能，再勾选安装'
 })
 
@@ -147,7 +147,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     <div class="kpis">
       <div class="kpi brand"><b>{{ installedSkills.length }}</b><span>已安装</span><em>.agents / config 并集</em></div>
       <div class="kpi live"><b>{{ enabledInstalledCount }}</b><span>启用中</span><em>写入 skill.yaml</em></div>
-      <div class="kpi"><b>{{ localSkills.length }}</b><span>本地预置</span><em>template/skills</em></div>
+      <div class="kpi"><b>{{ localSkills.length }}</b><span>本地预置</span><em>三源合并</em></div>
       <div class="kpi warn"><b>{{ disabledInstalledCount }}</b><span>已禁用</span><em>不会同步到 IDE</em></div>
     </div>
 
