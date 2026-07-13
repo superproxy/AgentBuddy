@@ -272,6 +272,131 @@ class ProviderCatalogTests(unittest.TestCase):
         self.assertEqual(applied["base_url"], catalog_url)
         self.assertEqual(env["llm"]["openrouter"]["openai"]["base_url"], catalog_url)
 
+    def test_catalog_official_base_urls(self):
+        """官方厂商 catalog URL 必须是可探测的权威域名。"""
+        openai = next(c for c in self.catalog if c["provider"] == "openai")
+        self.assertIn("api.openai.com", openai["protocols"]["openai"]["base_url"])
+        anthropic = next(c for c in self.catalog if c["provider"] == "anthropic")
+        self.assertIn("api.anthropic.com", anthropic["protocols"]["anthropic"]["base_url"])
+        deepseek = next(c for c in self.catalog if c["provider"] == "deepseek")
+        self.assertIn("api.deepseek.com", deepseek["protocols"]["openai"]["base_url"])
+
+    def test_probe_endpoints_prefer_authoritative_urls(self):
+        openai_urls = provider_catalog._probe_urls_for_provider("openai")
+        self.assertEqual(openai_urls[0][0], "https://api.openai.com/v1")
+        moon_urls = [u for u, _ in provider_catalog._probe_urls_for_provider("moonshot")]
+        self.assertIn("https://api.moonshot.ai/v1", moon_urls)
+        self.assertIn("https://api.moonshot.cn/v1", moon_urls)
+
+    def test_fingerprint_deepseek_hex_exact_32(self):
+        fp = provider_catalog.classify_api_key("sk-" + "a" * 32)
+        self.assertEqual(fp["id"], "deepseek_hex")
+        # 超过 32 hex → 走 generic_sk，避免误锁 DeepSeek
+        fp_long = provider_catalog.classify_api_key("sk-" + "a" * 40)
+        self.assertEqual(fp_long["id"], "generic_sk")
+        fp_alnum = provider_catalog.classify_api_key("sk-abcdefABCDEF1234567890xy")
+        self.assertEqual(fp_alnum["id"], "generic_sk")
+
+    def test_score_model_signature(self):
+        self.assertEqual(
+            provider_catalog.score_model_signature("deepseek", ["deepseek-chat"]), 15,
+        )
+        self.assertEqual(
+            provider_catalog.score_model_signature("openai", ["gpt-4o-mini"]), 15,
+        )
+        self.assertEqual(
+            provider_catalog.score_model_signature("deepseek", ["gpt-4o"]), -5,
+        )
+        self.assertEqual(
+            provider_catalog.score_model_signature("openai", []), 0,
+        )
+
+    def test_rank_probe_hits_unique_lock(self):
+        locked = provider_catalog.rank_probe_hits([
+            ("deepseek", "openai", 100),
+            ("openai", "openai", 85),
+            ("moonshot", "openai", 85),
+        ])
+        self.assertEqual(len(locked), 1)
+        self.assertEqual(locked[0][0], "deepseek")
+        # 分差不足 → 保留多候选
+        multi = provider_catalog.rank_probe_hits([
+            ("deepseek", "openai", 100),
+            ("openai", "openai", 98),
+        ])
+        self.assertEqual(len(multi), 2)
+
+    def test_needs_choice_threshold(self):
+        self.assertFalse(provider_catalog.needs_choice_for_candidates([{"score": 100}]))
+        self.assertFalse(provider_catalog.needs_choice_for_candidates([
+            {"score": 100}, {"score": 85},
+        ]))
+        self.assertTrue(provider_catalog.needs_choice_for_candidates([
+            {"score": 100}, {"score": 98},
+        ]))
+        self.assertTrue(provider_catalog.needs_choice_for_candidates([
+            {"score": 85}, {"score": 55},
+        ]))
+
+    def test_host_match_no_path_false_positive(self):
+        """path 含厂商关键词不应误匹配；host 才算。"""
+        self.assertFalse(provider_catalog._host_matches("example.com", "moonshot"))
+        self.assertTrue(provider_catalog._host_matches("api.moonshot.ai", "moonshot"))
+        self.assertTrue(provider_catalog._host_matches("api.moonshot.cn", "moonshot"))
+        rule = next(r for r in provider_catalog.DETECT_RULES if r["provider"] == "moonshot")
+        self.assertFalse(
+            provider_catalog._url_match("https://example.com/docs/moonshot-api", rule),
+        )
+        self.assertTrue(
+            provider_catalog._url_match("https://api.moonshot.cn/v1", rule),
+        )
+
+    def test_probe_signature_locks_deepseek(self):
+        """鉴权 200 + 模型签名命中 → 唯一锁定 deepseek。"""
+        def fake_probe(api_key, base_url, protocol="openai"):
+            if "deepseek.com" in base_url:
+                return {
+                    "ok": True, "status": 200,
+                    "model_ids": ["deepseek-chat", "deepseek-reasoner"],
+                }
+            return {"ok": False, "status": 401, "error": "auth_failed", "model_ids": []}
+
+        key = "sk-" + "b" * 32
+        with mock.patch.object(provider_catalog, "probe_endpoint", side_effect=fake_probe):
+            hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=True)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["provider"], "deepseek")
+        self.assertGreaterEqual(hits[0]["score"], 95)
+        self.assertFalse(provider_catalog.needs_choice_for_candidates(hits))
+
+    def test_probe_signature_locks_openai(self):
+        def fake_probe(api_key, base_url, protocol="openai"):
+            if "api.openai.com" in base_url:
+                return {"ok": True, "status": 200, "model_ids": ["gpt-4o", "o1-mini"]}
+            return {"ok": False, "status": 401, "error": "auth_failed", "model_ids": []}
+
+        key = "sk-generic-openai-key-abcdefgh"
+        with mock.patch.object(provider_catalog, "probe_endpoint", side_effect=fake_probe):
+            hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=True)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["provider"], "openai")
+
+    def test_probe_dual_success_ranks_by_signature(self):
+        """双端点都 200 时，签名命中者排前并可唯一锁定。"""
+        def fake_probe(api_key, base_url, protocol="openai"):
+            if "deepseek.com" in base_url:
+                return {"ok": True, "status": 200, "model_ids": ["deepseek-chat"]}
+            if "api.openai.com" in base_url:
+                # 鉴权通但无 OpenAI 签名模型（空列表 → 基分 85）
+                return {"ok": True, "status": 200, "model_ids": []}
+            return {"ok": False, "status": 403, "error": "auth_failed", "model_ids": []}
+
+        key = "sk-" + "c" * 32
+        with mock.patch.object(provider_catalog, "probe_endpoint", side_effect=fake_probe):
+            hits = provider_catalog.detect_providers(key, catalog=self.catalog, probe=True)
+        self.assertEqual(hits[0]["provider"], "deepseek")
+        self.assertEqual(len(hits), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
