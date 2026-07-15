@@ -124,6 +124,25 @@ export const useHooksStore = defineStore('hooks', () => {
     dirty.value = true
   }
 
+  function moveHook(event: HookEvent, from: number, to: number) {
+    const groups = hooksData.value.hooks[event]
+    if (!groups) return
+    if (from === to || from < 0 || to < 0 || from >= groups.length || to >= groups.length) return
+    const [item] = groups.splice(from, 1)
+    groups.splice(to, 0, item)
+    dirty.value = true
+  }
+
+  function moveCommand(event: HookEvent, groupIndex: number, from: number, to: number) {
+    const groups = hooksData.value.hooks[event]
+    if (!groups || !groups[groupIndex]) return
+    const cmds = groups[groupIndex].hooks
+    if (from === to || from < 0 || to < 0 || from >= cmds.length || to >= cmds.length) return
+    const [item] = cmds.splice(from, 1)
+    cmds.splice(to, 0, item)
+    dirty.value = true
+  }
+
   function onContentChange() {
     dirty.value = true
   }
@@ -165,6 +184,8 @@ export const useHooksStore = defineStore('hooks', () => {
     deleteHook,
     addCommand,
     deleteCommand,
+    moveHook,
+    moveCommand,
     onContentChange,
     syncHooks,
     exportHooks,
