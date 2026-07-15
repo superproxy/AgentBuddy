@@ -85,7 +85,7 @@ def _load_script_module(module_name: str, file_path: Path):
 # 从 lib/ 公共库导入（替代旧脚本的 importlib 加载）
 sys.path.insert(0, str(SCRIPTS_DIR))
 from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills, list_remote_skills
+from lib.skills import build_install_command, parse_shorthand, enable_skill, disable_skill, get_enabled_skills, list_remote_skills, ensure_npx_yes
 from lib.plugins import install_plugin, update_env_file, add_to_installed
 from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
@@ -325,6 +325,7 @@ def _stream_process(cmd: str, cwd: Optional[Path] = None):
             cmd,
             shell=True,
             cwd=str(cwd) if cwd else None,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -356,6 +357,7 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
             cmd,
             shell=True,
             cwd=str(cwd) if cwd else None,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -943,13 +945,14 @@ def install_skill_sse():
 
         if selected:
             skill_flags = " ".join(f'--skill {s}' for s in selected)
-            cmd = f"npx skills add {effective_source} {skill_flags} --copy -y"
+            cmd = f"npx --yes skills add {effective_source} {skill_flags} --copy -y"
             skill_name = ",".join(selected)
         else:
             # 未指定技能：仍允许安装全部（兼容旧行为）；UI 会先引导勾选
-            cmd = f"npx skills add {effective_source} --copy -y"
+            cmd = f"npx --yes skills add {effective_source} --copy -y"
             skill_name = effective_source
 
+    cmd = ensure_npx_yes(cmd)
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
         mimetype="text/event-stream",
@@ -2274,7 +2277,7 @@ def install_plugin_sse():
                         yield f"data: [!] source 安装失败(rc={rc})，尝试 find-skills\n\n"
 
                 # Step 3: find-skills 按名查找
-                find_cmd = f"npx skills add {skill_name} -y"
+                find_cmd = f"npx --yes skills add {skill_name} -y"
                 rc = yield from _stream_process_rc(find_cmd, cwd=PROJECT_ROOT)
                 if rc == 0 and (is_whole_repo or _skill_exists(skill_name)):
                     yield f"data: [OK] Skill installed from marketplace: {skill_name}\n\n"

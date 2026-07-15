@@ -91,7 +91,7 @@ def _skills_add_cmd(spec: str) -> str:
     spec = (spec or "").strip()
     if not spec:
         return ""
-    return f"npx skills add {spec} --copy -y"
+    return f"npx --yes skills add {spec} --copy -y"
 
 
 def _github_tree_to_spec(url: str, skill_name: str = "") -> str:

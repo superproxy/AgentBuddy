@@ -442,7 +442,7 @@ def generate_plugin_from_csv(
             })
         else:
             # 构建完整的远程安装命令
-            plugin_skills.append(f"npx skills add {source} --skill {skill_name} -y")
+            plugin_skills.append(f"npx --yes skills add {source} --skill {skill_name} -y")
 
     plugin_config = {
         "name": plugin_name,
