@@ -86,6 +86,12 @@ export const usePluginStore = defineStore('plugin', () => {
       selectedForExport.value = new Set(plugins.value.map(p => p.file))
     }
   }
+  function selectFilesForExport(files: string[]) {
+    selectedForExport.value = new Set(files)
+  }
+  function clearExportSelection() {
+    selectedForExport.value = new Set()
+  }
   async function exportSelectedPlugins() {
     const files = Array.from(selectedForExport.value)
     if (!files.length) {
@@ -98,10 +104,7 @@ export const usePluginStore = defineStore('plugin', () => {
   function triggerImportPlugin() {
     importPluginInput.value && importPluginInput.value.click()
   }
-  async function onImportPluginFile(e: Event) {
-    const input = e.target as HTMLInputElement
-    const f = input.files && input.files[0]
-    if (!f) return
+  async function importPluginFile(f: File) {
     // 统一用 FormData 上传（支持 .zip 含 skills 包 和 .yaml 单文件）
     const fd = new FormData()
     fd.append('file', f)
@@ -110,9 +113,7 @@ export const usePluginStore = defineStore('plugin', () => {
       ok: boolean; name?: string; error?: string; msg?: string
       plugin_count?: number; skill_count?: number; skipped?: any[]
     }
-    input.value = ''
     if (res.ok) {
-      // 构建 toast 摘要
       const parts: string[] = []
       if (res.plugin_count) parts.push(`${res.plugin_count} 个插件`)
       if (res.skill_count) parts.push(`${res.skill_count} 个技能`)
@@ -139,6 +140,13 @@ export const usePluginStore = defineStore('plugin', () => {
       }
     } else ui.toast('导入失败: ' + (res.error || ''), 'err')
   }
+  async function onImportPluginFile(e: Event) {
+    const input = e.target as HTMLInputElement
+    const f = input.files && input.files[0]
+    if (!f) return
+    input.value = ''
+    await importPluginFile(f)
+  }
   async function onTogglePlugin(p: PluginItem, checked: boolean) {
     if (installingPlugin.value) { ui.toast('正在安装其他插件，请稍候', 'warn'); return }
     if (checked) {
@@ -161,7 +169,7 @@ export const usePluginStore = defineStore('plugin', () => {
   }
   function editPlugin(file: string) {
     selectedPluginFile.value = file
-    ui.toast('请在顶部切换到「插件构建」tab 继续编辑', 'warn')
+    ui.toast('已打开「插件构建」继续编辑')
   }
   async function publishToMarketplace(file: string) {
     const tags = prompt('请输入标签（逗号分隔，可留空）：', '')
@@ -173,7 +181,8 @@ export const usePluginStore = defineStore('plugin', () => {
     plugins, selectedPluginFile, installingPlugin, importPluginInput,
     selectedForExport,
     refreshPluginList, exportPlugin, triggerImportPlugin,
-    toggleSelectForExport, toggleSelectAllForExport, exportSelectedPlugins,
-    onImportPluginFile, onTogglePlugin, editPlugin, publishToMarketplace,
+    toggleSelectForExport, toggleSelectAllForExport, selectFilesForExport, clearExportSelection,
+    exportSelectedPlugins,
+    importPluginFile, onImportPluginFile, onTogglePlugin, editPlugin, publishToMarketplace,
   }
 })

@@ -119,7 +119,7 @@ onBeforeUnmount(() => {
       <SkillView v-else-if="tab === 'skill'" />
       <CommandView v-else-if="tab === 'command'" />
       <SubagentView v-else-if="tab === 'subagent'" />
-      <PluginView v-else-if="tab === 'plugin'" />
+      <PluginView v-else-if="tab === 'plugin'" @go-tab="tab = $event" />
       <PluginBuildView v-else-if="tab === 'plugin-build'" />
       <RulesView v-else-if="tab === 'rules'" />
       <HooksView v-else-if="tab === 'hooks'" />
