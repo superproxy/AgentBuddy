@@ -7,8 +7,24 @@ import shutil
 import sys
 from pathlib import Path
 
-# scripts/lib/paths.py → scripts/lib/ → scripts/ → 项目根
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+def _resolve_project_root() -> Path:
+    """Frozen-aware 项目根定位。
+
+    macOS .app bundle 安装到 /Applications 后不可写，
+    改用 ~/Library/Application Support/AdeBuddy/。
+    """
+    if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root.mkdir(parents=True, exist_ok=True)
+            return data_root
+        return Path(sys.executable).parent
+    # scripts/lib/paths.py → scripts/lib/ → scripts/ → 项目根
+    return Path(__file__).resolve().parents[2]
+
+
+PROJECT_ROOT = _resolve_project_root()
 
 
 def make_dir_link(src: Path, dst: Path, prefer_copy: bool = True) -> str:

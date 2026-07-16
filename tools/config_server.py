@@ -26,8 +26,14 @@ def _resolve_project_root() -> Path:
     """Frozen-aware 项目根定位。
     - dev: 仓库根（tools/config_server.py 的上两级）
     - frozen (PyInstaller onedir): exe 所在目录（_MEIPASS == exe dir，可写）
+    - macOS .app bundle: exe 在 /Applications 下不可写，改用
+      ~/Library/Application Support/AdeBuddy/ 作为用户数据目录
     """
     if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root.mkdir(parents=True, exist_ok=True)
+            return data_root
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent.parent
 
@@ -2918,7 +2924,7 @@ def save_rule():
     content = body.get("content") or ""
     if not rel:
         return jsonify({"ok": False, "error": "缺少 path 参数"}), 400
-    # 安全：路径不能含 .. 
+    # 安全：路径不能含 ..
     if ".." in Path(rel).parts:
         return jsonify({"ok": False, "error": "非法路径"}), 400
     out_path = (RULES_DIR / rel).resolve()
@@ -3619,4 +3625,67 @@ def ai_save():
                         "name": data["name"]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ai/chat", methods=["POST"])
+def ai_chat():
+    """AI 多轮对话生成插件。SSE 流式输出。
+
+    Body: {session_id?, message, level?, model?}
+    - 首次对话不传 session_id，后端创建新会话
+    - 后续对话传 session_id 继续会话
+    """
+    body = request.get_json(force=True)
+    message = (body.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "缺少 message"}), 400
+
+    session_id = (body.get("session_id") or "").strip()
+    level = (body.get("level") or "").strip()
+    model = (body.get("model") or "").strip() or "glm-5-2-260617"
+
+    from ai_generator.generator import (
+        create_session, generate_plugin_chat, clear_session, get_session_config
+    )
+
+    # 创建或复用会话
+    if not session_id or not get_session_config and session_id:
+        session_id = create_session(level=level)
+    else:
+        # 检查会话是否存在
+        from ai_generator.generator import get_session
+        if not get_session(session_id):
+            session_id = create_session(level=level)
+
+    def generate():
+        for chunk in generate_plugin_chat(session_id, message, PROJECT_ROOT, preferred_model=model):
+            for line in chunk.split("\n"):
+                yield f"data: {line}\n\n"
+
+    # 在第一个 data 之前发送 session_id
+    def generate_with_session():
+        yield f"data: [SESSION] {session_id}\n\n"
+        yield from generate()
+
+    return Response(stream_with_context(generate_with_session()),
+                    mimetype="text/event-stream")
+
+
+@app.route("/api/ai/session/<session_id>/config", methods=["GET"])
+def ai_session_config(session_id: str):
+    """获取会话中最新的生成配置。"""
+    from ai_generator.generator import get_session_config
+    config = get_session_config(session_id)
+    if config:
+        return jsonify({"ok": True, "content": config})
+    return jsonify({"ok": False, "error": "会话中暂无配置"}), 404
+
+
+@app.route("/api/ai/session/<session_id>", methods=["DELETE"])
+def ai_session_clear(session_id: str):
+    """清除会话。"""
+    from ai_generator.generator import clear_session
+    if clear_session(session_id):
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "会话不存在"}), 404
 

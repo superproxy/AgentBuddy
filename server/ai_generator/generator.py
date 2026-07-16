@@ -744,3 +744,278 @@ def generate_plugin(
     except Exception as e:
         yield f"[ERROR] 生成失败: {e}"
         yield "[DONE]"
+
+
+# ============================================================
+# 多轮对话会话管理
+# ============================================================
+import uuid as _uuid
+
+# 内存会话存储：{session_id: {"messages": [...], "level": "...", "config": "...", "project_root": Path}}
+_sessions: dict[str, dict] = {}
+
+
+def create_session(level: str = "") -> str:
+    """创建新会话，返回 session_id。"""
+    sid = _uuid.uuid4().hex[:12]
+    _sessions[sid] = {
+        "messages": [],
+        "level": level,
+        "config": "",
+        "project_root": None,
+    }
+    return sid
+
+
+def get_session(sid: str) -> dict | None:
+    return _sessions.get(sid)
+
+
+def clear_session(sid: str) -> bool:
+    if sid in _sessions:
+        del _sessions[sid]
+        return True
+    return False
+
+
+def get_session_config(sid: str) -> str:
+    """获取会话中最新的生成的 YAML 配置。"""
+    session = _sessions.get(sid)
+    return session.get("config", "") if session else ""
+
+
+def generate_plugin_chat(
+    session_id: str,
+    user_message: str,
+    project_root: Path,
+    preferred_model: str = "",
+) -> Generator[str, None, None]:
+    """多轮对话生成插件，携带历史消息。
+
+    每次调用追加一条 user 消息，运行 Agent 循环，输出回复。
+    支持用户后续优化请求（如"增加一个 MCP"、"减少 skills"）。
+
+    SSE 标记协议：
+        [TURN] N          — 轮次开始
+        [TOOL] name(args) — 工具调用
+        [TOOL_RESULT] N条 — 工具结果摘要
+        [CONFIG]          — YAML 配置内容开始
+        [DONE]            — 本轮结束
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        yield "[ERROR] 会话不存在，请重新开始"
+        yield "[DONE]"
+        return
+
+    level = session.get("level", "")
+    llm_cfg = _load_llm_config(project_root)
+    provider = _get_active_provider(llm_cfg, preferred_model=preferred_model)
+
+    if not provider.get("api_key"):
+        yield "[ERROR] 未找到已配置的 LLM provider（需要 api_key），请在 LLM 配置 tab 设置"
+        yield "[DONE]"
+        return
+
+    tavily_key = _load_tavily_key(project_root)
+
+    # 首次对话：构建 system prompt
+    if not session["messages"]:
+        system_prompt = _build_system_prompt(project_root, level=level)
+        session["messages"].append({"role": "system", "content": system_prompt})
+        yield f"[INFO] 使用 {provider['provider']}/{provider['protocol']} ({provider['model']})"
+        if level:
+            yield f"[INFO] 工具集级别: {level}"
+        if tavily_key:
+            yield "[INFO] 已启用联网搜索（Tavily + 市场搜索）"
+
+    # 追加用户消息
+    session["messages"].append({"role": "user", "content": user_message})
+
+    yield f"[TURN] {len([m for m in session['messages'] if m['role'] == 'user'])}"
+    yield f"[USER] {user_message}"
+    yield ""
+
+    try:
+        from openai import OpenAI
+
+        base_url = provider["base_url"] or "https://api.openai.com/v1"
+        client = OpenAI(api_key=provider["api_key"], base_url=base_url)
+
+        max_rounds = 5
+        final_content = ""
+
+        for round_num in range(max_rounds):
+            response = client.chat.completions.create(
+                model=provider["model"],
+                messages=session["messages"],
+                tools=_AGENT_TOOLS,
+                tool_choice="auto",
+                temperature=0.7,
+            )
+
+            msg = response.choices[0].message
+
+            if msg.tool_calls:
+                # 记录 assistant 消息（含 tool_calls）
+                session["messages"].append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            }
+                        }
+                        for tc in msg.tool_calls
+                    ]
+                })
+
+                for tc in msg.tool_calls:
+                    func_name = tc.function.name
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except Exception:
+                        args = {}
+
+                    query = args.get("query", "")[:50]
+                    yield f"[TOOL] {func_name}({query})"
+
+                    # 执行工具
+                    if func_name == "web_search":
+                        results = _tavily_search(args.get("query", ""), tavily_key)
+                        summary = f"{len(results)} 条结果"
+                    elif func_name == "search_market":
+                        results = _search_market(args.get("query", ""), args.get("type", "both"))
+                        summary = f"{len(results.get('skills', []))} skills, {len(results.get('mcps', []))} mcps"
+                    else:
+                        results = [{"error": f"未知工具: {func_name}"}]
+                        summary = "未知工具"
+
+                    yield f"[TOOL_RESULT] {summary}"
+
+                    session["messages"].append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(results, ensure_ascii=False),
+                    })
+
+                continue  # 继续下一轮
+
+            # 没有工具调用，LLM 输出文本
+            final_content = msg.content or ""
+            session["messages"].append({
+                "role": "assistant",
+                "content": final_content,
+            })
+
+            # 检查是否是问询模式（包含 [QUESTION]）
+            if "[QUESTION]" in final_content:
+                yield "[PHASE] interview"
+                # 提取问题和推荐答案
+                for line in final_content.split("\n"):
+                    line = line.strip()
+                    if line.startswith("[QUESTION]"):
+                        yield line
+                    elif line.startswith("[RECOMMEND]"):
+                        yield line
+                    elif line and not line.startswith("["):
+                        yield line
+                yield "[DONE]"
+                return  # 等待用户回答后继续
+
+            # 检查用户是否说"完成"/"直接生成"
+            user_lower = user_message.lower()
+            if any(kw in user_lower for kw in ["完成", "直接生成", "可以了", "生成吧", "done", "finish", "skip"]):
+                # 用户要求生成，强制输出 YAML
+                # 如果当前回复没有 YAML，再做一次不带工具的调用
+                yaml_content = _extract_yaml(final_content)
+                if not yaml_content:
+                    gen_response = client.chat.completions.create(
+                        model=provider["model"],
+                        messages=session["messages"] + [
+                            {"role": "user", "content": "请直接输出最终的 plugin.yaml 配置，不要提问。"}
+                        ],
+                        temperature=0.5,
+                    )
+                    final_content = gen_response.choices[0].message.content or ""
+                    session["messages"].append({"role": "assistant", "content": final_content})
+                    yaml_content = _extract_yaml(final_content)
+
+                if yaml_content:
+                    session["config"] = yaml_content
+                    yield "[PHASE] generate"
+                    yield "[CONFIG]"
+                    yield yaml_content
+                else:
+                    yield final_content
+                yield "[DONE]"
+                return
+
+            # 尝试提取 YAML（直接生成模式）
+            yaml_content = _extract_yaml(final_content)
+            if yaml_content:
+                session["config"] = yaml_content
+                yield "[PHASE] generate"
+                yield "[CONFIG]"
+                yield yaml_content
+            else:
+                yield final_content
+
+            yield "[DONE]"
+            return
+
+        # 达到最大轮次
+        yield "[WARN] 达到最大搜索轮次（5轮），强制生成"
+        gen_response = client.chat.completions.create(
+            model=provider["model"],
+            messages=session["messages"] + [
+                {"role": "user", "content": "请直接输出最终的 plugin.yaml 配置，不要再提问。"}
+            ],
+            temperature=0.5,
+        )
+        final_content = gen_response.choices[0].message.content or ""
+        session["messages"].append({"role": "assistant", "content": final_content})
+        yaml_content = _extract_yaml(final_content)
+        if yaml_content:
+            session["config"] = yaml_content
+            yield "[PHASE] generate"
+            yield "[CONFIG]"
+            yield yaml_content
+        else:
+            yield final_content
+        yield "[DONE]"
+
+    except ImportError:
+        yield "[ERROR] openai SDK 未安装，请执行: pip install openai"
+        yield "[DONE]"
+    except Exception as e:
+        yield f"[ERROR] 生成失败: {e}"
+        yield "[DONE]"
+
+
+def _extract_yaml(text: str) -> str:
+    """从 LLM 输出中提取 YAML 配置。"""
+    # 1. 优先提取 ```yaml ... ``` 代码块
+    import re
+    match = re.search(r'```ya?ml?\n([\s\S]*?)```', text)
+    if match:
+        return match.group(1).strip()
+    # 2. 找 name: 开头的 YAML
+    lines = text.split("\n")
+    filtered = [l for l in lines if not l.startswith("[") and not l.startswith("#")]
+    for i, line in enumerate(filtered):
+        if line.strip().startswith("name:"):
+            # 向后扫描到非 YAML 行
+            end = len(filtered)
+            for j in range(i + 1, len(filtered)):
+                trimmed = filtered[j].strip()
+                if trimmed and not filtered[j].startswith(" ") and not filtered[j].startswith("\t") and not filtered[j].startswith("-"):
+                    if not re.match(r'^[a-zA-Z_]+:', trimmed):
+                        end = j
+                        break
+            return "\n".join(filtered[i:end]).strip()
+    return ""

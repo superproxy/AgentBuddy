@@ -18,8 +18,17 @@ import webbrowser
 from pathlib import Path
 
 def _resolve_project_root() -> Path:
-    """Frozen-aware：dev 用 __file__ 上级，frozen 用 exe 所在目录。"""
+    """Frozen-aware：dev 用 __file__ 上级，frozen 用 exe 所在目录。
+
+    macOS .app bundle 安装到 /Applications 后，exe 所在目录不可写
+    （root 权限），改用 ~/Library/Application Support/AdeBuddy/ 作为
+    用户数据目录（config/、.agents/ 等可写资源均落在此处）。
+    """
     if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            data_root = Path.home() / "Library" / "Application Support" / "AdeBuddy"
+            data_root.mkdir(parents=True, exist_ok=True)
+            return data_root
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
@@ -107,21 +116,54 @@ def _wait_for_server(url: str, timeout: float = 15.0) -> bool:
     return False
 
 
+def _make_writable(path: Path) -> None:
+    """递归设置目录权限：目录 rwxr-xr-x，文件 rw-r--r--。
+
+    macOS .app bundle 内的文件由 root 安装，权限为 r--r--r--（只读）。
+    shutil.copy2 / copytree 会保留源权限，导致后续覆盖写入失败。
+    复制后强制设为用户可写。
+    """
+    import os
+    if path.is_dir():
+        os.chmod(path, 0o755)
+        for entry in path.rglob("*"):
+            if entry.is_dir():
+                os.chmod(entry, 0o755)
+            else:
+                os.chmod(entry, 0o644)
+    elif path.is_file():
+        os.chmod(path, 0o644)
+
+
+def _remove_readonly(func, path, excinfo):
+    """shutil.rmtree onerror 回调：移除只读文件后重试。
+
+    macOS .app bundle 复制过来的文件可能只读，rmtree 删除时失败，
+    先 chmod 再重试。
+    """
+    import os
+    import stat
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
 def _bootstrap_from_bundle() -> None:
-    """frozen 模式每次启动：把 bundled 只读资源从 _MEIPASS 覆盖到 exe 目录（PROJECT_ROOT）。
+    """frozen 模式每次启动：把 bundled 资源从 _MEIPASS 同步到数据目录（PROJECT_ROOT）。
 
-    这样所有脚本的 `source_dir = script_dir.parent` 逻辑无需改动即可工作，
-    用户数据（llm.yaml/mcp.yaml/config/）也在 exe 目录可写。
+    平台差异：
+    - Windows/Linux: PROJECT_ROOT == exe 所在目录（可写），用 dirs_exist_ok 合并覆盖
+    - macOS: PROJECT_ROOT == ~/Library/Application Support/AdeBuddy/（可写），
+      .app bundle 内源文件为 root 只读，需先删旧只读目录再拷贝，拷贝后 chmod 设可写
 
-    程序资源（scripts/template/tools/AGENTS.md）每次启动都用 _internal 的新版本覆盖，
-    保证升级后顶层副本与 bundle 一致；用户数据（config/、.agents/）不在 resources 列表，
-    天然保留不被覆盖。
+    程序资源（scripts/template/tools/AGENTS.md）每次启动用 bundle 新版本覆盖；
+    用户数据（config/、.agents/）不在 resources 列表，天然保留不被覆盖。
     """
     if not getattr(sys, "frozen", False):
         return
     import shutil
     meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-    project = Path(sys.executable).parent
+    project = PROJECT_ROOT
+    is_macos = sys.platform == "darwin"
 
     resources = [
         "scripts", "template", "tools",
@@ -135,15 +177,27 @@ def _bootstrap_from_bundle() -> None:
         dst = project / name
         try:
             if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
+                if is_macos:
+                    # macOS: 源文件可能只读，先删后拷 + chmod
+                    if dst.exists():
+                        shutil.rmtree(dst, onerror=_remove_readonly)
+                    shutil.copytree(src, dst)
+                    _make_writable(dst)
+                else:
+                    # Windows/Linux: 直接合并覆盖
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
             else:
+                if is_macos and dst.exists():
+                    dst.unlink()
                 shutil.copy2(src, dst)
+                if is_macos:
+                    _make_writable(dst)
             copied.append(name)
         except Exception as e:
             print(f"[bootstrap][WARN] 复制 {name} 失败: {e}", file=sys.stderr)
 
     if copied:
-        print(f"[bootstrap] 已从 bundle 同步资源到 exe 目录: {', '.join(copied)}")
+        print(f"[bootstrap] 已从 bundle 同步资源到数据目录: {', '.join(copied)}")
     # 写入标记，便于诊断
     try:
         (project / ".bundle_bootstrapped").write_text("1", encoding="utf-8")
