@@ -2581,11 +2581,13 @@ def api_ide_install():
 def api_ide_uninstall():
     """卸载 IDE（CLI 或 App）。
 
-    Body: {ide: <IDE key>, mode: "cli" | "app"}
+    Body: {ide: <IDE key>, mode: "cli" | "app", force?: bool}
+    force=true：跳过系统卸载程序，直接强删目录（用于 GUI 卸载器卡死/超时/残留场景）
     """
     body = request.get_json(silent=True) or {}
     ide_key = (body.get("ide") or "").strip()
     mode = (body.get("mode") or "cli").strip()
+    force = bool(body.get("force", False))
     if not ide_key:
         return jsonify({"ok": False, "error": "missing ide"}), 400
     if mode not in ("cli", "app"):
@@ -2593,7 +2595,7 @@ def api_ide_uninstall():
     if ide_key not in IDE_INSTALL_META:
         return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
     try:
-        result = uninstall_ide(ide_key, mode)
+        result = uninstall_ide(ide_key, mode, force=force)
         return jsonify(result)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

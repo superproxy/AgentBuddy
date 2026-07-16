@@ -2,8 +2,10 @@
 import { storeToRefs } from 'pinia'
 import { onMounted } from 'vue'
 import { useIdeStore } from '../stores/ide'
+import { useSyncStore } from '../stores/sync'
 
 const ide = useIdeStore()
+const sync = useSyncStore()
 const {
   ideDetectStats, ideDetecting, ideInstallInfo, ideInstallInfoLoaded,
   installedIdes, notInstalledIdes, sessionableIdes, showNotInstalled,
@@ -14,11 +16,13 @@ const {
   exportingSession, shareModalOpen, shareModalSession, shareTargetIde, shareImporting,
   shareTargetIdes,
 } = storeToRefs(ide)
+const { dragIdeKey, dragOverIdeKey } = storeToRefs(sync)
 const {
   loadIdeDetect, launchIde, installIde, uninstallIde, reinstallIde, openIdeConfig,
   syncIdeConfig, toggleIdeSessions, closeSessionDrawer, toggleIdeCard, setIdeCardTab, exportSession,
   openShareModal, importSession,
 } = ide
+const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
 function markText(label: string): string {
   const words = label.split(/\s+/).filter(Boolean)
@@ -117,7 +121,7 @@ onMounted(() => {
         <span class="count">{{ installedIdes.length }}</span>
       </div>
       <div v-if="installedIdes.length" class="grid">
-        <article v-for="it in installedIdes" :key="it.key" class="tile">
+        <article v-for="it in installedIdes" :key="it.key" class="tile" :class="{ 'dragging': dragIdeKey === it.key, 'drag-over': dragOverIdeKey === it.key && dragIdeKey !== it.key }" draggable="true" @dragstart="onIdeDragStart($event, it.key)" @dragover="onIdeDragOver($event, it.key)" @drop="onIdeDrop($event, it.key)" @dragend="onIdeDragEnd">
           <div class="tile-top">
             <div class="mark" aria-hidden="true">{{ markText(it.label) }}</div>
             <span class="status-pill"><span class="d" aria-hidden="true"></span>已安装</span>
@@ -155,19 +159,20 @@ onMounted(() => {
           </div>
           <div class="tile-foot">
             <template v-if="currentInstalled(it)">
-              <button @click="launchIde(it.key, null, currentTab(it))" :disabled="!!ideLaunching || !!ideResuming" class="btn btn-sm btn-primary" type="button">
+              <button @click="launchIde(it.key, null, currentTab(it))" :disabled="ideLaunching === it.key || !!ideResuming" class="btn btn-sm btn-primary" type="button">
                 <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 {{ ideLaunching === it.key ? '...' : '打开' }}
               </button>
-              <button @click="syncIdeConfig(it.key)" :disabled="!!ideSyncing" class="btn btn-sm btn-soft" type="button">{{ ideSyncing === it.key ? '...' : '同步' }}</button>
-              <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="!!ideOpeningConfig" class="btn btn-sm btn-ink" type="button">{{ ideOpeningConfig === it.key ? '...' : '配置' }}</button>
+              <button @click="syncIdeConfig(it.key)" :disabled="ideSyncing === it.key" class="btn btn-sm btn-soft" type="button">{{ ideSyncing === it.key ? '...' : '同步' }}</button>
+              <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="ideOpeningConfig === it.key" class="btn btn-sm btn-ink" type="button">{{ ideOpeningConfig === it.key ? '...' : '配置' }}</button>
               <button v-if="currentMethod(it) && currentMethod(it) !== 'manual'" @click="reinstallIde(it.key, currentTab(it))" :disabled="ideReinstalling === busyKey(it)" class="btn btn-sm btn-amber" type="button">{{ ideReinstalling === busyKey(it) ? '...' : '重装' }}</button>
               <button v-if="currentMethod(it) && currentMethod(it) !== 'manual'" @click="uninstallIde(it.key, currentTab(it))" :disabled="ideUninstalling === busyKey(it)" class="btn btn-sm btn-red" type="button">{{ ideUninstalling === busyKey(it) ? '...' : '卸载' }}</button>
+              <button v-if="currentMethod(it) && currentMethod(it) !== 'manual'" @click="uninstallIde(it.key, currentTab(it), true)" :disabled="ideUninstalling === busyKey(it) + ':force'" class="btn btn-sm btn-red" type="button" title="跳过系统卸载程序，直接强删目录">{{ ideUninstalling === busyKey(it) + ':force' ? '...' : '强删' }}</button>
             </template>
             <template v-else>
               <button v-if="currentMethod(it) && currentMethod(it) !== 'manual'" @click="installIde(it.key, currentTab(it))" :disabled="ideInstalling === busyKey(it)" class="btn btn-sm btn-primary" type="button">{{ ideInstalling === busyKey(it) ? '...' : '安装' }}</button>
               <a v-else-if="currentInfo(it)?.url" :href="currentInfo(it).url" target="_blank" class="btn btn-sm btn-ink">下载</a>
-              <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="!!ideOpeningConfig" class="btn btn-sm btn-ink" type="button">{{ ideOpeningConfig === it.key ? '...' : '配置' }}</button>
+              <button v-if="it.config_paths?.length" @click="openIdeConfig(it.key)" :disabled="ideOpeningConfig === it.key" class="btn btn-sm btn-ink" type="button">{{ ideOpeningConfig === it.key ? '...' : '配置' }}</button>
             </template>
             <a v-if="ideInstallInfo[it.key]?.homepage" :href="ideInstallInfo[it.key].homepage" target="_blank" class="btn btn-sm btn-ink">官网</a>
           </div>
@@ -180,7 +185,7 @@ onMounted(() => {
         <span class="count">{{ notInstalledIdes.length }}</span>
       </div>
       <div v-if="notInstalledIdes.length" class="grid">
-        <article v-for="it in notInstalledIdes" :key="it.key" class="tile offline">
+        <article v-for="it in notInstalledIdes" :key="it.key" class="tile offline" :class="{ 'dragging': dragIdeKey === it.key, 'drag-over': dragOverIdeKey === it.key && dragIdeKey !== it.key }" draggable="true" @dragstart="onIdeDragStart($event, it.key)" @dragover="onIdeDragOver($event, it.key)" @drop="onIdeDrop($event, it.key)" @dragend="onIdeDragEnd">
           <div class="tile-top">
             <div class="mark" aria-hidden="true">{{ markText(it.label) }}</div>
             <span class="status-pill off"><span class="d" aria-hidden="true"></span>未安装</span>
@@ -733,6 +738,14 @@ onMounted(() => {
   color: var(--ink-600);
   border-color: var(--ink-200);
 }
+.tile.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.tile.drag-over {
+  border-color: var(--ink-400, #6b7280);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+}
 .path {
   display: flex;
   align-items: center;
@@ -753,10 +766,13 @@ onMounted(() => {
   color: var(--ink-500);
 }
 .path span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-x: auto;
   white-space: nowrap;
   min-width: 0;
+  cursor: text;
+  user-select: text;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
 }
 .tile-foot {
   margin-top: auto;

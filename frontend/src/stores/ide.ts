@@ -75,8 +75,26 @@ export const useIdeStore = defineStore('ide', () => {
   const showNotInstalled = ref(false)
 
   // ===== computed =====
-  const installedIdes = computed(() => ideDetects.value.filter((i) => i.installed))
-  const notInstalledIdes = computed(() => ideDetects.value.filter((i) => !i.installed))
+  /** 已安装 IDE，按 sync.ideList 的用户自定义顺序排序（支持拖拽排序） */
+  const installedIdes = computed(() => {
+    const installed = ideDetects.value.filter((i) => i.installed)
+    const order = sync.ideList.map((i) => i.key)
+    return installed.sort((a, b) => {
+      const ia = order.indexOf(a.key)
+      const ib = order.indexOf(b.key)
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
+    })
+  })
+  /** 未安装 IDE，同样按 sync.ideList 顺序排序 */
+  const notInstalledIdes = computed(() => {
+    const notInstalled = ideDetects.value.filter((i) => !i.installed)
+    const order = sync.ideList.map((i) => i.key)
+    return notInstalled.sort((a, b) => {
+      const ia = order.indexOf(a.key)
+      const ib = order.indexOf(b.key)
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
+    })
+  })
   /** 有会话目录的已安装 IDE（用于右侧会话面板的 IDE 选择器） */
   const sessionableIdes = computed(() => ideDetects.value.filter((i) => i.installed && i.sessions_dir))
   const shareTargetIdes = computed(() => {
@@ -240,21 +258,23 @@ export const useIdeStore = defineStore('ide', () => {
     }
   }
 
-  async function uninstallIde(ideKey: string, mode: string) {
-    const key = `${ideKey}:${mode}`
+  async function uninstallIde(ideKey: string, mode: string, force: boolean = false) {
+    const key = `${ideKey}:${mode}${force ? ':force' : ''}`
     if (ideUninstalling.value) return
-    if (!confirm(`确定卸载 ${ideKey} ${mode.toUpperCase()}？`)) return
+    const action = force ? '强制卸载' : '卸载'
+    const warn = force ? '（跳过系统卸载程序，直接强删目录）' : ''
+    if (!confirm(`确定${action} ${ideKey} ${mode.toUpperCase()}？${warn}`)) return
     ideUninstalling.value = key
     try {
       const r = await api<{ ok: boolean; message?: string; error?: string }>('/api/ide/uninstall', {
         method: 'POST',
-        body: JSON.stringify({ ide: ideKey, mode }),
+        body: JSON.stringify({ ide: ideKey, mode, force }),
       })
       if (r.ok) {
-        ui.toast(`卸载 ${ideKey} ${mode.toUpperCase()} 成功`, 'ok')
+        ui.toast(`${action} ${ideKey} ${mode.toUpperCase()} 成功`, 'ok')
         await loadIdeDetect()
       } else {
-        ui.toast(`卸载 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
+        ui.toast(`${action} ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
       }
     } finally {
       ideUninstalling.value = ''
