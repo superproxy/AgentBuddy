@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import { useSyncLayoutStore } from '../stores/syncLayout'
+import { useThemeStore } from '../stores/theme'
 
 interface TabItem {
   key: string
@@ -10,10 +10,9 @@ interface TabItem {
 const props = defineProps<{ tab: string; tabs: TabItem[] }>()
 const emit = defineEmits<{
   (e: 'update:tab', v: string): void
-  (e: 'restore-sync'): void
 }>()
 
-const layout = useSyncLayoutStore()
+const theme = useThemeStore()
 const appVersion = ref('')
 const buildTime = ref('')
 
@@ -22,19 +21,12 @@ const tabBtnRefs = ref<Record<string, HTMLElement | null>>({})
 const indicatorStyle = ref({ width: '0px', transform: 'translateX(0px)' })
 const indicatorReady = ref(false)
 
-const showRestoreSync = computed(() => props.tab !== 'plugin-build')
 const statusLabel = computed(() =>
   buildTime.value ? `构建于 ${buildTime.value.slice(0, 10)}` : '开发模式',
 )
 
 function setTabBtnRef(key: string, el: unknown) {
   tabBtnRefs.value[key] = (el as HTMLElement | null) ?? null
-}
-
-function restoreSyncPanel() {
-  layout.resetToTopDock()
-  if (props.tab === 'ide') emit('update:tab', 'env')
-  emit('restore-sync')
 }
 
 function selectTab(key: string) {
@@ -124,7 +116,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="app-header command-shell sticky top-0 z-30 text-white relative overflow-hidden">
+  <header class="app-header command-shell sticky top-0 z-30 relative overflow-hidden">
     <div class="max-w-[1600px] mx-auto w-full">
       <div
         class="command-bar grid items-center gap-x-4 gap-y-3 px-6 py-3
@@ -142,18 +134,20 @@ onBeforeUnmount(() => {
             A
           </div>
           <div class="min-w-0">
-            <h1 class="text-[15px] font-bold tracking-tight leading-tight whitespace-nowrap">
+            <h1 class="text-[15px] font-bold tracking-tight leading-tight whitespace-nowrap" style="color: var(--text-primary)">
               AdeBuddy 配置工具
             </h1>
             <div class="flex items-center gap-2 mt-1">
               <span
                 v-if="appVersion"
-                class="font-mono text-[11px] font-medium text-white/40 tracking-wide"
+                class="font-mono text-[11px] font-medium tracking-wide"
+                style="color: var(--text-tertiary)"
               >v{{ appVersion }}</span>
               <span
                 class="status-pill inline-flex items-center gap-1.5 text-[11px] font-medium
-                       text-white/70 px-2 py-0.5 rounded-full"
+                       px-2 py-0.5 rounded-full"
                 :title="statusLabel"
+                :style="{ color: 'var(--text-secondary)' }"
               >
                 <span class="status-dot" aria-hidden="true" />
                 <span class="max-[560px]:sr-only">{{ statusLabel }}</span>
@@ -189,7 +183,8 @@ onBeforeUnmount(() => {
               class="tab relative z-[1] appearance-none border-0 bg-transparent cursor-pointer
                      text-[13px] font-medium tracking-tight whitespace-nowrap
                      px-3 py-2 rounded-[10px] transition-colors duration-150"
-              :class="tab === t.key ? 'text-white font-semibold' : 'text-white/55 hover:text-white/90'"
+              :class="tab === t.key ? 'text-white font-semibold' : 'hover:text-[var(--text-primary)]'"
+              :style="tab !== t.key ? { color: 'var(--text-secondary)' } : {}"
               :aria-selected="tab === t.key"
               :tabindex="tab === t.key ? 0 : -1"
               @click="selectTab(t.key)"
@@ -201,53 +196,24 @@ onBeforeUnmount(() => {
 
         <!-- Actions -->
         <div class="actions flex items-center justify-end max-[1100px]:col-start-2 max-[1100px]:row-start-1">
-          <div class="market-cluster inline-flex items-stretch p-0.5 rounded-xl" aria-label="快捷操作">
-            <button
-              v-if="showRestoreSync"
-              type="button"
-              class="market-btn"
-              title="找回同步面板（Ctrl+Shift+S）"
-              @click="restoreSyncPanel"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                <path d="M3 3v5h5" />
-                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                <path d="M16 16h5v5" />
-              </svg>
-              <span class="label">同步面板</span>
-            </button>
-            <a
-              class="market-btn"
-              href="https://www.modelscope.cn/mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5" />
-                <path d="M2 12l10 5 10-5" />
-              </svg>
-              <span class="label">MCP 市场</span>
-              <svg class="ext-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                <path d="M7 17L17 7M8 7h9v9" />
-              </svg>
-            </a>
-            <a
-              class="market-btn"
-              href="https://www.modelscope.cn/skills"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-              </svg>
-              <span class="label">Skills 市场</span>
-              <svg class="ext-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                <path d="M7 17L17 7M8 7h9v9" />
-              </svg>
-            </a>
-          </div>
+          <!-- 主题切换按钮 -->
+          <button
+            class="theme-toggle"
+            type="button"
+            :title="theme.mode === 'light' ? '切换到深色模式' : '切换到浅色模式'"
+            :aria-label="theme.mode === 'light' ? '切换到深色模式' : '切换到浅色模式'"
+            @click="theme.toggle()"
+          >
+            <!-- 太阳图标（深色模式时显示，点击切回浅色） -->
+            <svg v-if="theme.mode === 'dark'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+            </svg>
+            <!-- 月亮图标（浅色模式时显示，点击切到深色） -->
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -256,11 +222,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .command-shell {
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 42%),
-    linear-gradient(135deg, #1a1d22 0%, #242930 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.22);
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border-base);
+  box-shadow: var(--shadow-sm);
 }
 
 .command-shell::before {
@@ -271,9 +235,8 @@ onBeforeUnmount(() => {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(22, 93, 255, 0.55) 22%,
-    rgba(217, 230, 255, 0.55) 50%,
-    rgba(22, 93, 255, 0.55) 78%,
+    rgba(22, 93, 255, 0.4) 22%,
+    rgba(22, 93, 255, 0.4) 78%,
     transparent 100%
   );
   pointer-events: none;
@@ -296,7 +259,7 @@ onBeforeUnmount(() => {
 }
 
 .status-pill {
-  background: rgba(61, 214, 140, 0.08);
+  background: var(--success-container);
   border: 1px solid rgba(61, 214, 140, 0.22);
 }
 
@@ -304,7 +267,7 @@ onBeforeUnmount(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #3dd68c;
+  background: var(--success);
   box-shadow: 0 0 0 3px rgba(61, 214, 140, 0.18);
 }
 
@@ -325,10 +288,9 @@ onBeforeUnmount(() => {
 }
 
 .tab-track {
-  background: rgba(0, 0, 0, 0.32);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-base);
   border-radius: 14px;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   scrollbar-width: none;
 }
 
@@ -342,7 +304,7 @@ onBeforeUnmount(() => {
   left: 0;
   height: calc(100% - 8px);
   border-radius: 10px;
-  background: linear-gradient(180deg, #165dff, #0e42d2);
+  background: linear-gradient(180deg, var(--primary), var(--primary-hover));
   box-shadow:
     0 2px 10px rgba(22, 93, 255, 0.45),
     0 0 0 1px rgba(255, 255, 255, 0.12) inset;
@@ -362,99 +324,57 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 
-.market-cluster {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-}
-
-.market-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: rgba(255, 255, 255, 0.78);
-  text-decoration: none;
-  padding: 7px 12px;
-  border-radius: 9px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font-family: inherit;
-  transition:
-    background 150ms ease,
-    color 150ms ease;
-}
-
-.market-btn + .market-btn {
-  position: relative;
-}
-
-.market-btn + .market-btn::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 22%;
-  bottom: 22%;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.market-btn:hover {
-  background: rgba(22, 93, 255, 0.28);
-  color: #fff;
-}
-
-.market-btn:focus-visible {
-  outline: 2px solid rgba(217, 230, 255, 0.9);
-  outline-offset: 2px;
-}
-
-.market-btn svg {
-  width: 14px;
-  height: 14px;
-  opacity: 0.72;
-  flex-shrink: 0;
-  transition: opacity 150ms ease;
-}
-
-.market-btn:hover svg {
-  opacity: 1;
-}
-
-.ext-icon {
-  width: 11px;
-  height: 11px;
-  opacity: 0.4;
-  margin-left: -1px;
-}
-
-@media (max-width: 560px) {
-  .market-btn .label {
-    display: none;
-  }
-
-  .market-btn {
-    padding: 8px 10px;
-  }
-
-  .market-btn + .market-btn::before {
-    display: none;
-  }
-
-  .ext-icon {
-    display: none;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .tab-indicator.is-ready,
-  .market-btn,
-  .market-btn svg,
   .status-dot {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* 主题切换按钮 —— 与 market-cluster 同样的容器风格，elevated 凸起感 */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-left: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-base);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: all 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle:hover {
+  background: var(--primary-container);
+  color: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-toggle:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.theme-toggle:hover svg {
+  transform: rotate(15deg);
 }
 </style>

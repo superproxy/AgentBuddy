@@ -421,7 +421,7 @@ onUnmounted(() => {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--color-ink-200);
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--color-ink-700);
   font-family: inherit;
   transition: all 0.15s;
@@ -443,7 +443,7 @@ onUnmounted(() => {
 }
 
 .sa-card {
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--color-ink-200);
   border-radius: 10px;
   overflow: hidden;
@@ -456,7 +456,7 @@ onUnmounted(() => {
 }
 .sa-card:hover {
   border-color: var(--color-brand-100);
-  box-shadow: 0 4px 16px rgba(22, 93, 255, 0.08);
+  box-shadow: 0 4px 16px var(--primary-container);
   transform: translateY(-1px);
 }
 .sa-card:focus-visible {
@@ -560,7 +560,7 @@ onUnmounted(() => {
 .sa-workbench {
   width: min(720px, 100%);
   max-height: min(88vh, 760px);
-  background: #fff;
+  background: var(--bg-elevated);
   border-radius: 14px;
   box-shadow: 0 16px 48px rgba(31, 35, 41, 0.18), 0 0 0 1px rgba(22, 93, 255, 0.06);
   display: flex;
@@ -643,7 +643,7 @@ onUnmounted(() => {
   font-family: inherit;
   color: var(--color-ink-900);
   width: 100%;
-  background: #fff;
+  background: var(--bg-elevated);
 }
 .sa-field textarea {
   resize: vertical;

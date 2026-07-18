@@ -2,12 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMarketplaceStore } from '../stores/marketplace'
-import { useAiGenerateStore } from '../stores/aiGenerate'
 
 const mkt = useMarketplaceStore()
-const ai = useAiGenerateStore()
-const { items, loading, searchQuery, installing } = storeToRefs(mkt)
-const { dialogOpen, prompt, level, generating, output, generatedConfig } = storeToRefs(ai)
+const { items, loading, searchQuery, installing, isMock } = storeToRefs(mkt)
 
 type SortKey = 'new' | 'hot' | 'name'
 type ViewMode = 'grid' | 'list'
@@ -125,13 +122,6 @@ onMounted(() => { mkt.browse() })
   <div class="mkt-page">
     <!-- Hero：搜索优先 -->
     <header class="mkt-hero">
-      <div class="mkt-eyebrow">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h14"/></svg>
-        插件市场
-      </div>
-      <h1>找到下一个可复用智能体</h1>
-      <p>按名称、描述或标签检索本地市场中的完整插件包，一键安装到当前工作区。</p>
-
       <div class="mkt-search">
         <span class="mkt-search-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
@@ -161,30 +151,14 @@ onMounted(() => { mkt.browse() })
           @click="applySuggest(tag)"
         >{{ tag }}</button>
       </div>
-
-      <div class="mkt-hero-actions">
-        <button type="button" class="mkt-btn mkt-btn-primary" @click="ai.openDialog()">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg>
-          AI 创建插件
-        </button>
-        <button type="button" class="mkt-btn mkt-btn-ghost" :disabled="loading" @click="mkt.browse()">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.3M21 3v6h-6"/></svg>
-          {{ loading ? '加载中…' : '刷新' }}
-        </button>
-      </div>
     </header>
-
-    <!-- 概览 -->
-    <div class="mkt-stats" aria-label="市场概览">
-      <div class="mkt-stat"><b>{{ items.length }}</b><span>可用插件</span></div>
-      <div class="mkt-stat"><b>{{ totalDownloads }}</b><span>累计安装</span></div>
-      <div class="mkt-stat"><b>{{ tagCounts.length }}</b><span>活跃标签</span></div>
-    </div>
 
     <div class="mkt-workspace">
       <div class="mkt-main">
         <div class="mkt-toolbar">
-          <h2>全部插件<em>· {{ filteredItems.length }} 个</em></h2>
+          <h2>全部插件<em>· {{ filteredItems.length }} 个</em>
+            <span v-if="isMock" class="mock-flag" title="当前为内置示例数据，发布本地插件后将自动替换">示例</span>
+          </h2>
           <div class="mkt-toolbar-right">
             <div class="mkt-view-toggle" role="group" aria-label="视图切换">
               <button
@@ -222,8 +196,7 @@ onMounted(() => { mkt.browse() })
         <div v-else-if="!items.length" class="mkt-empty">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           <h3>市场暂无插件</h3>
-          <p>在「插件配置」页点击「分享到市场」即可发布，或用 AI 创建。</p>
-          <button type="button" class="mkt-btn mkt-btn-primary" @click="ai.openDialog()">AI 创建插件</button>
+          <p>在「插件配置」页点击「分享到市场」即可发布。</p>
         </div>
 
         <div v-else-if="!filteredItems.length" class="mkt-empty">
@@ -272,17 +245,32 @@ onMounted(() => { mkt.browse() })
               <button
                 type="button"
                 class="mkt-btn mkt-btn-primary"
-                :disabled="!!installing"
+                :disabled="!!installing || isMock"
+                :title="isMock ? '示例数据，无法真实安装' : ''"
                 @click="mkt.install(item.id)"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg>
                 {{ installing === item.id ? '安装中…' : '安装' }}
               </button>
               <a
+                v-if="!isMock"
                 class="mkt-btn mkt-btn-ghost"
                 :href="'/api/marketplace/download?id=' + encodeURIComponent(item.id)"
               >下载</a>
-              <button type="button" class="mkt-btn mkt-btn-danger" @click="mkt.remove(item.id)">移除</button>
+              <button
+                v-else
+                type="button"
+                class="mkt-btn mkt-btn-ghost"
+                disabled
+                title="示例数据，无法下载"
+              >下载</button>
+              <button
+                type="button"
+                class="mkt-btn mkt-btn-danger"
+                :disabled="isMock"
+                :title="isMock ? '示例数据，无需移除' : ''"
+                @click="mkt.remove(item.id)"
+              >移除</button>
             </div>
           </article>
         </div>
@@ -341,84 +329,6 @@ onMounted(() => { mkt.browse() })
         </div>
       </aside>
     </div>
-
-    <!-- AI 创建插件对话框 -->
-    <div v-if="dialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="ai.closeDialog()">
-      <div class="bg-white rounded-xl shadow-2xl w-[700px] max-w-[90vw] max-h-[85vh] flex flex-col">
-        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <h3 class="text-sm font-semibold flex items-center gap-2">AI 创建插件</h3>
-          <button type="button" class="text-ink-500 hover:text-ink-700 text-lg leading-none cursor-pointer" @click="ai.closeDialog()">&times;</button>
-        </div>
-
-        <div class="flex-1 overflow-y-auto p-5 space-y-3">
-          <div>
-            <label class="text-[11px] text-ink-500 block mb-1">需求描述</label>
-            <textarea
-              v-model="prompt"
-              :disabled="generating"
-              rows="3"
-              placeholder="例如：一个 Java 后端开发智能体，精通 Spring Boot / MyBatis / MySQL，需要文件系统和搜索能力"
-              class="w-full px-3 py-2 text-xs border border-ink-300 rounded-lg focus:outline-none focus:border-brand-500 disabled:bg-ink-100"
-            />
-          </div>
-
-          <div class="flex items-center gap-2">
-            <label class="text-[11px] text-ink-500">工具集级别：</label>
-            <div class="flex gap-1">
-              <button
-                v-for="lv in ['basic', 'standard', 'expert']"
-                :key="lv"
-                type="button"
-                :disabled="generating"
-                :class="[
-                  'px-2.5 py-1 text-[10px] rounded-md transition border cursor-pointer',
-                  level === lv
-                    ? 'bg-brand-500 text-white border-brand-500'
-                    : 'bg-white text-ink-700 border-ink-300 hover:border-brand-500 disabled:opacity-50',
-                ]"
-                @click="level === lv ? (level = '') : (level = lv)"
-              >
-                {{ lv === 'basic' ? '基础' : lv === 'standard' ? '进阶' : '专家' }}
-              </button>
-              <span class="text-[10px] text-ink-500 ml-1">（不选则自动判断）</span>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              :disabled="generating || !prompt.trim()"
-              class="px-4 py-1.5 text-xs font-medium text-white rounded-lg bg-brand-500 hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
-              @click="ai.generate()"
-            >
-              {{ generating ? '生成中…' : '开始生成' }}
-            </button>
-            <span v-if="generating" class="text-[10px] text-ink-500">LLM 正在生成 plugin.yaml…</span>
-          </div>
-
-          <div v-if="output" class="space-y-2">
-            <div class="text-[10px] text-ink-500">生成输出：</div>
-            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-[11px] max-h-[200px] overflow-y-auto whitespace-pre-wrap font-mono">{{ output }}</pre>
-          </div>
-
-          <div v-if="generatedConfig" class="space-y-2">
-            <div class="text-[10px] text-green-600 font-medium">生成完成，预览 plugin.yaml：</div>
-            <pre class="bg-ink-100 border border-ink-200 p-3 rounded-lg text-[11px] max-h-[250px] overflow-y-auto whitespace-pre-wrap font-mono">{{ generatedConfig }}</pre>
-          </div>
-        </div>
-
-        <div v-if="generatedConfig" class="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
-          <button type="button" class="px-3 py-1.5 text-xs text-ink-700 hover:text-ink-900 cursor-pointer" @click="ai.closeDialog()">取消</button>
-          <button
-            type="button"
-            class="px-4 py-1.5 text-xs font-medium text-white rounded-lg bg-green-500 hover:bg-green-600 cursor-pointer"
-            @click="ai.save()"
-          >
-            保存到插件配置
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -431,46 +341,8 @@ onMounted(() => { mkt.browse() })
 
 .mkt-hero {
   text-align: center;
-  padding: 8px 4px 4px;
+  padding: 4px 4px;
 }
-.mkt-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  color: var(--color-brand-600, #0e42d2);
-  background: var(--color-brand-50, #eef4ff);
-  border: 1px solid var(--color-brand-100, #d9e6ff);
-  padding: 5px 10px;
-  border-radius: 999px;
-  margin-bottom: 12px;
-}
-.mkt-eyebrow svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-}
-.mkt-hero h1 {
-  margin: 0 0 8px;
-  font-size: clamp(22px, 3.2vw, 30px);
-  font-weight: 800;
-  letter-spacing: -.03em;
-  line-height: 1.2;
-  color: var(--color-ink-900, #1f2329);
-}
-.mkt-hero > p {
-  margin: 0 auto 18px;
-  max-width: 460px;
-  color: var(--color-ink-700, #4e5969);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
 .mkt-search {
   position: relative;
   max-width: 640px;
@@ -482,7 +354,7 @@ onMounted(() => { mkt.browse() })
   padding: 0 108px 0 44px;
   border: 1.5px solid var(--color-ink-300, #c9cdd4);
   border-radius: 14px;
-  background: #fff;
+  background: var(--bg-elevated);
   font-size: 14px;
   font-weight: 500;
   color: var(--color-ink-900, #1f2329);
@@ -548,7 +420,7 @@ onMounted(() => { mkt.browse() })
 }
 .mkt-chip {
   border: 1px solid var(--color-ink-200, #e5e6eb);
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--color-ink-700, #4e5969);
   font-size: 12px;
   font-weight: 500;
@@ -562,38 +434,6 @@ onMounted(() => { mkt.browse() })
   border-color: var(--color-brand-500, #165dff);
   color: var(--color-brand-600, #0e42d2);
   background: var(--color-brand-50, #eef4ff);
-}
-
-.mkt-hero-actions {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 14px;
-  flex-wrap: wrap;
-}
-
-.mkt-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-.mkt-stat {
-  background: #fff;
-  border: 1px solid var(--color-ink-200, #e5e6eb);
-  border-radius: 12px;
-  padding: 12px 14px;
-  box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06));
-}
-.mkt-stat b {
-  display: block;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -.02em;
-  color: var(--color-brand-600, #0e42d2);
-}
-.mkt-stat span {
-  font-size: 12px;
-  color: var(--color-ink-500, #86909c);
 }
 
 .mkt-workspace {
@@ -624,6 +464,16 @@ onMounted(() => { mkt.browse() })
   font-weight: 500;
   margin-left: 6px;
 }
+.mkt-toolbar h2 .mock-flag {
+  font-size: 10.5px;
+  color: var(--color-brand-600, #0e42d2);
+  background: var(--color-brand-50, #eef4ff);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+  margin-left: 8px;
+  vertical-align: middle;
+}
 .mkt-toolbar-right {
   display: flex;
   align-items: center;
@@ -635,7 +485,7 @@ onMounted(() => { mkt.browse() })
 .mkt-view-toggle {
   display: flex;
   gap: 3px;
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--color-ink-200, #e5e6eb);
   border-radius: 10px;
   padding: 3px;
@@ -682,7 +532,7 @@ onMounted(() => { mkt.browse() })
 .mkt-filter {
   position: sticky;
   top: 12px;
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--color-ink-200, #e5e6eb);
   border-radius: 14px;
   padding: 14px 12px 16px;
@@ -834,7 +684,7 @@ onMounted(() => { mkt.browse() })
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--color-ink-200, #e5e6eb);
   border-radius: 14px;
   padding: 16px;
@@ -974,7 +824,7 @@ onMounted(() => { mkt.browse() })
 .mkt-btn-primary:hover:not(:disabled) { background: var(--color-brand-600, #0e42d2); }
 .mkt-btn-primary:disabled { opacity: .55; cursor: not-allowed; }
 .mkt-btn-ghost {
-  background: #fff;
+  background: var(--bg-elevated);
   border-color: var(--color-ink-300, #c9cdd4);
   color: var(--color-ink-700, #4e5969);
 }
@@ -995,7 +845,7 @@ onMounted(() => { mkt.browse() })
 .mkt-empty {
   text-align: center;
   padding: 48px 20px;
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px dashed var(--color-ink-300, #c9cdd4);
   border-radius: 14px;
 }

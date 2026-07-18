@@ -37,7 +37,7 @@ const ui = useUiStore()
   background: rgba(0, 0, 0, 0.5);
 }
 .ui-modal-panel {
-  background: #fff;
+  background: var(--bg-elevated);
   border-radius: 8px;
   padding: 20px;
   width: 80%;
@@ -50,7 +50,7 @@ const ui = useUiStore()
   margin: 0 0 12px;
   font-size: 14px;
   font-weight: 600;
-  color: #1f2329;
+  color: var(--text-primary);
 }
 .ui-modal-pre {
   margin: 0;
@@ -73,8 +73,8 @@ const ui = useUiStore()
   font-size: 12px;
   border-radius: 6px;
   border: none;
-  background: #f2f3f5;
-  color: #1f2329;
+  background: var(--bg-sunken);
+  color: var(--text-primary);
   cursor: pointer;
 }
 .ui-modal-close:hover {

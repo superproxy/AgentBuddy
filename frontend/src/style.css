@@ -17,9 +17,117 @@
   --shadow-glow: 0 0 0 3px rgba(22, 93, 255, 0.15);
 }
 
+/* —— 全局主题变量（浅色 / 深灰柔和） —— */
+:root,
+:root[data-theme='light'] {
+  --bg-base: #f7f8fa;
+  --bg-elevated: #ffffff;       /* 卡片 / Header */
+  --bg-sunken: #f2f3f5;         /* 更深一层（tab track / 输入框底） */
+  --bg-header: #ffffff;
+  --bg-syncbar: #ffffff;
+  --bg-input: #f7f8fa;
+  --bg-hover: #f2f3f5;
+  --bg-active: rgba(22, 93, 255, 0.08);
+
+  --border-base: #e5e6eb;
+  --border-strong: #c9cdd4;
+  --border-subtle: #f2f3f5;
+
+  --text-primary: #1f2329;
+  --text-secondary: #4e5969;
+  --text-tertiary: #86909c;
+  --text-inverse: #ffffff;
+
+  --primary: #165dff;
+  --primary-hover: #0e42d2;
+  --primary-container: rgba(22, 93, 255, 0.08);
+  --primary-container-strong: rgba(22, 93, 255, 0.16);
+  --primary-on: #ffffff;
+
+  --success: #059669;
+  --success-container: rgba(5, 150, 105, 0.12);
+  --warning: #d97706;
+  --danger: #dc2626;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-primary: 0 2px 6px rgba(22, 93, 255, 0.3);
+
+  --scrollbar-thumb: #c9cdd4;
+  --scrollbar-thumb-hover: #86909c;
+}
+
+:root[data-theme='dark'] {
+  --bg-base: #1f2329;
+  --bg-elevated: #2a2f36;
+  --bg-sunken: #1a1d21;
+  --bg-header: #1a1d21;
+  --bg-syncbar: #1a1d21;
+  --bg-input: #1f2329;
+  --bg-hover: #353b43;
+  --bg-active: rgba(91, 140, 255, 0.16);
+
+  --border-base: #353b43;
+  --border-strong: #4e5969;
+  --border-subtle: #2a2f36;
+
+  --text-primary: #f5f6f7;
+  --text-secondary: #c9cdd4;
+  --text-tertiary: #8d929a;
+  --text-inverse: #1f2329;
+
+  --primary: #5b8cff;
+  --primary-hover: #4a7dff;
+  --primary-container: rgba(91, 140, 255, 0.16);
+  --primary-container-strong: rgba(91, 140, 255, 0.24);
+  --primary-on: #ffffff;
+
+  --success: #34d399;
+  --success-container: rgba(52, 211, 153, 0.22);
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-primary: 0 2px 6px rgba(91, 140, 255, 0.35);
+
+  --scrollbar-thumb: #4e5969;
+  --scrollbar-thumb-hover: #6b7280;
+
+  /* —— 覆盖 Tailwind @theme 中的 ink-* / brand-* / white 变量 —— */
+  /* 让 bg-white / border-ink-300 / text-ink-700 等 class 跟随主题 */
+  --color-white: #2a2f36;          /* bg-white → 卡片背景 */
+  --color-ink-100: #1f2329;        /* bg-ink-100 → 浅灰背景 → 深色 */
+  --color-ink-200: #353b43;        /* border-ink-200 → 边框 */
+  --color-ink-300: #4e5969;        /* border-ink-300 → 边框 */
+  --color-ink-500: #8d929a;        /* text-ink-500 → 次要文字 */
+  --color-ink-700: #c9cdd4;        /* text-ink-700 → 正文文字 */
+  --color-ink-900: #f5f6f7;        /* text-ink-900 → 主文字 */
+  --color-brand-50: rgba(91, 140, 255, 0.12);
+  --color-brand-100: rgba(91, 140, 255, 0.2);
+  --color-brand-500: #5b8cff;
+  --color-brand-600: #4a7dff;
+  --color-brand-700: #3a6ae8;
+}
+
+/* —— dark 模式下，text-white / border-white 保持白色 —— */
+/* 因为 --color-white 被覆盖为深色（用于 bg-white 卡片背景）， */
+/* 但 text-white 通常用在彩色按钮上，需要保持白色文字 */
+:root[data-theme='dark'] .text-white {
+  color: #ffffff;
+}
+:root[data-theme='dark'] .border-white {
+  border-color: #ffffff;
+}
+
 /* 全局基础样式（从 config_ui.html L24-38 搬迁） */
 body {
   font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  transition: background 0.2s, color 0.2s;
 }
 
 ::-webkit-scrollbar {
@@ -27,11 +135,11 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c9cdd4;
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #86909c;
+  background: var(--scrollbar-thumb-hover);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -59,12 +167,12 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.15);
-  border-color: #165dff;
+  box-shadow: 0 0 0 3px var(--primary-container-strong);
+  border-color: var(--primary);
 }
 
 .gradient-bg {
-  background: linear-gradient(135deg, #1f2329 0%, #2a2f36 100%);
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-sunken) 100%);
 }
 .glass {
   background: rgba(255, 255, 255, 0.1);

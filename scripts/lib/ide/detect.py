@@ -46,7 +46,7 @@ IDE_DETECT_META = {
     "Claude": {
         "label": "Claude Code",
         "cli_names": ["claude"],
-        "macos_apps": [],
+        "macos_apps": ["/Applications/Claude.app"],
         "windows_apps": [],
         "config_dirs": [".claude"],
         "sessions_subdir": "projects",  # Claude 会话按项目哈希存于 projects/
@@ -55,7 +55,7 @@ IDE_DETECT_META = {
     "Codex": {
         "label": "Codex",
         "cli_names": ["codex"],
-        "macos_apps": [],
+        "macos_apps": ["/Applications/Codex.app"],
         "windows_apps": [],
         "config_dirs": [".codex"],
         "sessions_subdir": "sessions",

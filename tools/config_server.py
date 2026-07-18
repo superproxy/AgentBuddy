@@ -2645,6 +2645,158 @@ def api_ide_install_info():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ============================================================
+# IDE 图标提取（macOS 从 .app 包读取真实程序图标）
+# ============================================================
+IDE_ICON_CACHE_DIR = PROJECT_ROOT / "tools" / "dist-ui" / "ide-icons"
+# 防御：如果路径被错误地创建为文件，先删除再建目录
+if IDE_ICON_CACHE_DIR.exists() and not IDE_ICON_CACHE_DIR.is_dir():
+    IDE_ICON_CACHE_DIR.unlink()
+IDE_ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _find_app_icon_path(app_path: str) -> Path | None:
+    """从 macOS .app 包内查找最佳图标文件（优先 PNG，其次 ICNS）。
+
+    查找顺序：
+    1. Info.plist 的 CFBundleIconFile 指定的文件（去掉扩展名后尝试 .icns/.png）
+    2. Resources/ 目录下名为 icon.icns / app.icns / <AppName>.icns
+    3. Resources/ 目录下任意 .png（取文件名含 icon/logo 的）
+    """
+    import plistlib
+    app_p = Path(app_path)
+    if not app_p.exists() or not app_path.endswith(".app"):
+        return None
+    resources_dir = app_p / "Contents" / "Resources"
+    if not resources_dir.exists():
+        return None
+
+    # 1. 解析 Info.plist 的 CFBundleIconFile
+    info_plist = app_p / "Contents" / "Info.plist"
+    if info_plist.exists():
+        try:
+            with open(info_plist, "rb") as f:
+                plist = plistlib.load(f)
+            icon_name = plist.get("CFBundleIconFile", "") or plist.get("CFBundleIcons", {}).get("CFBundlePrimaryIcon", {}).get("CFBundleIconFile", "")
+            if icon_name:
+                # 去掉扩展名后尝试 .icns / .png
+                base = icon_name.rsplit(".", 1)[0] if "." in icon_name else icon_name
+                for ext in (".icns", ".png"):
+                    for cand in (resources_dir / (icon_name + ext if not icon_name.endswith(ext) else icon_name),
+                                 resources_dir / (base + ext)):
+                        if cand.exists():
+                            return cand
+                # 直接用 icon_name
+                direct = resources_dir / icon_name
+                if direct.exists():
+                    return direct
+        except Exception:
+            pass
+
+    # 2. 常见命名
+    common_names = ["icon.icns", "app.icns", "App.icns", "Icon.icns"]
+    app_stem = app_p.stem  # 如 "Trae CN"
+    common_names += [f"{app_stem}.icns", f"{app_stem}.png", "icon.png", "app.png"]
+    for name in common_names:
+        cand = resources_dir / name
+        if cand.exists():
+            return cand
+
+    # 3. 任意 .icns / .png（优先含 icon/logo 的）
+    candidates = []
+    for p in resources_dir.iterdir():
+        if p.suffix.lower() in (".icns", ".png"):
+            score = 0
+            low = p.name.lower()
+            if "icon" in low: score += 3
+            if "logo" in low: score += 2
+            if "app" in low: score += 1
+            if p.suffix.lower() == ".png": score += 1
+            candidates.append((score, p))
+    if candidates:
+        candidates.sort(key=lambda x: -x[0])
+        return candidates[0][1]
+    return None
+
+
+def _icns_to_png(icns_path: Path, out_png: Path) -> bool:
+    """用 macOS 自带 sips 将 .icns 转为 .png。"""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["sips", "-s", "format", "png", str(icns_path), "--out", str(out_png)],
+            capture_output=True, timeout=10,
+        )
+        return r.returncode == 0 and out_png.exists()
+    except Exception:
+        return False
+
+
+@app.route("/api/ide/icon/<ide_key>")
+def api_ide_icon(ide_key: str):
+    """返回 IDE 的真实程序图标（PNG）。
+
+    优先从已安装 IDE 的 .app 包提取图标；提取失败返回 404 让前端回退到字母。
+    缓存到 tools/dist-ui/ide-icons/<key>.png，避免重复 sips 调用。
+    404 响应带 no-store，避免前端缓存"未安装"状态后无法刷新。
+    """
+    from flask import Response
+
+    def _not_found(msg: str) -> Response:
+        return Response(msg, status=404, mimetype="text/plain", headers={"Cache-Control": "no-store"})
+
+    # 白名单校验
+    if ide_key not in IDE_INSTALL_META:
+        return _not_found("not found")
+
+    # 防御：每次请求前确保缓存目录存在且是目录（防止被旧进程/外部误删后变成文件）
+    if IDE_ICON_CACHE_DIR.exists() and not IDE_ICON_CACHE_DIR.is_dir():
+        try:
+            IDE_ICON_CACHE_DIR.unlink()
+        except Exception:
+            pass
+    IDE_ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    cached = IDE_ICON_CACHE_DIR / f"{ide_key}.png"
+    # 缓存命中（且非 0 字节）
+    if cached.exists() and cached.is_file() and cached.stat().st_size > 0:
+        return send_file(cached, mimetype="image/png", max_age=86400)
+
+    # 查找已安装 IDE 的 app 路径
+    info = detect_ide(ide_key)
+    app_path = info.get("app_path", "") if info.get("installed") else ""
+    if not app_path:
+        # 未安装时，从 uninstall_cmd_mac 解析默认 .app 路径（如 /Applications/Claude.app）
+        # 这样未安装但用户之前装过的 IDE 仍能提取图标
+        import re
+        meta = IDE_INSTALL_META.get(ide_key, {})
+        uninstall_cmd = meta.get("app_install", {}).get("uninstall_cmd_mac", "")
+        m = re.search(r"(/[^\s']+\.app)", uninstall_cmd)
+        if m:
+            app_path = m.group(1)
+    if not app_path or not app_path.endswith(".app"):
+        return _not_found("not installed")
+
+    icon_file = _find_app_icon_path(app_path)
+    if not icon_file:
+        return _not_found("no icon")
+
+    # PNG 直接复制；ICNS 用 sips 转换
+    if icon_file.suffix.lower() == ".png":
+        try:
+            import shutil
+            shutil.copyfile(icon_file, cached)
+            return send_file(cached, mimetype="image/png", max_age=86400)
+        except Exception:
+            return Response("copy failed", status=500, mimetype="text/plain")
+    elif icon_file.suffix.lower() == ".icns":
+        if _icns_to_png(icon_file, cached):
+            return send_file(cached, mimetype="image/png", max_age=86400)
+        return Response("convert failed", status=500, mimetype="text/plain")
+    else:
+        return _not_found("unsupported format")
+
+
 @app.route("/api/ide/session/export", methods=["GET"])
 def api_ide_session_export():
     """导出会话为通用 JSON 格式（用于跨 IDE 共享）。
@@ -3518,36 +3670,80 @@ _ttyd_proc: subprocess.Popen | None = None
 TTYD_PORT = 7681
 
 
+def _find_ttyd() -> str | None:
+    """查找 ttyd 可执行文件。
+
+    macOS 打包后子进程 PATH 可能不含 /opt/homebrew/bin、/usr/local/bin，
+    shutil.which 会找不到 brew 安装的 ttyd，需手动扩展查找路径。
+    """
+    found = shutil.which("ttyd")
+    if found:
+        return found
+    extra_dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+    for d in extra_dirs:
+        p = os.path.join(d, "ttyd")
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    """检测端口是否被占用。"""
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.3)
+        return s.connect_ex((host, port)) == 0
+
+
 @app.route("/api/terminal/start", methods=["POST"])
 def terminal_start():
     """启动 ttyd 终端服务，返回访问 URL。"""
     global _ttyd_proc
-    if _ttyd_proc and _ttyd_proc.poll() is None:
+    if _ttyd_proc and _ttyd_proc.poll() is None and _port_in_use("127.0.0.1", TTYD_PORT):
         # 已在运行
         return jsonify({"ok": True, "port": TTYD_PORT,
                         "url": f"http://127.0.0.1:{TTYD_PORT}"})
-    ttyd = shutil.which("ttyd")
+    ttyd = _find_ttyd()
     if not ttyd:
         hint = "brew install ttyd" if sys.platform == "darwin" else "winget install ttyd"
         return jsonify({"ok": False,
                         "error": f"未安装 ttyd，请执行: {hint}"}), 400
-    # 选择 ttyd 启动的 shell：Windows 用 cmd.exe，其他平台用 bash
+    # 端口预检：被其他进程占用时给出明确错误（而不是 ttyd 静默退出）
+    if _port_in_use("127.0.0.1", TTYD_PORT):
+        return jsonify({"ok": False,
+                        "error": f"端口 {TTYD_PORT} 已被占用，请释放后重试"}), 400
+    # 选择 ttyd 启动的 shell：Windows 用 cmd.exe，其他平台用绝对路径 /bin/bash
+    # （避免打包后 PATH 不含 /bin 导致 bash 找不到）
     if sys.platform == "win32":
         shell_cmd = ["cmd.exe"]
     else:
-        shell_cmd = ["bash"]
+        shell_cmd = ["/bin/bash"]
     try:
+        # 捕获 stderr 以便 ttyd 启动失败时返回真实错误原因
         _ttyd_proc = subprocess.Popen(
             [ttyd, "--port", str(TTYD_PORT), "--writable",
              "--interface", "127.0.0.1"] + shell_cmd,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
         )
-        # 等待启动
+        # 等待端口就绪或进程退出
         import time
-        for _ in range(10):
-            if _ttyd_proc.poll() is not None:
-                return jsonify({"ok": False, "error": "ttyd 启动后立即退出"}), 500
-            time.sleep(0.2)
+        while True:
+            rc = _ttyd_proc.poll()
+            if rc is not None:
+                # 进程已退出，读取 stderr 获取错误原因
+                err = ""
+                if _ttyd_proc.stderr:
+                    try:
+                        err = _ttyd_proc.stderr.read().decode(errors="replace").strip()
+                    except Exception:
+                        pass
+                msg = f"ttyd 启动失败 (exit={rc})"
+                if err:
+                    msg += f": {err}"
+                return jsonify({"ok": False, "error": msg}), 500
+            if _port_in_use("127.0.0.1", TTYD_PORT):
+                break
+            time.sleep(0.1)
         return jsonify({"ok": True, "port": TTYD_PORT,
                         "url": f"http://127.0.0.1:{TTYD_PORT}"})
     except Exception as e:

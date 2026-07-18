@@ -203,7 +203,7 @@ onMounted(() => { loadHooks() })
             class="event relative z-[1] grid grid-cols-[42px_1fr] gap-x-2.5 w-full text-left min-h-[52px] py-2.5 pr-2.5 pl-1 rounded-xl border border-transparent transition cursor-pointer"
             :class="[
               activeEvent === ev
-                ? 'bg-white border-brand-100 shadow-[0_1px_2px_rgba(22,93,255,0.06),0_6px_16px_rgba(22,93,255,0.08)]'
+                ? 'bg-white border-brand-100 shadow-[0_1px_2px_rgba(22,93,255,0.06),0_6px_16px_var(--primary-container)]'
                 : 'hover:bg-ink-100',
               (eventCount[ev] || 0) > 0 ? 'has-hooks' : '',
             ]"
@@ -219,7 +219,7 @@ onMounted(() => { loadHooks() })
             <span
               class="node w-[34px] h-[34px] ml-2 mt-0.5 rounded-full inline-flex items-center justify-center text-[11px] font-medium font-mono border-2 shadow-sm transition"
               :class="activeEvent === ev
-                ? 'border-brand-500 bg-brand-500 text-white shadow-[0_0_0_4px_rgba(22,93,255,0.16)]'
+                ? 'border-brand-500 bg-brand-500 text-white shadow-[0_0_0_4px_var(--primary-container-strong)]'
                 : (eventCount[ev] || 0) > 0
                   ? 'border-brand-500 text-brand-600 bg-brand-50'
                   : 'border-ink-300 text-ink-500 bg-white'"
@@ -419,11 +419,11 @@ onMounted(() => { loadHooks() })
   width: 8px;
 }
 .editor-scroll::-webkit-scrollbar-thumb {
-  background: #c9cdd4;
+  background: var(--border-strong);
   border-radius: 4px;
 }
 .editor-scroll::-webkit-scrollbar-thumb:hover {
-  background: #86909c;
+  background: var(--text-tertiary);
 }
 .editor-scroll::-webkit-scrollbar-track {
   background: transparent;
@@ -447,29 +447,29 @@ onMounted(() => { loadHooks() })
   cursor: not-allowed;
 }
 .btn-primary {
-  background: #165dff;
+  background: var(--primary);
   color: #fff;
   box-shadow: 0 1px 2px rgba(22, 93, 255, .22);
 }
-.btn-primary:hover:not(:disabled) { background: #0e42d2; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
 .btn-ghost {
-  background: #fff;
-  color: #4e5969;
-  border: 1px solid #e5e6eb;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-base);
 }
 .btn-ghost:hover {
-  border-color: #165dff;
-  color: #0e42d2;
-  background: #eef4ff;
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  background: var(--primary-container);
 }
 .btn-soft {
-  background: #eef4ff;
-  color: #0e42d2;
+  background: var(--primary-container);
+  color: var(--primary-hover);
   border: 1px solid transparent;
 }
 .btn-soft:hover {
   background: #d9e6ff;
-  border-color: #d9e6ff;
+  border-color: var(--primary-container-strong);
 }
 
 .rail-list::before {
@@ -479,7 +479,7 @@ onMounted(() => { loadHooks() })
   top: 28px;
   bottom: 28px;
   width: 2px;
-  background: linear-gradient(180deg, #d9e6ff, #e5e6eb 40%, #e5e6eb);
+  background: linear-gradient(180deg, #d9e6ff, var(--border-base) 40%, #e5e6eb);
   border-radius: 1px;
   pointer-events: none;
   z-index: 0;
@@ -492,7 +492,7 @@ onMounted(() => { loadHooks() })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #c9cdd4;
+  color: var(--text-secondary);
   cursor: grab;
   flex-shrink: 0;
   border: none;
@@ -501,8 +501,8 @@ onMounted(() => { loadHooks() })
   touch-action: none;
 }
 .drag-handle:hover {
-  color: #0e42d2;
-  background: #eef4ff;
+  color: var(--primary-hover);
+  background: var(--primary-container);
 }
 .drag-handle:active { cursor: grabbing; }
 .drag-handle svg {
@@ -518,9 +518,9 @@ onMounted(() => { loadHooks() })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #86909c;
-  background: #fff;
-  border: 1px solid #e5e6eb;
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
   cursor: pointer;
   flex-shrink: 0;
   transition: color .15s ease, background .15s ease, border-color .15s ease;
@@ -531,9 +531,9 @@ onMounted(() => { loadHooks() })
   background: #fff1f0;
 }
 .icon-btn.add:hover {
-  color: #0e42d2;
-  border-color: #d9e6ff;
-  background: #eef4ff;
+  color: var(--primary-hover);
+  border-color: var(--primary-container-strong);
+  background: var(--primary-container);
 }
 .icon-btn svg {
   width: 14px;

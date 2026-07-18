@@ -42,6 +42,30 @@ const filteredPlugins = computed(() => {
   })
 })
 
+// 推荐：未安装 + 综合能力分数（skills + mcp）前 4 个
+const featuredPlugins = computed(() => {
+  const q = listQuery.value.trim().toLowerCase()
+  const pool = plugins.value.filter((p) => {
+    if (p.installed) return false
+    if (listFilter.value === 'on') return false
+    if (!q) return true
+    return p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
+  })
+  return pool
+    .slice()
+    .sort((a, b) => ((b.skills_count || 0) + (b.mcp_count || 0)) - ((a.skills_count || 0) + (a.mcp_count || 0)))
+    .slice(0, 4)
+})
+
+// 已安装
+const installedPlugins = computed(() => filteredPlugins.value.filter((p) => p.installed))
+
+// 其余（除推荐外的未安装）
+const otherPlugins = computed(() => {
+  const featuredFiles = new Set(featuredPlugins.value.map((p) => p.file))
+  return filteredPlugins.value.filter((p) => !p.installed && !featuredFiles.has(p.file))
+})
+
 function initials(name: string) {
   const parts = name.trim().split(/[\s\-_]+/).filter(Boolean)
   if (!parts.length) return '?'
@@ -160,7 +184,211 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
       </div>
     </div>
 
-    <div class="grid">
+    <!-- 分区视图：无筛选时按 推荐 → 已安装 → 全部 顺序展示 -->
+    <div v-if="!listQuery && listFilter === 'all'" class="sections">
+      <!-- 推荐 -->
+      <section v-if="featuredPlugins.length" class="section">
+        <header class="section-head">
+          <h2><span class="star" aria-hidden="true">★</span> 热门推荐</h2>
+          <span class="section-count">{{ featuredPlugins.length }} 个</span>
+        </header>
+        <div class="grid grid-featured">
+          <article
+            v-for="p in featuredPlugins"
+            :key="p.file"
+            class="card featured"
+            :class="{ selected: selectedForExport.has(p.file) }"
+          >
+            <div class="card-top">
+              <div class="avatar" aria-hidden="true">{{ initials(p.name) }}</div>
+              <span class="recommend-tag">推荐</span>
+              <input
+                type="checkbox"
+                class="pick"
+                :checked="selectedForExport.has(p.file)"
+                :aria-label="'选择 ' + p.name"
+                @change="toggleSelectForExport(p.file)"
+              >
+            </div>
+            <div>
+              <h2 class="title">
+                {{ p.name }}
+                <span class="ver">v{{ p.version }}</span>
+              </h2>
+              <p class="desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
+            </div>
+            <div class="meta">
+              <span class="chip brand">{{ p.skills_count }} skills</span>
+              <span class="chip">{{ p.mcp_count }} mcp</span>
+            </div>
+            <div class="card-foot">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="!!installingPlugin"
+                @click="onTogglePlugin(p, true)"
+              >
+                {{ installingPlugin === p.name || installingPlugin === p.file ? '安装中…' : '安装' }}
+              </button>
+              <div class="card-ops">
+                <button type="button" class="btn btn-ghost btn-sm" @click="onEdit(p.file)">编辑</button>
+                <div class="export-menu relative">
+                  <button type="button" class="btn btn-ghost btn-sm" @click.stop="toggleExportMenu(p.file)">导出</button>
+                  <div v-if="exportMenu === p.file" class="menu-panel" @click.stop>
+                    <button type="button" @click="doExport(p.file, 'zip')">ZIP（含 Skills）</button>
+                    <button type="button" @click="doExport(p.file, 'yaml')">YAML（仅配置）</button>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 已安装 -->
+      <section v-if="installedPlugins.length" class="section">
+        <header class="section-head">
+          <h2>已安装</h2>
+          <span class="section-count">{{ installedPlugins.length }} 个</span>
+        </header>
+        <div class="grid">
+          <article
+            v-for="p in installedPlugins"
+            :key="p.file"
+            class="card installed"
+            :class="{ selected: selectedForExport.has(p.file) }"
+          >
+            <div class="card-top">
+              <div class="avatar" aria-hidden="true">{{ initials(p.name) }}</div>
+              <input
+                type="checkbox"
+                class="pick"
+                :checked="selectedForExport.has(p.file)"
+                :aria-label="'选择 ' + p.name"
+                @change="toggleSelectForExport(p.file)"
+              >
+            </div>
+            <div>
+              <h2 class="title">
+                {{ p.name }}
+                <span class="ver">v{{ p.version }}</span>
+              </h2>
+              <p class="desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
+            </div>
+            <div class="meta">
+              <span class="chip ok">已安装</span>
+              <span class="chip brand">{{ p.skills_count }} skills</span>
+              <span class="chip">{{ p.mcp_count }} mcp</span>
+            </div>
+            <div class="card-foot">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="!!installingPlugin"
+                @click="onTogglePlugin(p, false)"
+              >
+                卸载
+              </button>
+              <div class="card-ops">
+                <button type="button" class="btn btn-ghost btn-sm" @click="onEdit(p.file)">编辑</button>
+                <div class="export-menu relative">
+                  <button type="button" class="btn btn-ghost btn-sm" @click.stop="toggleExportMenu(p.file)">导出</button>
+                  <div v-if="exportMenu === p.file" class="menu-panel" @click.stop>
+                    <button type="button" @click="doExport(p.file, 'zip')">ZIP（含 Skills）</button>
+                    <button type="button" @click="doExport(p.file, 'yaml')">YAML（仅配置）</button>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 全部其他 -->
+      <section v-if="otherPlugins.length" class="section">
+        <header class="section-head">
+          <h2>全部插件</h2>
+          <span class="section-count">{{ otherPlugins.length }} 个</span>
+        </header>
+        <div class="grid">
+          <article
+            v-for="p in otherPlugins"
+            :key="p.file"
+            class="card"
+            :class="{ selected: selectedForExport.has(p.file) }"
+          >
+            <div class="card-top">
+              <div class="avatar" aria-hidden="true">{{ initials(p.name) }}</div>
+              <input
+                type="checkbox"
+                class="pick"
+                :checked="selectedForExport.has(p.file)"
+                :aria-label="'选择 ' + p.name"
+                @change="toggleSelectForExport(p.file)"
+              >
+            </div>
+            <div>
+              <h2 class="title">
+                {{ p.name }}
+                <span class="ver">v{{ p.version }}</span>
+              </h2>
+              <p class="desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
+            </div>
+            <div class="meta">
+              <span class="chip idle">未安装</span>
+              <span class="chip brand">{{ p.skills_count }} skills</span>
+              <span class="chip">{{ p.mcp_count }} mcp</span>
+            </div>
+            <div class="card-foot">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="!!installingPlugin"
+                @click="onTogglePlugin(p, true)"
+              >
+                {{ installingPlugin === p.name || installingPlugin === p.file ? '安装中…' : '安装' }}
+              </button>
+              <div class="card-ops">
+                <button type="button" class="btn btn-ghost btn-sm" @click="onEdit(p.file)">编辑</button>
+                <div class="export-menu relative">
+                  <button type="button" class="btn btn-ghost btn-sm" @click.stop="toggleExportMenu(p.file)">导出</button>
+                  <div v-if="exportMenu === p.file" class="menu-panel" @click.stop>
+                    <button type="button" @click="doExport(p.file, 'zip')">ZIP（含 Skills）</button>
+                    <button type="button" @click="doExport(p.file, 'yaml')">YAML（仅配置）</button>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-ghost btn-sm" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- 拖拽导入区 -->
+      <section class="section">
+        <div
+          class="dropzone"
+          :class="{ drag: dropDragging }"
+          role="button"
+          tabindex="0"
+          aria-label="导入插件"
+          @click="triggerImport"
+          @keydown.enter.prevent="triggerImport"
+          @dragover.prevent="dropDragging = true"
+          @dragleave.prevent="dropDragging = false"
+          @drop="onDrop"
+        >
+          <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 19h16"/></svg>
+          <strong>拖入或点击导入</strong>
+          <span>支持 .zip（含 Skills）或 .yaml</span>
+        </div>
+      </section>
+    </div>
+
+    <!-- 搜索/筛选结果：扁平网格 -->
+    <div v-else class="grid">
       <article
         v-for="p in filteredPlugins"
         :key="p.file"
@@ -266,7 +494,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   --red: #f53f3f;
   --red-bg: #ffece8;
   --red-border: #f9c2c0;
-  --glow: 0 0 0 3px rgba(22, 93, 255, 0.15);
+  --glow: 0 0 0 3px var(--primary-container-strong);
   --card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
@@ -287,14 +515,14 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sm { height: 30px; padding: 0 10px; font-size: 11px; border-radius: 7px; }
 .btn-sm svg { width: 13px; height: 13px; }
-.btn-primary { background: #165dff; color: #fff; box-shadow: 0 1px 2px rgba(22, 93, 255, .22); }
-.btn-primary:hover:not(:disabled) { background: #0e42d2; }
-.btn-soft { background: #eef4ff; color: #0e42d2; border-color: #d9e6ff; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 1px 2px rgba(22, 93, 255, .22); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-soft { background: var(--primary-container); color: var(--primary-hover); border-color: var(--primary-container-strong); }
 .btn-soft:hover:not(:disabled) { background: #d9e6ff; }
-.btn-secondary { background: #fff; color: #4e5969; border-color: #e5e6eb; }
-.btn-secondary:hover:not(:disabled) { background: #f7f8fa; border-color: #c9cdd4; }
-.btn-ghost { background: transparent; color: #4e5969; }
-.btn-ghost:hover:not(:disabled) { background: #f7f8fa; color: #1f2329; }
+.btn-secondary { background: var(--bg-elevated); color: var(--text-secondary); border-color: var(--border-base); }
+.btn-secondary:hover:not(:disabled) { background: var(--bg-base); border-color: var(--border-strong); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover:not(:disabled) { background: var(--bg-base); color: var(--text-primary); }
 .btn:focus-visible { outline: none; box-shadow: var(--glow); }
 
 .btn-cluster { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -305,7 +533,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   gap: 12px;
 }
 .stat-hero, .stat {
-  background: #fff;
+  background: var(--bg-elevated);
   border-radius: 16px;
   box-shadow: var(--card);
   border: 1px solid rgba(0, 0, 0, .03);
@@ -333,35 +561,35 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 .stat-hero .hint { margin-top: 10px; font-size: 12px; opacity: .8; position: relative; }
 .stat-hero .installing { opacity: 1; font-weight: 600; }
 .stat { padding: 18px 20px; }
-.stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; color: #1f2329; }
-.stat span { font-size: 12px; color: #86909c; }
+.stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.stat span { font-size: 12px; color: var(--text-tertiary); }
 .stat .bar {
-  margin-top: 12px; height: 6px; border-radius: 999px; background: #f7f8fa; overflow: hidden;
+  margin-top: 12px; height: 6px; border-radius: 999px; background: var(--bg-base); overflow: hidden;
 }
 .stat .bar i {
-  display: block; height: 100%; border-radius: inherit; background: #165dff;
+  display: block; height: 100%; border-radius: inherit; background: var(--primary);
   transition: width .25s ease;
 }
 .stat .bar i.skills { background: #00b42a; }
 
 .toolbar {
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center;
-  padding: 12px 14px; background: #fff;
+  padding: 12px 14px; background: var(--bg-elevated);
   border: 1px solid rgba(0, 0, 0, .04); border-radius: 14px; box-shadow: var(--card);
 }
 .toolbar-left { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .search {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
-  border: 1px solid #c9cdd4; border-radius: 8px; background: #fff; min-width: 220px;
+  border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-elevated); min-width: 220px;
 }
-.search:focus-within { border-color: #165dff; box-shadow: var(--glow); }
+.search:focus-within { border-color: var(--primary); box-shadow: var(--glow); }
 .search input { border: none; outline: none; flex: 1; font-size: 12px; min-width: 0; background: transparent; }
-.seg { display: inline-flex; background: #f7f8fa; padding: 3px; border-radius: 8px; }
+.seg { display: inline-flex; background: var(--bg-base); padding: 3px; border-radius: 8px; }
 .seg button {
   height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
-  color: #86909c; border: none; background: transparent; cursor: pointer;
+  color: var(--text-tertiary); border: none; background: transparent; cursor: pointer;
 }
-.seg button.on { background: #fff; color: #0e42d2; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.seg button.on { background: var(--bg-elevated); color: var(--primary-hover); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
 
 .grid {
   display: grid;
@@ -370,39 +598,39 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   position: relative;
 }
 .card {
-  background: #fff; border-radius: 16px; box-shadow: var(--card);
+  background: var(--bg-elevated); border-radius: 16px; box-shadow: var(--card);
   border: 1px solid rgba(0, 0, 0, .03);
   padding: 16px; display: flex; flex-direction: column; gap: 12px;
   transition: border-color .18s ease, box-shadow .18s ease;
 }
-.card:hover { border-color: #d9e6ff; box-shadow: 0 4px 16px rgba(22, 93, 255, .08); }
-.card.selected { border-color: #165dff; box-shadow: var(--glow); }
+.card:hover { border-color: var(--primary-container-strong); box-shadow: 0 4px 16px rgba(22, 93, 255, .08); }
+.card.selected { border-color: var(--primary); box-shadow: var(--glow); }
 .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .avatar {
   width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-  background: #eef4ff; color: #0e42d2; font-weight: 750; font-size: 14px;
-  border: 1px solid #d9e6ff; flex-shrink: 0;
+  background: var(--primary-container); color: var(--primary-hover); font-weight: 750; font-size: 14px;
+  border: 1px solid var(--primary-container-strong); flex-shrink: 0;
 }
 .card.installed .avatar { background: var(--green-bg); color: var(--green); border-color: #b7f0c0; }
-.pick { width: 18px; height: 18px; accent-color: #165dff; cursor: pointer; margin-top: 2px; }
-.title { font-size: 14px; font-weight: 700; letter-spacing: -.01em; margin: 0; color: #1f2329; }
+.pick { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; margin-top: 2px; }
+.title { font-size: 14px; font-weight: 700; letter-spacing: -.01em; margin: 0; color: var(--text-primary); }
 .ver {
   font-family: 'JetBrains Mono', Consolas, monospace;
-  font-size: 11px; color: #86909c; margin-left: 6px; font-weight: 500;
+  font-size: 11px; color: var(--text-tertiary); margin-left: 6px; font-weight: 500;
 }
 .desc {
-  margin: 6px 0 0; font-size: 12.5px; color: #86909c; line-height: 1.45;
+  margin: 6px 0 0; font-size: 12.5px; color: var(--text-tertiary); line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; min-height: 2.9em;
 }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
-  background: #f7f8fa; color: #4e5969;
+  background: var(--bg-base); color: var(--text-secondary);
 }
 .chip.ok { background: var(--green-bg); color: var(--green); }
 .chip.idle { background: var(--amber-bg); color: var(--amber); }
-.chip.brand { background: #eef4ff; color: #0e42d2; }
+.chip.brand { background: var(--primary-container); color: var(--primary-hover); }
 .card-foot {
   margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding-top: 12px; border-top: 1px solid #f7f8fa; flex-wrap: wrap;
@@ -411,54 +639,125 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 
 .menu-panel {
   position: absolute; right: 0; top: calc(100% + 4px); min-width: 148px;
-  background: #fff; border: 1px solid #e5e6eb; border-radius: 10px; box-shadow: var(--card);
+  background: var(--bg-elevated); border: 1px solid var(--border-base); border-radius: 10px; box-shadow: var(--card);
   z-index: 20; overflow: hidden;
 }
 .menu-panel button {
   display: block; width: 100%; text-align: left; padding: 9px 12px; border: none; background: none;
-  font-size: 12px; color: #4e5969; cursor: pointer;
+  font-size: 12px; color: var(--text-secondary); cursor: pointer;
 }
-.menu-panel button:hover { background: #eef4ff; color: #0e42d2; }
+.menu-panel button:hover { background: var(--primary-container); color: var(--primary-hover); }
 
 .dropzone {
   border: 1.5px dashed #c9cdd4; border-radius: 16px; padding: 22px 16px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-  color: #86909c; text-align: center; cursor: pointer; background: #fafbfd;
+  color: var(--text-tertiary); text-align: center; cursor: pointer; background: var(--bg-base);
   transition: .18s ease; min-height: 180px;
 }
 .dropzone:hover, .dropzone.drag {
-  border-color: #165dff; background: #eef4ff; color: #0e42d2;
+  border-color: var(--primary); background: var(--primary-container); color: var(--primary-hover);
 }
-.dropzone:focus-visible { outline: none; box-shadow: var(--glow); border-color: #165dff; }
+.dropzone:focus-visible { outline: none; box-shadow: var(--glow); border-color: var(--primary); }
 .dropzone svg { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .dropzone strong { font-size: 13px; color: inherit; }
 .dropzone span { font-size: 11.5px; }
 
 .empty-hint {
   grid-column: 1 / -1;
-  text-align: center; color: #86909c; font-size: 12.5px; padding: 8px 0 4px;
+  text-align: center; color: var(--text-tertiary); font-size: 12.5px; padding: 8px 0 4px;
+}
+
+/* 分区布局 */
+.sections {
+  display: flex; flex-direction: column; gap: 22px;
+}
+.section {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.section-head {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 0 2px;
+}
+.section-head h2 {
+  margin: 0;
+  font-size: 14px; font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.section-head .star {
+  color: #ff7d00;
+  font-size: 14px;
+  filter: drop-shadow(0 1px 2px rgba(255, 125, 0, .25));
+}
+.section-count {
+  font-size: 11.5px; color: var(--text-tertiary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.section .grid { grid-template-columns: repeat(3, 1fr); }
+.section .grid.grid-featured {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* 推荐卡片 */
+.card.featured {
+  position: relative;
+  background: linear-gradient(180deg, var(--primary-container) 0%, var(--bg-elevated) 32%) var(--bg-elevated);
+  border-color: var(--primary-container-strong);
+}
+.card.featured::before {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: 16px;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(22, 93, 255, .04), transparent 30%);
+}
+.card.featured .avatar {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.recommend-tag {
+  font-size: 10.5px; font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  letter-spacing: .02em;
+  box-shadow: 0 1px 2px rgba(22, 93, 255, .25);
 }
 
 .float-bar {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px);
-  background: #1f2329; color: #fff; border-radius: 14px; padding: 10px 12px 10px 16px;
+  background: var(--text-primary); color: #fff; border-radius: 14px; padding: 10px 12px 10px 16px;
   display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
   opacity: 0; pointer-events: none; transition: .2s ease; z-index: 40; max-width: calc(100vw - 32px);
 }
 .float-bar.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 .float-bar span { font-size: 12.5px; white-space: nowrap; }
 .float-bar .btn { height: 30px; color: #fff; border-color: rgba(255, 255, 255, .2); }
-.float-bar .btn-primary { background: #165dff; border-color: transparent; }
+.float-bar .btn-primary { background: var(--primary); border-color: transparent; }
 .float-bar .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .1); color: #fff; }
 
 @media (max-width: 960px) {
   .hero-stats { grid-template-columns: 1fr 1fr; }
   .stat-hero { grid-column: 1 / -1; }
   .grid { grid-template-columns: 1fr 1fr; }
+  .section .grid,
+  .section .grid.grid-featured { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 620px) {
-  .grid { grid-template-columns: 1fr; }
+  .grid,
+  .section .grid,
+  .section .grid.grid-featured { grid-template-columns: 1fr 1fr; }
   .hero-stats { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .grid,
+  .section .grid,
+  .section .grid.grid-featured { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .btn, .card, .dropzone, .float-bar, .stat .bar i { transition: none !important; }

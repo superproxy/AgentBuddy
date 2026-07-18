@@ -306,7 +306,13 @@ export const useIdeStore = defineStore('ide', () => {
   }
 
   function toggleIdeCard(ideKey: string) {
-    expandedIdeCard.value = expandedIdeCard.value === ideKey ? '' : ideKey
+    if (expandedIdeCard.value === ideKey) {
+      expandedIdeCard.value = ''
+      expandedIde.value = ''
+    } else {
+      expandedIdeCard.value = ideKey
+      expandedIde.value = ideKey
+    }
   }
 
   function setIdeCardTab(ideKey: string, tab: string) {

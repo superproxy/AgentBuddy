@@ -6,6 +6,7 @@ import { useEnvStore } from '../stores/env'
 import { useMcpStore } from '../stores/mcp'
 import { useSkillStore } from '../stores/skill'
 import { usePluginStore } from '../stores/plugin'
+import { useAiGenerateStore } from '../stores/aiGenerate'
 
 type CatKey = 'llm' | 'mcp' | 'skill' | 'agent' | 'rule' | 'cmd'
 
@@ -14,6 +15,8 @@ const env = useEnvStore()
 const mcp = useMcpStore()
 const skill = useSkillStore()
 const plugin = usePluginStore()
+const ai = useAiGenerateStore()
+const { dialogOpen, prompt, level, generating, output, generatedConfig } = storeToRefs(ai)
 
 const {
   pluginForm, selectedSkills, selectedMcp, selectedLlm,
@@ -309,44 +312,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- C7 层叠清单纸 -->
-    <div class="c7-wrap">
-      <div class="c7-stack s1" aria-hidden="true" />
-      <div class="c7-stack s2" aria-hidden="true" />
-      <div class="c7-sheet">
-        <div class="c7-head">
-          <span>PLUGIN MANIFEST · DRAFT</span>
-          <em>rev 0.3</em>
-        </div>
-        <div class="c7-rows">
-          <div class="c7-row brand">
-            <i class="c7-mark" aria-hidden="true" />
-            <div class="idx">A01</div>
-            <b>{{ totalSelected }}</b>
-            <span>已选组件</span>
-          </div>
-          <div class="c7-row live">
-            <i class="c7-mark" aria-hidden="true" />
-            <div class="idx">A02</div>
-            <b>{{ filledLayers }}/6</b>
-            <span>已填充类型</span>
-          </div>
-          <div class="c7-row warn">
-            <i class="c7-mark" aria-hidden="true" />
-            <div class="idx">A03</div>
-            <b>{{ completeness }}%</b>
-            <span>装箱完整度</span>
-          </div>
-          <div class="c7-row muted">
-            <i class="c7-mark" aria-hidden="true" />
-            <div class="idx">A04</div>
-            <b>{{ buildMode === 'local' ? '本地' : 'IDE' }}</b>
-            <span>构建来源</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Toolbar -->
     <div class="pb-toolbar">
       <span class="pb-toolbar-label">构建来源</span>
@@ -369,6 +334,15 @@ onMounted(() => {
         >
           IDE 导入
         </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ on: buildMode === 'ai' }"
+          :aria-selected="buildMode === 'ai'"
+          @click="buildMode = 'ai'"
+        >
+          AI 生成
+        </button>
       </div>
       <div class="pb-chips" aria-live="polite">
         <span class="pb-chip" :class="{ has: counts.llm }">LLM {{ counts.llm }}</span>
@@ -378,6 +352,9 @@ onMounted(() => {
         <span class="pb-chip" :class="{ has: counts.rule }">Rule {{ counts.rule }}</span>
         <span class="pb-chip" :class="{ has: counts.cmd }">Cmd {{ counts.cmd }}</span>
         <span v-if="hooksEnabled" class="pb-chip on">Hooks</span>
+        <span class="pb-chip-meta" :title="`已填充类型 ${filledLayers}/6 · 装箱完整度 ${completeness}%`">
+          {{ filledLayers }}/6 · {{ completeness }}%
+        </span>
       </div>
     </div>
 
@@ -949,6 +926,83 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- AI 生成 -->
+    <div v-show="buildMode === 'ai'" class="pb-ai">
+      <div class="pb-ai-hero">
+        <div class="pb-ai-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg>
+        </div>
+        <div>
+          <h3>用自然语言生成插件</h3>
+          <p>描述你想要的智能体能力，LLM 会自动挑选 LLM / MCP / Skill / Subagent 组合并生成 plugin.yaml。</p>
+        </div>
+      </div>
+
+      <div class="pb-ai-form">
+        <label class="pb-ai-label">需求描述</label>
+        <textarea
+          v-model="prompt"
+          :disabled="generating"
+          rows="4"
+          placeholder="例如：一个 Java 后端开发智能体，精通 Spring Boot / MyBatis / MySQL，需要文件系统和搜索能力"
+          class="pb-ai-textarea"
+        />
+
+        <div class="pb-ai-row">
+          <span class="pb-ai-label">工具集级别</span>
+          <div class="pb-ai-seg">
+            <button
+              v-for="lv in ['basic', 'standard', 'expert']"
+              :key="lv"
+              type="button"
+              :disabled="generating"
+              :class="['pb-ai-lv', level === lv ? 'on' : '']"
+              @click="level === lv ? (level = '') : (level = lv)"
+            >
+              {{ lv === 'basic' ? '基础' : lv === 'standard' ? '进阶' : '专家' }}
+            </button>
+          </div>
+          <span class="pb-ai-hint">不选则自动判断</span>
+        </div>
+
+        <div class="pb-ai-actions">
+          <button
+            type="button"
+            class="pb-btn pb-btn-primary"
+            :disabled="generating || !prompt.trim()"
+            @click="ai.generate()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            {{ generating ? '生成中…' : '开始生成' }}
+          </button>
+          <span v-if="generating" class="pb-ai-status">LLM 正在生成 plugin.yaml…</span>
+        </div>
+      </div>
+
+      <div v-if="output" class="pb-ai-out">
+        <div class="pb-ai-out-head">
+          <span>生成输出</span>
+          <em v-if="generating">streaming…</em>
+        </div>
+        <pre class="pb-ai-stream">{{ output }}</pre>
+      </div>
+
+      <div v-if="generatedConfig" class="pb-ai-result">
+        <div class="pb-ai-out-head">
+          <span>plugin.yaml 预览</span>
+          <em class="ok">✓ 生成完成</em>
+        </div>
+        <pre class="pb-ai-yaml">{{ generatedConfig }}</pre>
+        <div class="pb-ai-result-actions">
+          <button type="button" class="pb-btn pb-btn-ghost" @click="ai.closeDialog()">丢弃</button>
+          <button type="button" class="pb-btn pb-btn-success" @click="ai.save()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
+            保存到插件配置
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -971,7 +1025,7 @@ onMounted(() => {
 .pb-btn-primary:hover:not(:disabled) { background: var(--color-brand-600); }
 .pb-btn-soft { background: var(--color-brand-50); color: var(--color-brand-600); border-color: var(--color-brand-100); }
 .pb-btn-soft:hover:not(:disabled) { background: var(--color-brand-100); }
-.pb-btn-secondary { background: #fff; color: var(--color-ink-700); border-color: var(--color-ink-200); }
+.pb-btn-secondary { background: var(--bg-elevated); color: var(--color-ink-700); border-color: var(--color-ink-200); }
 .pb-btn-secondary:hover:not(:disabled) { background: var(--color-ink-100); border-color: var(--color-ink-300); }
 .pb-btn-ghost { color: var(--color-ink-700); }
 .pb-btn-ghost:hover:not(:disabled) { background: var(--color-ink-100); }
@@ -982,58 +1036,20 @@ onMounted(() => {
 
 .pb-select {
   height: 34px; padding: 0 10px; border: 1px solid var(--color-ink-300); border-radius: 8px;
-  font-size: 12px; background: #fff; color: var(--color-ink-700); min-width: 140px; font-family: inherit;
+  font-size: 12px; background: var(--bg-elevated); color: var(--color-ink-700); min-width: 140px; font-family: inherit;
 }
 .pb-select:focus { outline: none; border-color: var(--color-brand-500); box-shadow: var(--shadow-glow); }
 .pb-select-sm { height: 30px; min-width: 100px; font-size: 11px; }
 .pb-input {
   width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--color-ink-300); border-radius: 8px;
-  font-size: 12px; background: #fff; font-family: inherit;
+  font-size: 12px; background: var(--bg-elevated); font-family: inherit;
 }
 .pb-input:focus { outline: none; border-color: var(--color-brand-500); box-shadow: var(--shadow-glow); }
-
-/* C7 */
-.c7-wrap { position: relative; padding: 12px 8px 8px; }
-.c7-stack {
-  position: absolute; left: 16px; right: 16px; height: 16px;
-  border-radius: 10px; background: #fff; border: 1px solid var(--color-ink-200);
-  box-shadow: var(--shadow-card);
-}
-.c7-stack.s1 { top: 0; transform: rotate(-.6deg); opacity: .55; }
-.c7-stack.s2 { top: 6px; transform: rotate(.4deg); opacity: .75; }
-.c7-sheet {
-  position: relative; background: #fff; border: 1px solid var(--color-ink-200);
-  border-radius: 12px; box-shadow: var(--shadow-card); overflow: hidden;
-}
-.c7-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px dashed var(--color-ink-200);
-  background: linear-gradient(90deg, var(--color-brand-50), #fff 40%);
-  font-size: 11px; font-weight: 700; color: var(--color-brand-600);
-}
-.c7-head em { font-style: normal; font-family: 'JetBrains Mono', Consolas, monospace; color: var(--color-ink-500); font-weight: 600; }
-.c7-rows { display: grid; grid-template-columns: repeat(4, 1fr); }
-.c7-row {
-  padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
-  border-right: 1px solid var(--color-ink-100);
-}
-.c7-row:last-child { border-right: none; }
-.c7-row .idx { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 10px; font-weight: 700; color: var(--color-ink-300); }
-.c7-row b { font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.c7-row.brand b { color: var(--color-brand-600); }
-.c7-row.live b { color: #009a29; }
-.c7-row.warn b { color: #d46b08; }
-.c7-row span { font-size: 11.5px; color: var(--color-ink-500); }
-.c7-mark { width: 8px; height: 8px; border-radius: 2px; margin-bottom: 2px; display: block; }
-.c7-row.brand .c7-mark { background: var(--color-brand-500); }
-.c7-row.live .c7-mark { background: #00b42a; }
-.c7-row.warn .c7-mark { background: #ff7d00; }
-.c7-row.muted .c7-mark { background: var(--color-ink-300); }
 
 /* Toolbar */
 .pb-toolbar {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  background: #fff; border-radius: 12px; padding: 10px 14px;
+  background: var(--bg-elevated); border-radius: 12px; padding: 10px 14px;
   box-shadow: var(--shadow-card); border: 1px solid rgba(0,0,0,.03);
 }
 .pb-toolbar-label { font-size: 12px; color: var(--color-ink-500); font-weight: 500; }
@@ -1042,7 +1058,7 @@ onMounted(() => {
   height: 28px; padding: 0 14px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600;
   background: transparent; color: var(--color-ink-500); transition: .15s; font-family: inherit; cursor: pointer;
 }
-.pb-seg button.on { background: #fff; color: var(--color-brand-600); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.pb-seg button.on { background: var(--bg-elevated); color: var(--color-brand-600); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 .pb-seg button:hover:not(.on) { color: var(--color-ink-900); }
 .pb-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .pb-chip {
@@ -1052,15 +1068,22 @@ onMounted(() => {
 }
 .pb-chip.has { background: var(--color-brand-50); color: var(--color-brand-600); border-color: var(--color-brand-100); }
 .pb-chip.on { background: #e8ffea; color: #00b42a; }
+.pb-chip-meta {
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+  background: transparent; color: var(--color-ink-500);
+  border: 1px dashed var(--color-ink-300);
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+  margin-left: 4px; cursor: help;
+}
 
 /* Studio */
 .pb-studio {
   display: grid; grid-template-columns: 200px minmax(0, 1fr) 340px;
-  min-height: 580px; background: #fff; border-radius: 14px;
+  min-height: 580px; background: var(--bg-elevated); border-radius: 14px;
   box-shadow: var(--shadow-card); border: 1px solid rgba(0,0,0,.03); overflow: hidden;
 }
 
-.pb-rail { border-right: 1px solid var(--color-ink-200); display: flex; flex-direction: column; background: #fff; min-width: 0; }
+.pb-rail { border-right: 1px solid var(--color-ink-200); display: flex; flex-direction: column; background: var(--bg-elevated); min-width: 0; }
 .pb-rail-top { padding: 14px; border-bottom: 1px solid var(--color-ink-200); }
 .pb-rail-brand { display: flex; align-items: center; gap: 8px; }
 .pb-rail-brand .mark { width: 10px; height: 10px; border-radius: 2px; background: var(--color-brand-500); flex-shrink: 0; }
@@ -1080,7 +1103,7 @@ onMounted(() => {
   width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
   display: grid; place-items: center; background: var(--color-ink-100); color: var(--color-ink-700); transition: .15s;
 }
-.pb-cat.active .ico { background: #fff; color: var(--color-brand-600); box-shadow: 0 1px 2px rgba(22,93,255,.12); }
+.pb-cat.active .ico { background: var(--bg-elevated); color: var(--color-brand-600); box-shadow: 0 1px 2px rgba(22,93,255,.12); }
 .pb-cat .ico svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
 .pb-cat .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .pb-cat .txt small { font-size: 10px; font-weight: 500; color: var(--color-ink-500); }
@@ -1092,11 +1115,11 @@ onMounted(() => {
 }
 .pb-cat.active .n { background: var(--color-brand-500); color: #fff; }
 .pb-cat .n.empty { background: transparent; color: var(--color-ink-300); }
-.pb-rail-foot { padding: 12px 14px; border-top: 1px solid var(--color-ink-200); font-size: 11px; color: var(--color-ink-500); line-height: 1.45; background: #fafbfd; }
+.pb-rail-foot { padding: 12px 14px; border-top: 1px solid var(--color-ink-200); font-size: 11px; color: var(--color-ink-500); line-height: 1.45; background: var(--bg-base); }
 .pb-rail-foot strong { color: var(--color-ink-700); }
 
 .pb-main { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--color-ink-200); }
-.pb-main-top { padding: 14px 16px; border-bottom: 1px solid var(--color-ink-200); display: flex; flex-direction: column; gap: 12px; background: #fff; }
+.pb-main-top { padding: 14px 16px; border-bottom: 1px solid var(--color-ink-200); display: flex; flex-direction: column; gap: 12px; background: var(--bg-elevated); }
 .pb-main-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pb-main-title h2 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 .pb-pill {
@@ -1109,7 +1132,7 @@ onMounted(() => {
 .pb-main-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .pb-search {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
-  border: 1px solid var(--color-ink-300); border-radius: 8px; background: #fff;
+  border: 1px solid var(--color-ink-300); border-radius: 8px; background: var(--bg-elevated);
   flex: 1; min-width: 160px; max-width: 280px;
 }
 .pb-search:focus-within { border-color: var(--color-brand-500); box-shadow: var(--shadow-glow); }
@@ -1122,7 +1145,7 @@ onMounted(() => {
 }
 .pb-item {
   display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
-  border: 1px solid var(--color-ink-200); border-radius: 10px; background: #fff;
+  border: 1px solid var(--color-ink-200); border-radius: 10px; background: var(--bg-elevated);
   cursor: pointer; transition: border-color .2s, box-shadow .2s, transform .2s;
   text-align: left; width: 100%; font-family: inherit; color: inherit;
 }
@@ -1130,7 +1153,7 @@ onMounted(() => {
 .pb-item.on { border-color: var(--color-brand-500); background: var(--color-brand-50); box-shadow: 0 2px 8px rgba(22,93,255,.1); transform: none; }
 .pb-item .check {
   width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--color-ink-300);
-  margin-top: 7px; flex-shrink: 0; display: grid; place-items: center; transition: .15s; background: #fff;
+  margin-top: 7px; flex-shrink: 0; display: grid; place-items: center; transition: .15s; background: var(--bg-elevated);
 }
 .pb-item.on .check { background: var(--color-brand-500); border-color: var(--color-brand-500); }
 .pb-item .check svg { width: 11px; height: 11px; stroke: #fff; fill: none; stroke-width: 3; opacity: 0; }
@@ -1140,7 +1163,7 @@ onMounted(() => {
   display: grid; place-items: center; font-size: 12px; font-weight: 700;
   background: var(--color-brand-50); color: var(--color-brand-600);
 }
-.pb-item.on .avatar { background: #fff; box-shadow: 0 1px 3px rgba(22,93,255,.15); }
+.pb-item.on .avatar { background: var(--bg-elevated); box-shadow: 0 1px 3px rgba(22,93,255,.15); }
 .pb-item .body { flex: 1; min-width: 0; }
 .pb-item .title { font-size: 13px; font-weight: 650; color: var(--color-ink-900); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .pb-item.on .title { color: var(--color-brand-600); }
@@ -1165,7 +1188,7 @@ onMounted(() => {
 
 /* Manifest */
 .pb-manifest { display: flex; flex-direction: column; min-width: 0; background: linear-gradient(180deg, #fff 0%, #fafbfd 100%); }
-.pb-manifest-head { padding: 16px 18px 14px; border-bottom: 1px solid var(--color-ink-200); background: #fff; }
+.pb-manifest-head { padding: 16px 18px 14px; border-bottom: 1px solid var(--color-ink-200); background: var(--bg-elevated); }
 .pb-manifest-head .pb-pill { margin-bottom: 8px; }
 .pb-pkg-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .pb-pkg-row h3 { margin: 0; font-size: 16px; font-weight: 720; letter-spacing: -.02em; font-family: 'JetBrains Mono', Consolas, monospace; }
@@ -1176,7 +1199,7 @@ onMounted(() => {
 .pb-complete .bar i { display: block; height: 100%; background: var(--color-brand-500); border-radius: 3px; transition: width .3s ease; }
 .pb-complete b { color: var(--color-brand-600); font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
 
-.pb-form-block { margin: 12px 14px 0; background: #fff; border: 1px solid var(--color-ink-200); border-radius: 12px; padding: 12px 14px; }
+.pb-form-block { margin: 12px 14px 0; background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 12px; padding: 12px 14px; }
 .pb-form-block h4 { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: var(--color-ink-500); text-transform: uppercase; letter-spacing: .04em; }
 .pb-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pb-form .field.span-2 { grid-column: 1 / -1; }
@@ -1184,7 +1207,7 @@ onMounted(() => {
 .pb-form .field input,
 .pb-form .field textarea {
   width: 100%; border: 1px solid var(--color-ink-300); border-radius: 8px;
-  padding: 7px 9px; font-size: 12px; color: var(--color-ink-900); background: #fff; transition: .15s; font-family: inherit;
+  padding: 7px 9px; font-size: 12px; color: var(--color-ink-900); background: var(--bg-elevated); transition: .15s; font-family: inherit;
 }
 .pb-form .field input:focus,
 .pb-form .field textarea:focus { border-color: var(--color-brand-500); box-shadow: var(--shadow-glow); outline: none; }
@@ -1193,7 +1216,7 @@ onMounted(() => {
 .field-err { font-size: 10px; color: #f53f3f; margin-top: 3px; }
 
 .pb-packing { flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; max-height: 280px; }
-.pb-pack-block { background: #fff; border: 1px solid var(--color-ink-200); border-radius: 10px; padding: 10px 12px; transition: border-color .15s; }
+.pb-pack-block { background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 10px; padding: 10px 12px; transition: border-color .15s; }
 .pb-pack-block:hover { border-color: var(--color-brand-100); }
 .pb-pack-block.empty { background: var(--color-ink-100); border-style: dashed; }
 .pb-pack-h {
@@ -1224,7 +1247,7 @@ onMounted(() => {
 
 .pb-hooks {
   display: flex; align-items: center; gap: 10px; padding: 12px 14px;
-  border: 1px solid var(--color-ink-200); border-radius: 10px; background: #fff;
+  border: 1px solid var(--color-ink-200); border-radius: 10px; background: var(--bg-elevated);
   font-size: 12.5px; color: var(--color-ink-700); cursor: pointer; transition: .15s; user-select: none;
 }
 .pb-hooks:hover { border-color: var(--color-brand-100); }
@@ -1234,7 +1257,7 @@ onMounted(() => {
 
 .pb-manifest-foot {
   margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--color-ink-200);
-  display: flex; flex-direction: column; gap: 8px; background: #fff;
+  display: flex; flex-direction: column; gap: 8px; background: var(--bg-elevated);
 }
 .pb-manifest-foot .row { display: flex; gap: 8px; }
 .pb-manifest-foot .hint-line { margin: 0; font-size: 11px; color: var(--color-ink-500); text-align: center; }
@@ -1243,7 +1266,7 @@ onMounted(() => {
 .pb-ide { display: flex; flex-direction: column; gap: 10px; }
 .pb-wizard-bar {
   display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
-  background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow-card);
+  background: var(--bg-elevated); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow-card);
 }
 .pb-wiz-step {
   display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px;
@@ -1256,14 +1279,14 @@ onMounted(() => {
   width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
   font-size: 10px; font-weight: 700; background: var(--color-ink-200); color: var(--color-ink-500);
 }
-.pb-wiz-step.active .num { background: #fff; color: var(--color-brand-600); }
+.pb-wiz-step.active .num { background: var(--bg-elevated); color: var(--color-brand-600); }
 .pb-wiz-step.done .num { background: var(--color-brand-500); color: #fff; }
 .pb-wiz-step .lab { font-size: 12px; font-weight: 600; }
 .pb-wiz-line { flex: 1; min-width: 12px; height: 2px; background: var(--color-ink-200); }
 .pb-wiz-line.on { background: var(--color-brand-500); }
 .pb-wiz-desc { margin: 0; font-size: 11px; color: var(--color-ink-500); padding-left: 4px; }
 .pb-wizard-body {
-  background: #fff; border-radius: 14px; box-shadow: var(--shadow-card); padding: 16px;
+  background: var(--bg-elevated); border-radius: 14px; box-shadow: var(--shadow-card); padding: 16px;
   min-height: 400px; border: 1px solid rgba(0,0,0,.03);
 }
 .pb-wiz-foot {
@@ -1288,10 +1311,150 @@ onMounted(() => {
 .pb-check-row.on { border-color: var(--color-brand-100); background: var(--color-brand-50); }
 .pb-check-row input { accent-color: var(--color-brand-500); }
 
+/* AI 生成 */
+.pb-ai {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.pb-ai-hero {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-base);
+}
+.pb-ai-icon {
+  width: 36px; height: 36px; flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--primary-container);
+  color: var(--primary);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pb-ai-icon svg { width: 20px; height: 20px; fill: currentColor; }
+.pb-ai-hero h3 {
+  margin: 0 0 4px; font-size: 14px; font-weight: 700;
+  color: var(--text-primary); letter-spacing: -0.01em;
+}
+.pb-ai-hero p {
+  margin: 0; font-size: 12px; line-height: 1.5;
+  color: var(--text-secondary);
+}
+.pb-ai-form {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.pb-ai-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+}
+.pb-ai-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  background: var(--bg-input);
+  font-size: 12.5px; line-height: 1.5;
+  color: var(--text-primary);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 88px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.pb-ai-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-container);
+}
+.pb-ai-textarea::placeholder { color: var(--text-tertiary); }
+.pb-ai-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.pb-ai-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.pb-ai-lv {
+  padding: 5px 12px;
+  font-size: 11.5px; font-weight: 500;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 0;
+  cursor: pointer;
+  transition: all .15s;
+}
+.pb-ai-lv + .pb-ai-lv { border-left: 1px solid var(--border-base); }
+.pb-ai-lv:hover:not(:disabled) { color: var(--primary); }
+.pb-ai-lv.on {
+  background: var(--primary);
+  color: var(--text-inverse);
+  font-weight: 600;
+}
+.pb-ai-lv:disabled { opacity: .5; cursor: not-allowed; }
+.pb-ai-hint {
+  font-size: 11px; color: var(--text-tertiary);
+}
+.pb-ai-actions {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 4px;
+}
+.pb-ai-status {
+  font-size: 11.5px; color: var(--text-tertiary);
+}
+.pb-ai-out,
+.pb-ai-result {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.pb-ai-out-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-secondary);
+}
+.pb-ai-out-head em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.pb-ai-out-head em.ok { color: var(--success); font-weight: 600; }
+.pb-ai-stream {
+  margin: 0;
+  padding: 10px 12px;
+  background: #0d1117;
+  color: #7ee787;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pb-ai-yaml {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  max-height: 280px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pb-ai-result-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 4px;
+}
+
 @media (max-width: 1060px) {
-  .c7-rows { grid-template-columns: repeat(2, 1fr); }
-  .c7-row:nth-child(2n) { border-right: none; }
-  .c7-row:nth-child(-n+2) { border-bottom: 1px solid var(--color-ink-100); }
   .pb-studio { grid-template-columns: 1fr; min-height: auto; }
   .pb-rail { border-right: none; border-bottom: 1px solid var(--color-ink-200); }
   .pb-rail-nav { flex-direction: row; overflow-x: auto; padding-bottom: 10px; }
@@ -1302,12 +1465,9 @@ onMounted(() => {
   .pb-manifest { min-height: 420px; }
 }
 @media (max-width: 560px) {
-  .c7-rows { grid-template-columns: 1fr; }
-  .c7-row { border-right: none; border-bottom: 1px solid var(--color-ink-100); }
-  .c7-row:last-child { border-bottom: none; }
   .pb-form { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pb-item, .c7-stack, .pb-complete .bar i { transition: none !important; }
+  .pb-item, .pb-complete .bar i { transition: none !important; }
 }
 </style>

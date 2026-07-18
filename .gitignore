@@ -19,9 +19,16 @@ temp_parse.py
 .idea
 .claude
 .qoder
+.qoder-cn
 .trae
-.cursor/
+.ade-hermes
+.mastergo
+.openclaw
 .specstory/
+.cursor/
+
+# 设计预览（仅本地参考，不发布）
+frontend/design-previews/
 
 # === Python ===
 # 字节码文件 / 编译产物

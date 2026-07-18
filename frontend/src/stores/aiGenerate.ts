@@ -11,7 +11,7 @@ export const useAiGenerateStore = defineStore('aiGenerate', () => {
 
   const dialogOpen = ref(false)
   const prompt = ref('')
-  const level = ref<'basic' | 'standard' | 'expert'>('')
+  const level = ref<'basic' | 'standard' | 'expert' | ''>('')
   const generating = ref(false)
   const output = ref('')
   const generatedConfig = ref('')
