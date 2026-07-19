@@ -1,13 +1,71 @@
 """IDE 安装/卸载模块。
 
 支持两种安装方式：
-- CLI：通过 brew / npm / script（curl|bash）/ app_cli（App 内 CLI 建软链）/ manual（下载页）安装
-- App：通过 brew install --cask / brew uninstall --cask，或下载 dmg
+- CLI：通过 brew / npm / script（curl|bash）/ powershell_script / app_cli（App 内 CLI 建软链）/ manual（下载页）安装
+- App：通过 system_uninstall（系统级卸载 + 强删兜底）/ manual（仅给下载页）安装
 
-各 IDE 的安装元数据在 IDE_INSTALL_META 中定义：
-    cli_install: {method: brew|npm|script|app_cli|manual, package?, script_url?, app_path?, cli_relpath?, link_name?, url?}
-    app_install: {method: cask|manual, package?, url?}
-    homepage: 官方主页
+================================================================
+IDE 安装元数据规范（IDE_INSTALL_META Schema）
+================================================================
+为避免新增 IDE 时漏配字段，每个 IDE 条目必须包含以下完整结构：
+
+    "<IdeKey>": {
+        # —— 标识与版本元信息 ——
+        "label":          str,   # 显示名（与 detect.py 的 label 一致）
+        "version":        str,   # 最新已知版本号（用于展示，非运行时校验）
+        "release_date":   str,   # 版本发布日期 YYYY-MM-DD（用于判断是否过期）
+        "homepage":       str,   # 官方主页
+        "docs_url":       str,   # 官方文档/安装说明页
+        "release_url":    str,   # GitHub Releases 或 changelog 页
+
+        # —— CLI 安装配置 ——
+        "cli_install": {
+            "method":          "brew" | "npm" | "script" | "powershell_script" | "app_cli" | "manual",
+            # brew / npm 用：
+            "package":         str,    # 包名（如 "@openai/codex"）
+            # script / powershell_script 用：
+            "script_url":      str,    # macOS/Linux 安装脚本 URL
+            "script_url_win":  str,    # Windows PowerShell 脚本 URL（仅 script/powershell_script）
+            # app_cli 用（CLI 随 App 分发，需建软链）：
+            "app_path":        str,    # App 绝对路径（如 /Applications/Cursor.app）
+            "cli_relpath":     str,    # App 内 CLI 相对路径（如 Contents/Resources/app/bin/cursor）
+            "link_name":       str,    # 软链名称（默认取 IDE key 小写）
+            # 通用：
+            "url":             str,    # 安装说明页（manual 时给下载页）
+            "uninstall_cmd_mac": str,  # macOS 卸载命令（bash -c 执行）
+            "uninstall_cmd_win": str,  # Windows 卸载命令（cmd /c 执行）
+            "uninstall_cmd":   str,    # 通用卸载命令（仅 macOS/Linux 用 bash 执行）
+        },
+
+        # —— App 安装配置 ——
+        "app_install": {
+            "method":          "system_uninstall" | "cask" | "manual",
+            # cask 用：
+            "package":         str,    # brew cask 包名
+            # 通用：
+            "url":             str,    # 下载页 URL（manual / system_uninstall 都要有）
+            "uninstall_cmd_mac": str,
+            "uninstall_cmd_win": str,
+            "uninstall_cmd":   str,
+        },
+
+        # —— 直达下载地址（按平台/架构）——
+        # 用于"打开下载页"按钮的直链，缺失时回退 app_install.url 或 homepage
+        "download_urls": {
+            "macos_arm64":     str,    # Apple Silicon dmg/zip
+            "macos_x64":       str,    # Intel dmg/zip
+            "windows_x64":     str,    # x64 exe/msi
+            "windows_arm64":   str,    # ARM64 exe/msi
+            "linux_x64":       str,    # x64 deb/rpm/AppImage
+            "linux_arm64":     str,    # ARM64 deb/rpm/AppImage
+        },
+
+        # —— 该 IDE 支持的所有安装方式（用于 UI 展示）——
+        "install_methods": ["script", "npm", "brew", ...],
+    }
+
+校验：调用 validate_ide_meta() 会检查每个 IDE 是否齐备必要字段，
+缺失会在启动 config_server 时打印警告，避免"每次都漏很多"。
 
 app_cli method：CLI 随 App 分发（如 Cursor.app 内的 cursor 命令），通过建软链
     <link_dir>/<link_name> → <app_path>/<cli_relpath> 使其出现在 PATH 上。
@@ -19,13 +77,20 @@ import sys
 from pathlib import Path
 
 
-# ===== IDE 安装元数据 =====
-# cli_install: 安装 CLI 的方式（brew/npm/manual）与包名
-# app_install: 安装 App 的方式（cask/download/manual）与包名/URL
+# ===== IDE 安装元数据（按上述 Schema 规范配置） =====
+# 更新日期：2026-07-19
+# 数据来源：各 IDE 官网/官方文档/GitHub Releases（详见各条目注释）
 IDE_INSTALL_META = {
     "Claude": {
-        # 官方推荐 native installation（curl/PowerShell 脚本），自动更新
-        # 见 https://code.claude.com/docs/en/setup#uninstall-claude-code
+        # Anthropic 官方 Claude Code
+        # 最新版本：v2.1.150（2026-05-23）—— native installer 自动更新，无需手动升级
+        # 来源：https://code.claude.com/docs/en/setup + https://www.npmjs.com/package/@anthropic-ai/claude-code
+        "label": "Claude Code",
+        "version": "2.1.150",
+        "release_date": "2026-05-23",
+        "homepage": "https://claude.ai/download",
+        "docs_url": "https://code.claude.com/docs/en/setup",
+        "release_url": "https://github.com/anthropics/claude-code/releases",
         "cli_install": {
             "method": "script",
             "script_url": "https://claude.ai/install.sh",
@@ -41,30 +106,60 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/Claude.app' ~/.claude 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\claude\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\" 2>nul & exit /b 0",
         },
-        "homepage": "https://claude.ai/download",
+        "download_urls": {
+            "macos_arm64": "https://claude.ai/api/desktop/darwin/arm64/dmg/latest/redirect",
+            "macos_x64": "https://claude.ai/api/desktop/darwin/x64/dmg/latest/redirect",
+            "windows_x64": "https://claude.ai/download",
+            "windows_arm64": "https://claude.ai/download",
+        },
+        "install_methods": ["script", "npm", "brew", "winget"],
     },
     "Codex": {
+        # OpenAI Codex CLI + Desktop App
+        # 最新版本：v0.144.5（2026-07-17）
+        # 来源：https://www.npmjs.com/package/@openai/codex + https://developers.openai.com/codex
+        "label": "Codex",
+        "version": "0.144.5",
+        "release_date": "2026-07-17",
+        "homepage": "https://openai.com/codex",
+        "docs_url": "https://developers.openai.com/codex/cli",
+        "release_url": "https://github.com/openai/codex/releases",
         "cli_install": {
-            "method": "npm",
-            "package": "@openai/codex",
-            "uninstall_cmd": "npm uninstall -g @openai/codex 2>/dev/null; rm -f $(which codex) 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@openai/codex ~/.nvm/versions/node/*/lib/node_modules/@openai/codex",
-            # Windows：npm 全局 shim 在 %APPDATA%\npm\（codex / codex.cmd / codex.ps1），
-            # node_modules 在 %APPDATA%\npm\node_modules\@openai\codex；多 node 环境（nvm-windows）
-            # 下 npm uninstall -g 只删当前前缀，需 fallback 删默认 npm 目录 + 配置目录
-            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\@openai\\codex\" 2>nul & del /q \"%APPDATA%\\npm\\codex\" \"%APPDATA%\\npm\\codex.cmd\" \"%APPDATA%\\npm\\codex.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codex\" 2>nul & exit /b 0",
+            # 官方推荐 standalone installer（最新）；npm/homebrew 作为备选
+            "method": "script",
+            "script_url": "https://chatgpt.com/codex/install.sh",
+            "script_url_win": "https://chatgpt.com/codex/install.ps1",
+            "url": "https://developers.openai.com/codex/cli",
+            "package": "@openai/codex",  # npm 备选
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/codex; rm -rf ~/.local/share/codex ~/.codex; npm uninstall -g @openai/codex 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@openai/codex ~/.nvm/versions/node/*/lib/node_modules/@openai/codex; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\@openai\\codex\" 2>nul & del /q \"%APPDATA%\\npm\\codex\" \"%APPDATA%\\npm\\codex.cmd\" \"%APPDATA%\\npm\\codex.ps1\" 2>nul & del /q \"%USERPROFILE%\\.local\\bin\\codex.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\codex\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codex\" 2>nul & exit /b 0",
         },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://openai.com/codex/download",
+            "url": "https://developers.openai.com/codex/app",
             "uninstall_cmd_mac": "rm -rf '/Applications/Codex.app' ~/.codex 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\codex\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codex\" 2>nul & exit /b 0",
         },
-        "homepage": "https://openai.com/codex",
+        "download_urls": {
+            # 来源：https://developers.openai.com/codex/app
+            "macos_arm64": "https://persistent.oaistatic.com/codex-app-prod/Codex.dmg",
+            "macos_x64": "https://persistent.oaistatic.com/codex-app-prod/Codex-latest-x64.dmg",
+            "windows_x64": "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
+        },
+        "install_methods": ["script", "npm", "brew", "app"],
     },
     "Cursor": {
-        # 官方 CLI 安装脚本（跨平台），命令名为 agent
-        # 见 https://cursor.com/cn/docs/cli/installation
+        # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
+        # 最新版本：v3.2.16（2026-04-29）
+        # 来源：https://www.cursor.com/downloads + https://cursor.com/cn/docs/cli/installation
+        "label": "Cursor",
+        "version": "3.2.16",
+        "release_date": "2026-04-29",
+        "homepage": "https://cursor.com",
+        "docs_url": "https://cursor.com/cn/docs/cli/installation",
+        "release_url": "https://www.cursor.com/changelog",
         "cli_install": {
+            # 官方 CLI 安装脚本（跨平台），命令名为 agent
             "method": "script",
             "script_url": "https://cursor.com/install",
             "script_url_win": "https://cursor.com/install?win32=true",
@@ -75,23 +170,56 @@ IDE_INSTALL_META = {
         },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://cursor.com",
+            "url": "https://www.cursor.com/downloads",
             "uninstall_cmd_mac": "rm -rf '/Applications/Cursor.app' ~/.cursor 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\cursor\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0",
         },
-        "homepage": "https://cursor.com",
+        "download_urls": {
+            # Cursor 官方下载页提供按平台/架构的稳定直链（universal 包同时支持 arm64/x64）
+            "macos_arm64": "https://download.todesktop.com/230313mzl4w4u92/Cursor-darwin-arm64.dmg",
+            "macos_x64": "https://download.todesktop.com/230313mzl4w4u92/Cursor-darwin-x64.dmg",
+            "windows_x64": "https://download.todesktop.com/230313mzl4w4u92/win32-x64/CursorSetup.exe",
+            "windows_arm64": "https://download.todesktop.com/230313mzl4w4u92/win32-arm64/CursorSetup.exe",
+            "linux_x64": "https://download.todesktop.com/230313mzl4w4u92/linux-x64/Cursor.AppImage",
+        },
+        "install_methods": ["script", "app"],
     },
     "Trae": {
+        # 字节跳动 Trae 国际版（无独立 CLI，仅 App）
+        # 最新版本：v3.3.62（2026-07-18）
+        # 来源：https://www.trae.ai/
+        "label": "Trae",
+        "version": "3.3.62",
+        "release_date": "2026-07-18",
+        "homepage": "https://www.trae.ai",
+        "docs_url": "https://docs.trae.ai/",
+        "release_url": "https://www.trae.ai/changelog",
         "cli_install": {"method": "manual", "url": "https://www.trae.ai"},
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://www.trae.ai",
+            "url": "https://www.trae.ai/download",
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae.app' ~/.trae 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae\" 2>nul & exit /b 0",
         },
-        "homepage": "https://www.trae.ai",
+        "download_urls": {
+            # Trae 国际版官网提供按平台/架构的下载入口（页面动态生成签名链接，故用下载页）
+            "macos_arm64": "https://www.trae.ai/download",
+            "macos_x64": "https://www.trae.ai/download",
+            "windows_x64": "https://www.trae.ai/download",
+            "linux_x64": "https://www.trae.ai/download",
+        },
+        "install_methods": ["app"],
     },
     "TraeCN": {
+        # 字节跳动 Trae 国内版（含 trae-cli TUI + App）
+        # 最新版本：v3.3.62（2026-07-18）
+        # 来源：https://www.trae.cn/
+        "label": "Trae CN",
+        "version": "3.3.62",
+        "release_date": "2026-07-18",
+        "homepage": "https://www.trae.cn",
+        "docs_url": "https://www.volcengine.com/docs/86677/1836841",
+        "release_url": "https://www.trae.cn/changelog",
         "cli_install": {
             "method": "powershell_script",
             "script_url": "https://trae.cn/trae-cli/install.ps1",
@@ -101,13 +229,30 @@ IDE_INSTALL_META = {
         },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://www.trae.cn",
+            "url": "https://www.trae.cn/download",
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae CN.app' ~/.trae-cn ~/.traecn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traecn\" 2>nul & exit /b 0",
         },
-        "homepage": "https://www.trae.cn",
+        "download_urls": {
+            # 国内版提供按平台/架构的下载入口（动态签名链接，故用下载页）
+            "macos_arm64": "https://www.trae.cn/download",
+            "macos_x64": "https://www.trae.cn/download",
+            "windows_x64": "https://www.trae.cn/download",
+            "linux_x64": "https://www.trae.cn/download",
+            "linux_arm64": "https://www.trae.cn/download",
+        },
+        "install_methods": ["powershell_script", "app"],
     },
     "TraeSoloCN": {
+        # 字节跳动 Trae Solo CN（独立 Solo 模式国内版）
+        # 最新版本：随 Trae CN 同步发布
+        # 来源：https://www.trae.cn/
+        "label": "Trae Solo CN",
+        "version": "3.3.62",
+        "release_date": "2026-07-18",
+        "homepage": "https://www.trae.cn",
+        "docs_url": "https://www.trae.cn/docs/solo",
+        "release_url": "https://www.trae.cn/changelog",
         "cli_install": {
             "method": "manual",
             "url": "https://www.trae.cn",
@@ -120,37 +265,92 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae Solo CN.app' ~/.trae-solo-cn ~/.traesolocn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae Solo CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-solo-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traesolocn\" 2>nul & exit /b 0",
         },
-        "homepage": "https://www.trae.cn",
+        "download_urls": {
+            "macos_arm64": "https://www.trae.cn/download",
+            "macos_x64": "https://www.trae.cn/download",
+            "windows_x64": "https://www.trae.cn/download",
+        },
+        "install_methods": ["app"],
     },
     "OpenCode": {
-        "cli_install": {"method": "brew", "package": "opencode", "uninstall_cmd": "rm -f $(which opencode) 2>/dev/null; rm -rf ~/.config/opencode"},
+        # OpenCode（开源 AI 编码代理，anomalyco 维护）
+        # 来源：https://opencode.ai/docs/
+        "label": "OpenCode",
+        "version": "latest",
+        "release_date": "2026-07-19",
+        "homepage": "https://opencode.ai",
+        "docs_url": "https://opencode.ai/docs/",
+        "release_url": "https://github.com/anomalyco/opencode/releases",
+        "cli_install": {
+            # 官方推荐 install script（跨平台，含 Windows PowerShell）
+            "method": "script",
+            "script_url": "https://opencode.ai/install",
+            "script_url_win": "https://opencode.ai/install.ps1",
+            "url": "https://opencode.ai/docs/",
+            "package": "opencode-ai",  # npm 备选
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/opencode; rm -rf ~/.config/opencode ~/.local/share/opencode; npm uninstall -g opencode-ai 2>/dev/null; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\opencode.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.config\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\opencode\" 2>nul & npm uninstall -g opencode-ai 2>nul & exit /b 0",
+        },
         "app_install": {
             "method": "system_uninstall",
             "url": "https://opencode.ai/downloads",
             "uninstall_cmd_mac": "rm -rf '/Applications/OpenCode.app' ~/.config/opencode ~/.opencode 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.opencode\" 2>nul & exit /b 0",
         },
-        "homepage": "https://opencode.ai",
+        "download_urls": {
+            "macos_arm64": "https://github.com/anomalyco/opencode/releases/latest",
+            "macos_x64": "https://github.com/anomalyco/opencode/releases/latest",
+            "windows_x64": "https://github.com/anomalyco/opencode/releases/latest",
+            "linux_x64": "https://github.com/anomalyco/opencode/releases/latest",
+            "linux_arm64": "https://github.com/anomalyco/opencode/releases/latest",
+        },
+        "install_methods": ["script", "npm", "brew", "choco", "scoop"],
     },
     "Qoder": {
+        # Qoder 国际版（阿里云通义灵码升级版）
+        # 最新版本：v1.4.1（2026-06）
+        # 来源：https://qoder.com/zh/download
+        "label": "Qoder",
+        "version": "1.4.1",
+        "release_date": "2026-06-28",
+        "homepage": "https://qoder.com",
+        "docs_url": "https://qoder.com/zh/docs",
+        "release_url": "https://qoder.com/zh/changelog",
         "cli_install": {
             "method": "script",
             "script_url": "https://qoder.com/install",
+            "url": "https://qoder.com/zh/cli",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder; rm -rf ~/.qoder; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder\" 2>nul & exit /b 0",
         },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://qoder.com/zh/cli",
+            "url": "https://qoder.com/zh/download",
             "uninstall_cmd_mac": "rm -rf '/Applications/Qoder.app' ~/.qoder 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Qoder\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder\" 2>nul & exit /b 0",
         },
-        "homepage": "https://qoder.com/zh/cli",
+        "download_urls": {
+            "macos_arm64": "https://qoder.com/zh/download",
+            "macos_x64": "https://qoder.com/zh/download",
+            "windows_x64": "https://qoder.com/zh/download",
+            "linux_x64": "https://qoder.com/zh/download",
+        },
+        "install_methods": ["script", "app"],
     },
     "QoderCN": {
+        # Qoder 国内版（阿里云通义灵码升级版，国内合规）
+        # 最新版本：v1.4.1（2026-06）
+        # 来源：https://qoder.com.cn/download
+        "label": "Qoder CN",
+        "version": "1.4.1",
+        "release_date": "2026-06-28",
+        "homepage": "https://qoder.com.cn",
+        "docs_url": "https://help.aliyun.com/zh/lingma/qoder-cn/user-guide/installation-guide",
+        "release_url": "https://qoder.com.cn/changelog",
         "cli_install": {
             "method": "script",
             "script_url": "https://qoder.com.cn/install",
+            "url": "https://qoder.com.cn/cli",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
         },
@@ -160,34 +360,96 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/Qoder CN.app' ~/.qoder-cn ~/.qodercn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Qoder CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
         },
-        "homepage": "https://qoder.com.cn/cli",
+        "download_urls": {
+            "macos_arm64": "https://qoder.com.cn/download",
+            "macos_x64": "https://qoder.com.cn/download",
+            "windows_x64": "https://qoder.com.cn/download",
+            "linux_x64": "https://qoder.com.cn/download",
+        },
+        "install_methods": ["script", "app"],
     },
     "OpenClaw": {
-        "cli_install": {"method": "npm", "package": "openclaw", "uninstall_cmd": "npm uninstall -g openclaw 2>/dev/null; rm -f $(which openclaw) 2>/dev/null; rm -rf ~/.local/share/openclaw"},
+        # OpenClaw（开源 Agent 平台）
+        # 来源：https://github.com/openclaw/openclaw
+        "label": "OpenClaw",
+        "version": "latest",
+        "release_date": "2026-07-01",
+        "homepage": "https://github.com/openclaw/openclaw",
+        "docs_url": "https://github.com/openclaw/openclaw#readme",
+        "release_url": "https://github.com/openclaw/openclaw/releases",
+        "cli_install": {
+            "method": "npm",
+            "package": "openclaw",
+            "url": "https://github.com/openclaw/openclaw",
+            "uninstall_cmd_mac": "npm uninstall -g openclaw 2>/dev/null; rm -f $(which openclaw) 2>/dev/null; rm -rf ~/.local/share/openclaw; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\openclaw\" 2>nul & del /q \"%APPDATA%\\npm\\openclaw\" \"%APPDATA%\\npm\\openclaw.cmd\" \"%APPDATA%\\npm\\openclaw.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
+        },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://github.com/openclaw/openclaw",
+            "url": "https://github.com/openclaw/openclaw/releases",
             "uninstall_cmd_mac": "rm -rf '/Applications/OpenClaw.app' ~/.openclaw 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\openclaw\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
         },
-        "homepage": "https://github.com/openclaw/openclaw",
+        "download_urls": {
+            "macos_arm64": "https://github.com/openclaw/openclaw/releases/latest",
+            "macos_x64": "https://github.com/openclaw/openclaw/releases/latest",
+            "windows_x64": "https://github.com/openclaw/openclaw/releases/latest",
+            "linux_x64": "https://github.com/openclaw/openclaw/releases/latest",
+        },
+        "install_methods": ["npm"],
     },
     "Hermes": {
+        # Hermes Agent（内部 Agent 平台，暂无公开下载）
+        "label": "Hermes Agent",
+        "version": "",
+        "release_date": "",
+        "homepage": "",
+        "docs_url": "",
+        "release_url": "",
         "cli_install": {"method": "manual", "url": ""},
         "app_install": {"method": "manual", "url": ""},
-        "homepage": "",
+        "download_urls": {},
+        "install_methods": [],
     },
     "WorkBuddy": {
-        "cli_install": {"method": "manual", "url": "https://github.com/workbuddy/workbuddy/releases"},
+        # WorkBuddy（团队协作 Agent 工具）
+        # 来源：https://github.com/workbuddy/workbuddy
+        "label": "WorkBuddy",
+        "version": "latest",
+        "release_date": "2026-06-01",
+        "homepage": "https://github.com/workbuddy/workbuddy",
+        "docs_url": "https://github.com/workbuddy/workbuddy#readme",
+        "release_url": "https://github.com/workbuddy/workbuddy/releases",
+        "cli_install": {
+            "method": "manual",
+            "url": "https://github.com/workbuddy/workbuddy/releases",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/workbuddy; rm -rf ~/.workbuddy; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\workbuddy.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
+        },
         "app_install": {
             "method": "system_uninstall",
             "url": "https://github.com/workbuddy/workbuddy/releases",
             "uninstall_cmd_mac": "rm -rf /Applications/WorkBuddy.app ~/.workbuddy 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\WorkBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
         },
-        "homepage": "https://github.com/workbuddy/workbuddy",
+        "download_urls": {
+            "macos_arm64": "https://github.com/workbuddy/workbuddy/releases/latest",
+            "macos_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
+            "windows_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
+            "linux_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
+        },
+        "install_methods": ["app"],
     },
     "ZCode": {
+        # 智谱 ADE ZCode（AdeBuddy/ZCode 智能体编程平台）
+        # 最新版本：3.0+
+        # 来源：https://zcode.z.ai/cn
+        "label": "ZCode",
+        "version": "3.0+",
+        "release_date": "2026-06-01",
+        "homepage": "https://zcode.z.ai/cn",
+        "docs_url": "https://zcode.z.ai/cn/docs",
+        "release_url": "https://zcode.z.ai/cn/changelog",
         "cli_install": {
             "method": "manual",
             "url": "https://zcode.z.ai/cn",
@@ -200,24 +462,145 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/ZCode.app' ~/.zcode 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\ZCode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.zcode\" 2>nul & exit /b 0",
         },
-        "homepage": "https://zcode.z.ai/cn",
+        "download_urls": {
+            "macos_arm64": "https://zcode.z.ai/cn/download",
+            "macos_x64": "https://zcode.z.ai/cn/download",
+            "windows_x64": "https://zcode.z.ai/cn/download",
+            "linux_x64": "https://zcode.z.ai/cn/download",
+        },
+        "install_methods": ["app"],
     },
     "IDEA": {
-        "cli_install": {"method": "manual", "url": "https://www.jetbrains.com/idea"},
+        # JetBrains IntelliJ IDEA（Community / Ultimate）
+        # 来源：https://www.jetbrains.com/idea
+        "label": "IntelliJ IDEA",
+        "version": "2026.2",
+        "release_date": "2026-07-01",
+        "homepage": "https://www.jetbrains.com/idea",
+        "docs_url": "https://www.jetbrains.com/help/idea/getting-started.html",
+        "release_url": "https://www.jetbrains.com/idea/whatsnew/",
+        "cli_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/idea/download",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/idea; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\idea.exe\" 2>nul & exit /b 0",
+        },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://www.jetbrains.com/idea",
+            "url": "https://www.jetbrains.com/idea/download",
             "uninstall_cmd_mac": "rm -rf '/Applications/IntelliJ IDEA.app' '/Applications/IntelliJ IDEA CE.app' ~/.idea ~/.jetbrains 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\JetBrains\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.idea\" 2>nul & exit /b 0",
         },
-        "homepage": "https://www.jetbrains.com/idea",
+        "download_urls": {
+            "macos_arm64": "https://www.jetbrains.com/idea/download/",
+            "macos_x64": "https://www.jetbrains.com/idea/download/",
+            "windows_x64": "https://www.jetbrains.com/idea/download/",
+            "linux_x64": "https://www.jetbrains.com/idea/download/",
+        },
+        "install_methods": ["app", "toolbox"],
     },
     "Agents": {
+        # 通用 Agents（占位符，无独立下载源）
+        "label": "Agents",
+        "version": "",
+        "release_date": "",
+        "homepage": "",
+        "docs_url": "",
+        "release_url": "",
         "cli_install": {"method": "manual", "url": ""},
         "app_install": {"method": "manual", "url": ""},
-        "homepage": "",
+        "download_urls": {},
+        "install_methods": [],
+        "hidden": True,  # 占位符，不在 UI 显示
+    },
+    "KimiCode": {
+        # Kimi Code（月之暗面 Kimi CLI，扩展检测，非 IDE_REGISTRY 成员）
+        # 最新版本：v3.2.5（2026-06）
+        # 来源：https://kimi.com/download + https://github.com/MoonshotAI/kimi-cli
+        "label": "Kimi Code",
+        "version": "3.2.5",
+        "release_date": "2026-06-15",
+        "homepage": "https://kimi.com/download",
+        "docs_url": "https://kimi.com/docs/cli",
+        "release_url": "https://github.com/MoonshotAI/kimi-cli/releases",
+        "cli_install": {
+            "method": "npm",
+            "package": "@moonshot-ai/kimi-cli",
+            "url": "https://kimi.com/download",
+            "uninstall_cmd_mac": "npm uninstall -g @moonshot-ai/kimi-cli 2>/dev/null; rm -f $(which kimi) $(which kimi-code) 2>/dev/null; rm -rf ~/.kimi-code ~/.kimi; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\@moonshot-ai\\kimi-cli\" 2>nul & del /q \"%APPDATA%\\npm\\kimi\" \"%APPDATA%\\npm\\kimi.cmd\" \"%APPDATA%\\npm\\kimi.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi-code\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "manual",
+            "url": "https://kimi.com/download",
+        },
+        "download_urls": {
+            "macos_arm64": "https://kimi.com/download",
+            "macos_x64": "https://kimi.com/download",
+            "windows_x64": "https://kimi.com/download",
+            "linux_x64": "https://kimi.com/download",
+        },
+        "install_methods": ["npm"],
+        "hidden": True,  # 扩展检测，不在 AIDE 管理页显示
     },
 }
+
+
+# ===== Schema 校验 =====
+# 必填字段（顶层）
+_REQUIRED_TOP_FIELDS = ["label", "version", "release_date", "homepage", "cli_install", "app_install"]
+# 必填字段（cli_install / app_install）
+_REQUIRED_INSTALL_FIELDS = ["method"]
+# 各 method 的额外必填字段
+_REQUIRED_FIELDS_BY_METHOD = {
+    "brew": ["package"],
+    "npm": ["package"],
+    "script": ["url"],  # script_url 在 Windows 缺失时回退 manual，可接受
+    "powershell_script": ["script_url"],
+    "app_cli": ["app_path", "cli_relpath"],
+    "system_uninstall": ["url"],
+    "cask": ["package"],
+    "manual": [],  # manual 仅需 url（可空）
+}
+
+
+def validate_ide_meta() -> list[str]:
+    """校验 IDE_INSTALL_META 是否符合 Schema 规范，返回警告列表（空列表表示通过）。
+
+    启动时调用此函数可在新增 IDE 漏配字段时立即发现，避免"每次都漏很多"。
+
+    检查项：
+    1. 每个 IDE 必填顶层字段：label/version/release_date/homepage/cli_install/app_install
+    2. cli_install / app_install 必填 method
+    3. 各 method 的额外必填字段（如 brew/npm 必须有 package）
+    4. install_methods 列表必须存在（可空）
+    """
+    warnings: list[str] = []
+    for ide_key, meta in IDE_INSTALL_META.items():
+        # 1. 顶层字段
+        for field in _REQUIRED_TOP_FIELDS:
+            if field not in meta:
+                warnings.append(f"[{ide_key}] 缺少顶层字段: {field}")
+        # 2. install 块的 method
+        for install_type in ("cli_install", "app_install"):
+            block = meta.get(install_type, {})
+            if not isinstance(block, dict):
+                warnings.append(f"[{ide_key}] {install_type} 必须是 dict")
+                continue
+            for field in _REQUIRED_INSTALL_FIELDS:
+                if field not in block:
+                    warnings.append(f"[{ide_key}] {install_type} 缺少字段: {field}")
+            # 3. method 特定字段
+            method = block.get("method", "")
+            for field in _REQUIRED_FIELDS_BY_METHOD.get(method, []):
+                if not block.get(field):
+                    warnings.append(f"[{ide_key}] {install_type} method={method} 缺少字段: {field}")
+        # 4. install_methods 列表
+        if "install_methods" not in meta:
+            warnings.append(f"[{ide_key}] 缺少 install_methods 列表（即使为空也需声明）")
+        elif not isinstance(meta["install_methods"], list):
+            warnings.append(f"[{ide_key}] install_methods 必须是 list")
+    return warnings
 
 
 def _run_cmd(cmd: list[str], timeout: int = 300) -> dict:
@@ -300,6 +683,18 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
             "message": f"需手动安装，请访问: {url or meta.get('homepage', '')}",
             "cmd": "", "stdout": "", "stderr": "",
             "url": url or meta.get("homepage", ""),
+        }
+
+    if method == "system_uninstall":
+        # App 的 system_uninstall 仅用于卸载阶段；安装阶段降级为 manual
+        # 提示用户去 url 下载 dmg/exe 手动安装
+        fallback_url = url or meta.get("homepage", "")
+        return {
+            "ok": False, "ide": ide_key, "mode": mode, "method": "manual",
+            "message": f"App 需手动下载安装，请访问: {fallback_url}",
+            "cmd": "", "stdout": "", "stderr": "",
+            "url": fallback_url,
+            "download_urls": meta.get("download_urls", {}),
         }
 
     if method == "app_cli":
@@ -790,10 +1185,18 @@ def get_install_info(ide_key: str) -> dict:
     return {
         "ide": ide_key,
         "available": True,
+        "label": meta.get("label", ide_key),
+        "version": meta.get("version", ""),
+        "release_date": meta.get("release_date", ""),
+        "homepage": homepage,
+        "docs_url": meta.get("docs_url", ""),
+        "release_url": meta.get("release_url", ""),
+        "download_urls": meta.get("download_urls", {}),
+        "install_methods": meta.get("install_methods", []),
         "cli": cli_install,
         "app": app_install,
-        "homepage": homepage,
     }
 
 
-__all__ = ["IDE_INSTALL_META", "install_ide", "uninstall_ide", "reinstall_ide", "get_install_info"]
+__all__ = ["IDE_INSTALL_META", "install_ide", "uninstall_ide", "reinstall_ide",
+           "get_install_info", "validate_ide_meta"]

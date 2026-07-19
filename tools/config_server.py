@@ -96,7 +96,10 @@ from lib.plugins import install_plugin, update_env_file, add_to_installed
 from lib.ide.detect import detect_ide, detect_all
 from lib.ide.session import list_sessions, export_session, import_session_to_ide
 from lib.ide.launch import launch_ide, launch_ide_resume_session
-from lib.ide.install import install_ide, uninstall_ide, reinstall_ide, get_install_info, IDE_INSTALL_META
+from lib.ide.install import (
+    install_ide, uninstall_ide, reinstall_ide, get_install_info,
+    IDE_INSTALL_META, validate_ide_meta,
+)
 from lib.provider_catalog import (
     apply_provider_to_env,
     classify_api_key,
@@ -1463,6 +1466,11 @@ def list_plugins():
                         "name": cfg.get("name"),
                         "version": cfg.get("version", ""),
                         "description": cfg.get("description", ""),
+                        "author": cfg.get("author", ""),
+                        "license": cfg.get("license", ""),
+                        "keywords": cfg.get("keywords", []) or [],
+                        "categories": cfg.get("categories", []) or [],
+                        "homepage": cfg.get("homepage", ""),
                         "skills_count": len(cfg.get("skills", [])),
                         "mcp_count": len(cfg.get("mcpServers", {})),
                         "installed": cfg.get("name") in installed_names,
@@ -1478,23 +1486,37 @@ def save_plugin():
     name = body.get("name", "").strip()
     if not name:
         return jsonify({"ok": False, "error": "name 必填"}), 400
-    config = {
-        "name": name,
-        "version": body.get("version", "1.0.0").strip() or "1.0.0",
-        "description": body.get("description", "").strip(),
-        "author": body.get("author", "AdeBuddy").strip() or "AdeBuddy",
-        "mcpServers": body.get("mcpServers", {}),
-        "skills": body.get("skills", []),
-        "llm": body.get("llm", []),
-        "subagents": body.get("subagents", []),
-        "rules": body.get("rules", []),
-        "commands": body.get("commands", []),
-        "hooks": body.get("hooks", False),
-    }
-    # 可选：初始化脚本（install script）
+    # 保留所有传入字段（标准字段 + AdeBuddy 扩展字段），避免丢弃 license/keywords/categories 等
+    config: dict = {}
+    # 标准字段（对齐 Claude Code / Codex CLI / VSCode）
+    for k in ("$schema", "manifest_version", "name", "version", "description", "author",
+              "license", "keywords", "homepage", "repository", "categories", "icon",
+              "defaultEnabled", "dependencies", "userConfig", "channels",
+              "interface", "apps"):
+        if k in body and body[k] not in (None, "", [], {}):
+            config[k] = body[k]
+    # 必填字段兜底
+    config["name"] = name
+    config["version"] = (body.get("version", "1.0.0") or "1.0.0").strip()
+    if "author" not in config:
+        config["author"] = (body.get("author", "AdeBuddy") or "AdeBuddy").strip()
+    # AdeBuddy 扩展字段（多 IDE 同步能力）
+    for k in ("mcpServers", "skills", "llm", "subagents", "rules", "commands"):
+        if k in body:
+            config[k] = body[k] if body[k] is not None else ([] if k in ("skills", "llm", "subagents", "rules", "commands") else {})
+    config["hooks"] = bool(body.get("hooks", False))
+    # scripts 对齐 npm 生命周期（install/postinstall/preinstall/preuninstall/uninstall/postuninstall/prepare）
     scripts = body.get("scripts")
-    if isinstance(scripts, dict) and scripts.get("install", "").strip():
-        config["scripts"] = {"install": scripts["install"].strip()}
+    if isinstance(scripts, dict) and scripts:
+        cleaned = {k: v.strip() for k, v in scripts.items()
+                   if isinstance(v, str) and v.strip()
+                   and k in ("preinstall", "install", "postinstall",
+                             "preuninstall", "uninstall", "postuninstall", "prepare")}
+        if cleaned:
+            config["scripts"] = cleaned
+    # envVars（可选）
+    if body.get("envVars") and isinstance(body["envVars"], dict):
+        config["envVars"] = body["envVars"]
     # 安全文件名
     safe_name = "".join(c for c in name if c.isalnum() or c in ("-", "_"))
     out_path = CONFIG_PLUGINS_DIR / f"{safe_name}.plugin.yaml"
@@ -2873,6 +2895,15 @@ def main():
     print(f"[Config UI] 服务启动中: {url}")
     print(f"[Config UI] 项目根: {PROJECT_ROOT}")
     print(f"[Config UI] Ctrl+C 退出")
+
+    # 启动时校验 IDE_INSTALL_META 完整性，漏配字段会在此处报警
+    meta_warnings = validate_ide_meta()
+    if meta_warnings:
+        print(f"[Config UI] ⚠ IDE 安装元数据校验发现 {len(meta_warnings)} 处漏配：")
+        for w in meta_warnings:
+            print(f"  - {w}")
+    else:
+        print(f"[Config UI] ✓ IDE 安装元数据校验通过（{len(IDE_INSTALL_META)} 个 IDE）")
 
     if not args.no_open:
         try:
