@@ -9,6 +9,7 @@ import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
 import EnvView from './views/EnvView.vue'
 import McpView from './views/McpView.vue'
+import KeysView from './views/KeysView.vue'
 import SkillView from './views/SkillView.vue'
 import CommandView from './views/CommandView.vue'
 import SubagentView from './views/SubagentView.vue'
@@ -21,6 +22,7 @@ import TerminalView from './views/TerminalView.vue'
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
+import { useKeysStore } from './stores/keys'
 
 const tab = ref('ide')
 const tabs = [
@@ -31,6 +33,7 @@ const tabs = [
   { key: 'terminal', label: '终端测试' },
   { key: 'env', label: 'LLM 配置' },
   { key: 'mcp', label: 'MCP 配置' },
+  { key: 'keys', label: '密钥 / 环境变量' },
   { key: 'skill', label: 'Skills 配置' },
   { key: 'command', label: '自定义命令' },
   { key: 'subagent', label: 'Subagent' },
@@ -41,12 +44,14 @@ const tabs = [
 const ide = useIdeStore()
 const env = useEnvStore()
 const mcp = useMcpStore()
+const keys = useKeysStore()
 
 onMounted(() => {
   ide.loadIdeDetect()
   env.loadEnv()
   mcp.loadMcpCatalog()
   mcp.loadMcpConfig()
+  keys.loadKeys()
 })
 onBeforeUnmount(() => {})
 </script>
@@ -61,7 +66,8 @@ onBeforeUnmount(() => {})
     <main class="max-w-[1600px] w-full mx-auto px-6 py-5">
       <IdeView v-if="tab === 'ide'" />
       <EnvView v-else-if="tab === 'env'" />
-      <McpView v-else-if="tab === 'mcp'" />
+      <McpView v-else-if="tab === 'mcp'" @go-tab="tab = $event" />
+      <KeysView v-else-if="tab === 'keys'" />
       <SkillView v-else-if="tab === 'skill'" />
       <CommandView v-else-if="tab === 'command'" />
       <SubagentView v-else-if="tab === 'subagent'" />

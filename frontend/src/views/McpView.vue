@@ -3,6 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMcpStore, MCP_SOURCE_ORDER, MCP_SOURCE_LABELS, PULSEMCP_DOCS_URL, PULSEMCP_API_URL, PULSEMCP_MAILTO, type McpSourceId } from '../stores/mcp'
 
+const emit = defineEmits<{ 'go-tab': [key: string] }>()
+
 const mcp = useMcpStore()
 const {
   mcpTemplate, mcpConfigData, mcpTab, mcpMarketQ, mcpMarketResults, mcpSearched,
@@ -16,13 +18,17 @@ const {
   fetchMcpDetail, resolveMcpInstallConfig,
   parsePastedMcp, addManualMcp, toggleAllMcp,
   startEditMcp, cancelEditMcp, saveEditMcp,
-  toggleMcpDisabled, deleteMcpEntry, saveMcpConfig, addMcpConfigKey, deleteMcpConfigKey,
+  toggleMcpDisabled, deleteMcpEntry, saveMcpConfig,
   loadPulseMcpStatus,
 } = mcp
 
-type DrawerMode = 'add' | 'edit' | 'keys' | null
+type DrawerMode = 'add' | 'edit' | null
 const drawer = ref<DrawerMode>(null)
 const marketInput = ref<HTMLInputElement | null>(null)
+
+function gotoKeys() {
+  emit('go-tab', 'keys')
+}
 
 const previewItem = ref<any>(null)
 const previewPayload = ref<{ data?: any; install?: any; install_error?: string } | null>(null)
@@ -31,12 +37,11 @@ const previewLoading = ref(false)
 const drawerTitle = computed(() => {
   if (drawer.value === 'add') return '添加 MCP'
   if (drawer.value === 'edit') return editingMcp.value ? `编辑 · ${editingMcp.value}` : '编辑'
-  if (drawer.value === 'keys') return '密钥配置'
   return ''
 })
+
 const drawerSub = computed(() => {
   if (drawer.value === 'add') return '选中条目后，右侧预览可直接确认配置'
-  if (drawer.value === 'keys') return '生成 mcp.json 时替换 ${KEY}'
   return ''
 })
 
@@ -184,7 +189,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   
       </div>
       <div class="btn-cluster">
-        <button type="button" class="btn btn-secondary" @click="openDrawer('keys')">
+        <button type="button" class="btn btn-secondary" @click="gotoKeys">
           <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           密钥
         </button>
@@ -311,7 +316,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
                     手动添加
                   </button>
-                  <button type="button" class="mode" @click="openDrawer('keys')">
+                  <button type="button" class="mode" @click="gotoKeys">
                     <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
                     密钥
                   </button>
@@ -585,18 +590,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     </button>
                   </div>
                 </template>
-                <template v-else-if="drawer === 'keys'">
-                  <p class="keys-hint">MCP 服务密钥 / Token，作为 <code v-pre>${KEY}</code> 占位符的 fallback。占位符优先取 OS 环境变量，其次取此处，最后用 <code v-pre>${VAR:-default}</code> 默认值。</p>
-                  <div class="keys-list">
-                    <div v-for="(_, k) in (mcpConfigData.mcp || {})" :key="k" class="key-row">
-                      <code :title="String(k)">{{ k }}</code>
-                      <input v-model="mcpConfigData.mcp[k]" type="password" />
-                      <button type="button" class="btn btn-danger btn-icon btn-sm" :aria-label="'删除 ' + k" @click="deleteMcpConfigKey(String(k))">
-                        <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                      </button>
-                    </div>
-                    <div v-if="!mcpKeyCount" class="m-empty">暂无密钥，点击下方添加。</div>
-                  </div>
+                <template v-else>
+                  <!-- drawer 只允许 'add' | 'edit'，密钥已迁移到独立 Tab -->
                 </template>
               </div>
               <div class="prev-f">
@@ -605,16 +600,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                   <button type="button" class="btn btn-primary" @click="saveEditAndClose">
                     <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
                     保存更改
-                  </button>
-                </div>
-                <div class="row" v-else>
-                  <button type="button" class="btn btn-soft" @click="addMcpConfigKey">
-                    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-                    添加 Key
-                  </button>
-                  <button type="button" class="btn btn-primary" @click="saveMcpConfig">
-                    <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-                    保存
                   </button>
                 </div>
               </div>

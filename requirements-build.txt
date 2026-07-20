@@ -6,6 +6,7 @@ flask>=3.0
 pyyaml>=6.0
 requests>=2.30
 pywebview>=6.0
+openai>=1.0  # 一键创建插件 / AI 生成器依赖（SSE 调用 LLM）
 
 # 前端构建依赖（仅开发/构建时需要，不打包进产物）：
 #   Node.js 18+ / npm

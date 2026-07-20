@@ -8,6 +8,7 @@ AdeBuddy 配置工具 Web UI 后端
 """
 
 import argparse
+import re
 import csv
 import importlib.util
 import io
@@ -129,6 +130,8 @@ ENV_FILE = PROJECT_ROOT / "env.yaml"
 # 新拆分：env.yaml → llm.yaml + mcp.yaml
 LLM_FILE = PROJECT_ROOT / "config" / "llm" / "llm.yaml"
 MCP_CONFIG_FILE = PROJECT_ROOT / "config" / "mcp" / "mcp.yaml"
+# 独立密钥/环境变量文件（优先级高于 mcp.yaml.mcp 段）
+KEYS_FILE = PROJECT_ROOT / "config" / "mcp" / "keys.yaml"
 # 拆分后的示例模板（可安全提交）
 LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
 MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
@@ -664,6 +667,117 @@ def delete_mcp_config_key(key):
         if isinstance(full.get("mcp"), dict) and key in full["mcp"]:
             del full["mcp"][key]
             _save_mcp_yaml_full(full)
+            return jsonify({"ok": True})
+        return jsonify({"ok": False, "error": f"未找到 key: {key}"}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ============================================================
+# Keys API (config/mcp/keys.yaml - 独立密钥/环境变量层)
+# ============================================================
+def _ensure_keys_file() -> Path:
+    """确保 keys.yaml 存在。优先级：
+      1. keys.yaml 已存在 → 直接返回
+      2. mcp.yaml 有 mcp: 段且非空 → 迁移到 keys.yaml（清空 mcp.yaml.mcp）
+      3. 创建空模板 {"mcp": {}}
+    """
+    if KEYS_FILE.exists():
+        return KEYS_FILE
+    # 从 mcp.yaml.mcp 段迁移
+    try:
+        if MCP_CONFIG_FILE.exists():
+            mcp_full = load_env_config_file(MCP_CONFIG_FILE) or {}
+            mcp_keys = mcp_full.get("mcp", {}) or {}
+            if isinstance(mcp_keys, dict) and mcp_keys:
+                save_env_config_file(KEYS_FILE, {"mcp": mcp_keys})
+                # 清空 mcp.yaml.mcp 段（避免双源冲突）
+                mcp_full["mcp"] = {}
+                save_env_config_file(MCP_CONFIG_FILE, mcp_full)
+                return KEYS_FILE
+    except Exception:
+        pass
+    save_env_config_file(KEYS_FILE, {"mcp": {}})
+    return KEYS_FILE
+
+
+def _load_keys_full() -> dict:
+    """加载 keys.yaml 全量数据。返回 {"mcp": {...}}。"""
+    path = _ensure_keys_file()
+    try:
+        data = load_env_config_file(path) or {}
+    except Exception:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    if "mcp" not in data or not isinstance(data.get("mcp"), dict):
+        data["mcp"] = {}
+    return data
+
+
+def _save_keys_full(data: dict) -> None:
+    """保存 keys.yaml 全量数据。"""
+    path = _ensure_keys_file()
+    save_env_config_file(path, data)
+
+
+@app.route("/api/keys", methods=["GET"])
+def get_keys():
+    """返回 keys.yaml 全量数据。"""
+    path = _ensure_keys_file()
+    try:
+        full = _load_keys_full()
+        return jsonify({
+            "ok": True,
+            "data": {"mcp": full.get("mcp", {})},
+            "path": str(path.relative_to(PROJECT_ROOT)),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/keys", methods=["POST"])
+def save_keys():
+    """保存 keys.yaml 全量数据。Body: {data: {mcp: {...}}}"""
+    body = request.get_json(force=True)
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "data 必须是对象"}), 400
+    try:
+        full = _load_keys_full()
+        full["mcp"] = data.get("mcp", {})
+        _save_keys_full(full)
+        return jsonify({"ok": True, "path": str(KEYS_FILE.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/keys/key", methods=["POST"])
+def add_key():
+    """添加单个密钥条目。Body: {key, value=''}"""
+    body = request.get_json(force=True)
+    key = (body.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "key 必填"}), 400
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        return jsonify({"ok": False, "error": "仅支持字母、数字、下划线，且不能以数字开头"}), 400
+    try:
+        full = _load_keys_full()
+        full["mcp"][key] = body.get("value", "")
+        _save_keys_full(full)
+        return jsonify({"ok": True, "key": key})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/keys/key/<key>", methods=["DELETE"])
+def delete_key(key):
+    """删除单个密钥条目。"""
+    try:
+        full = _load_keys_full()
+        if key in full["mcp"]:
+            del full["mcp"][key]
+            _save_keys_full(full)
             return jsonify({"ok": True})
         return jsonify({"ok": False, "error": f"未找到 key: {key}"}), 404
     except Exception as e:
@@ -1745,6 +1859,8 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 hooks_content = zf.read(name)
 
         # 导入 plugin yaml
+        # 同时收集所有插件的 envVars，统一合并到 keys.yaml（仅初始化未存在的变量）
+        plugin_envvars_list: list[dict] = []
         for arc, content in plugin_entries:
             fname = Path(arc).name
             try:
@@ -1762,6 +1878,39 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(content)
             imported_plugins.append({"file": fname, "name": data["name"]})
+            # 收集 envVars（dict 类型，含 default/description/required 等元信息）
+            ev = data.get("envVars")
+            if isinstance(ev, dict) and ev:
+                plugin_envvars_list.append(ev)
+
+        # 将插件 envVars 初始化到 keys.yaml.mcp（不覆盖已有值）
+        if plugin_envvars_list:
+            try:
+                keys_path = _ensure_keys_file()
+                existing_keys = load_env_config_file(keys_path) or {}
+                if not isinstance(existing_keys, dict):
+                    existing_keys = {}
+                if not isinstance(existing_keys.get("mcp"), dict):
+                    existing_keys["mcp"] = {}
+                env_updated = False
+                for ev in plugin_envvars_list:
+                    for var_name, var_info in ev.items():
+                        if var_name in existing_keys["mcp"]:
+                            continue  # 保留用户已配置的值，幂等
+                        if isinstance(var_info, dict):
+                            default_val = var_info.get("default", "")
+                            # default 必须是字符串/数字等标量，否则落空字符串
+                            if not isinstance(default_val, (str, int, float, bool)):
+                                default_val = ""
+                            existing_keys["mcp"][var_name] = default_val
+                        else:
+                            existing_keys["mcp"][var_name] = ""
+                        env_updated = True
+                if env_updated:
+                    save_env_config_file(keys_path, existing_keys)
+                    imported_extras.append("keys.yaml (envVars)")
+            except Exception as e:
+                skipped.append({"file": "keys.yaml", "reason": f"envVars 初始化失败: {e}"})
 
         # 导入 skills 目录
         for skill_name, arc_list in skill_entries.items():
@@ -2754,12 +2903,48 @@ def _icns_to_png(icns_path: Path, out_png: Path) -> bool:
         return False
 
 
+def _extract_windows_exe_icon(exe_path: str, out_png: Path) -> bool:
+    """从 Windows .exe 提取图标并保存为 PNG。
+
+    使用 PowerShell + System.Drawing.Icon.ExtractAssociatedIcon（.NET 内置，无需额外依赖）。
+    返回 32x32 图标，对 64px 容器足够清晰。
+    """
+    import subprocess
+    if sys.platform != "win32" or not exe_path:
+        return False
+    if not Path(exe_path).exists():
+        return False
+    # PowerShell 单引号字符串字面量，转义内部单引号
+    exe_ps = exe_path.replace("'", "''")
+    out_ps = str(out_png).replace("'", "''")
+    ps_script = (
+        f"$exe = '{exe_ps}'; "
+        f"$out = '{out_ps}'; "
+        "Add-Type -AssemblyName System.Drawing; "
+        "$icon = [System.Drawing.Icon]::ExtractAssociatedIcon($exe); "
+        "if ($null -eq $icon) { exit 2 }; "
+        "$bmp = $icon.ToBitmap(); "
+        "$bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png); "
+        "$bmp.Dispose(); $icon.Dispose()"
+    )
+    try:
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+            capture_output=True, timeout=10,
+        )
+        return r.returncode == 0 and out_png.exists() and out_png.stat().st_size > 0
+    except Exception:
+        return False
+
+
 @app.route("/api/ide/icon/<ide_key>")
 def api_ide_icon(ide_key: str):
     """返回 IDE 的真实程序图标（PNG）。
 
-    优先从已安装 IDE 的 .app 包提取图标；提取失败返回 404 让前端回退到字母。
-    缓存到 tools/dist-ui/ide-icons/<key>.png，避免重复 sips 调用。
+    - macOS：从 .app 包提取 ICNS/PNG，ICNS 用 sips 转 PNG
+    - Windows：从 .exe 用 PowerShell + System.Drawing 提取图标
+    - 其他平台 / 未安装：返回 404 让前端回退到字母
+    缓存到 tools/dist-ui/ide-icons/<key>.png，避免重复提取。
     404 响应带 no-store，避免前端缓存"未安装"状态后无法刷新。
     """
     from flask import Response
@@ -2788,7 +2973,7 @@ def api_ide_icon(ide_key: str):
     info = detect_ide(ide_key)
     app_path = info.get("app_path", "") if info.get("installed") else ""
     if not app_path:
-        # 未安装时，从 uninstall_cmd_mac 解析默认 .app 路径（如 /Applications/Claude.app）
+        # 未安装时，macOS 从 uninstall_cmd_mac 解析默认 .app 路径（如 /Applications/Claude.app）
         # 这样未安装但用户之前装过的 IDE 仍能提取图标
         import re
         meta = IDE_INSTALL_META.get(ide_key, {})
@@ -2796,6 +2981,14 @@ def api_ide_icon(ide_key: str):
         m = re.search(r"(/[^\s']+\.app)", uninstall_cmd)
         if m:
             app_path = m.group(1)
+
+    # Windows：从 .exe 提取图标
+    if app_path and app_path.lower().endswith(".exe"):
+        if _extract_windows_exe_icon(app_path, cached):
+            return send_file(cached, mimetype="image/png", max_age=86400)
+        return _not_found("extract failed")
+
+    # macOS：从 .app 包提取图标
     if not app_path or not app_path.endswith(".app"):
         return _not_found("not installed")
 

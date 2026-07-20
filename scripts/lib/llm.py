@@ -39,16 +39,22 @@ DIRECT_FIELD_KEYS = {"base_url", "api_key", "models"}
 
 
 def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
-    """从 llm.yaml + mcp.yaml 加载并合并配置（向后兼容 env.yaml）。
+    """从 llm.yaml + mcp.yaml + keys.yaml 加载并合并配置（向后兼容 env.yaml）。
 
     优先级：
       1. llm.yaml + mcp.yaml 都存在 → 合并
       2. 只有 llm.yaml → mcp 部分用空 dict
       3. 只有 env.yaml → 直接读 env.yaml（向后兼容）
       4. 都没有 → 报错
+
+    密钥层（env_config["mcp"]）来源优先级：
+      1. config/mcp/keys.yaml 存在 → 读 keys.yaml 的 mcp: 段
+      2. keys.yaml 不存在 → 回退到 mcp.yaml 的 mcp: 段（向后兼容）
+      3. 同时存在 → keys.yaml 的 key 覆盖 mcp.yaml.mcp 同名 key（鼓励迁移到独立文件）
     """
     llm_file = project_root / "config" / "llm" / "llm.yaml"
     mcp_file = project_root / "config" / "mcp" / "mcp.yaml"
+    keys_file = project_root / "config" / "mcp" / "keys.yaml"
     env_file = project_root / "env.yaml"
 
     if llm_file.exists():
@@ -60,11 +66,23 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
             if not silent:
                 print(f"{COLOR_GREEN}[READ] {mcp_file}{COLOR_RESET}")
             mcp_data = load_env_config_file(mcp_file) or {}
+        # 密钥层合并：先取 mcp.yaml.mcp（兼容旧用户），再用 keys.yaml 覆盖（鼓励迁移）
+        merged_mcp_keys = dict(mcp_data.get("mcp", {}) or {})
+        if keys_file.exists():
+            if not silent:
+                print(f"{COLOR_GREEN}[READ] {keys_file}{COLOR_RESET}")
+            try:
+                keys_data = load_env_config_file(keys_file) or {}
+                keys_mcp = keys_data.get("mcp", {}) or {}
+                if isinstance(keys_mcp, dict):
+                    merged_mcp_keys.update(keys_mcp)
+            except Exception:
+                pass
         merged = {}
         for k in LLM_TOP_KEYS:
             if k in llm_data:
                 merged[k] = llm_data[k]
-        merged["mcp"] = mcp_data.get("mcp", {})
+        merged["mcp"] = merged_mcp_keys
         # 保留 description
         if "_description" in llm_data:
             merged["_description"] = llm_data["_description"]
@@ -375,6 +393,24 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             if k.startswith("_"):
                 continue
             flat[k] = v
+
+    # 批量解析 ${VAR} 占位符：llm.yaml / mcp.yaml.mcp / keys.yaml 中的 ${VAR} 引用
+    # 优先级：OS env > flat 自身（已含 mcp/misc 段）> ${VAR:-default} 默认值 > 保留字面
+    # 多次迭代直到稳定（最多 5 次，防止循环引用）
+    from lib import placeholder
+    env_map_for_resolve = {k: v for k, v in flat.items() if isinstance(v, str)}
+    for _ in range(5):
+        changed = False
+        for k in list(flat.keys()):
+            v = flat[k]
+            if isinstance(v, str) and "${" in v:
+                new_v, n = placeholder.resolve_str(v, env_map_for_resolve)
+                if n > 0 and new_v != v:
+                    flat[k] = new_v
+                    env_map_for_resolve[k] = new_v
+                    changed = True
+        if not changed:
+            break
 
     return flat
 

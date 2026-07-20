@@ -116,7 +116,7 @@ function iconStyle(key: string): string {
 // 真实程序图标（后端从已安装 .app 包提取，失败回退到字母）
 const iconErrors = reactive<Record<string, boolean>>({})
 // 版本戳用于强制刷新图标缓存（避免后端缓存目录被修复后前端仍读到旧图标）
-const ICON_VERSION = '20260719b'
+const ICON_VERSION = '20260720a'
 const iconUrl = (key: string) => `/api/ide/icon/${encodeURIComponent(key)}?v=${ICON_VERSION}`
 const iconFailed = (key: string) => !!iconErrors[key]
 function onIconError(key: string) {
