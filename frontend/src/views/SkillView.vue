@@ -39,6 +39,59 @@ type SkillSortDir = 'asc' | 'desc'
 const sortBy = ref<SkillSortBy>('heat')
 const sortDir = ref<SkillSortDir>('desc')
 
+// ===== 已安装技能列表排序 =====
+type InstalledSortBy = 'name' | 'author' | 'repo' | 'path' | 'status'
+type InstalledSortDir = 'asc' | 'desc'
+const installedSortBy = ref<InstalledSortBy>('name')
+const installedSortDir = ref<InstalledSortDir>('asc')
+
+function setInstalledSort(by: InstalledSortBy) {
+  if (installedSortBy.value === by) {
+    installedSortDir.value = installedSortDir.value === 'asc' ? 'desc' : 'asc'
+    return
+  }
+  installedSortBy.value = by
+  // 默认方向：name/author/repo/path 升序，status 降序（启用优先）
+  installedSortDir.value = by === 'status' ? 'desc' : 'asc'
+}
+
+const sortedInstalled = computed(() => {
+  const list = filteredInstalled.value.slice()
+  const by = installedSortBy.value
+  const dir = installedSortDir.value === 'asc' ? 1 : -1
+  const coll = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true })
+  list.sort((a, b) => {
+    let cmp = 0
+    if (by === 'name') {
+      cmp = coll.compare(a.name || '', b.name || '')
+    } else if (by === 'author') {
+      cmp = coll.compare(a.author || '', b.author || '')
+      // 空值靠后（不因升序/降序而变）
+      if ((a.author || '') !== (b.author || '')) {
+        if (!a.author) return 1
+        if (!b.author) return -1
+      }
+    } else if (by === 'repo') {
+      cmp = coll.compare(a.repo || '', b.repo || '')
+      if ((a.repo || '') !== (b.repo || '')) {
+        if (!a.repo) return 1
+        if (!b.repo) return -1
+      }
+    } else if (by === 'path') {
+      cmp = coll.compare(a.path || '', b.path || '')
+    } else if (by === 'status') {
+      // 启用 (true) 排前
+      cmp = (a.enabled === b.enabled) ? 0 : (a.enabled ? -1 : 1)
+    }
+    if (cmp === 0) {
+      // 次级排序：name
+      cmp = coll.compare(a.name || '', b.name || '')
+    }
+    return cmp * dir
+  })
+  return list
+})
+
 const SUGGESTS = ['react', '设计', 'API', 'testing', 'docx']
 
 const drawerSub = computed(() => {
@@ -318,7 +371,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="toolbar-left">
           <label class="search">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86909c" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
-            <input v-model="listQuery" placeholder="筛选名称 / 路径" />
+            <input v-model="listQuery" placeholder="筛选名称 / 路径 / 作者 / 仓库" />
           </label>
           <div class="seg" role="group" aria-label="启停筛选">
             <button type="button" :class="{ on: listFilter === 'all' }" @click="listFilter = 'all'">全部</button>
@@ -345,14 +398,41 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <thead>
             <tr>
               <th style="width:72px">启用</th>
-              <th>技能</th>
-              <th>路径</th>
-              <th style="width:90px">状态</th>
+              <th class="sortable" :class="{ active: installedSortBy === 'name' }" @click="setInstalledSort('name')">
+                <span class="th-label">
+                  技能
+                  <svg class="sort-ic" :class="{ desc: installedSortBy === 'name' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </th>
+              <th class="sortable" style="width:140px" :class="{ active: installedSortBy === 'author' }" @click="setInstalledSort('author')">
+                <span class="th-label">
+                  作者
+                  <svg class="sort-ic" :class="{ desc: installedSortBy === 'author' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </th>
+              <th class="sortable" style="width:200px" :class="{ active: installedSortBy === 'repo' }" @click="setInstalledSort('repo')">
+                <span class="th-label">
+                  仓库
+                  <svg class="sort-ic" :class="{ desc: installedSortBy === 'repo' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </th>
+              <th class="sortable" :class="{ active: installedSortBy === 'path' }" @click="setInstalledSort('path')">
+                <span class="th-label">
+                  路径
+                  <svg class="sort-ic" :class="{ desc: installedSortBy === 'path' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </th>
+              <th class="sortable" style="width:90px" :class="{ active: installedSortBy === 'status' }" @click="setInstalledSort('status')">
+                <span class="th-label">
+                  状态
+                  <svg class="sort-ic" :class="{ desc: installedSortBy === 'status' && installedSortDir === 'desc' }" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </th>
               <th style="width:148px">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in filteredInstalled" :key="s.name" :class="{ disabled: !s.enabled }">
+            <tr v-for="s in sortedInstalled" :key="s.name" :class="{ disabled: !s.enabled }">
               <td>
                 <button
                   type="button"
@@ -363,6 +443,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 />
               </td>
               <td><div class="name">{{ s.name }}</div></td>
+              <td>
+                <span v-if="s.author" class="author" :title="s.author">{{ s.author }}</span>
+                <span v-else class="muted">—</span>
+              </td>
+              <td>
+                <a
+                  v-if="s.github_url"
+                  class="repo-link"
+                  :href="s.github_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  :title="s.github_url"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                  {{ s.repo || s.github_url }}
+                </a>
+                <span v-else-if="s.repo" :title="s.repo">{{ s.repo }}</span>
+                <span v-else class="muted">—</span>
+              </td>
               <td><div class="cmd" :title="s.path">{{ s.path || '—' }}</div></td>
               <td>
                 <span class="status" :class="s.enabled ? 'on' : 'off'"><i />{{ s.enabled ? '启用' : '禁用' }}</span>
@@ -379,8 +478,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 </div>
               </td>
             </tr>
-            <tr v-if="!filteredInstalled.length">
-              <td colspan="5" class="empty-cell">
+            <tr v-if="!sortedInstalled.length">
+              <td colspan="7" class="empty-cell">
                 {{ installedSkills.length ? '无匹配结果' : '暂无已安装技能，点击「添加技能」开始' }}
               </td>
             </tr>
@@ -913,6 +1012,23 @@ th {
   letter-spacing: .04em; padding: 11px 18px; background: var(--bg-base); border-bottom: 1px solid var(--border-base);
   position: sticky; top: 0; z-index: 1;
 }
+th.sortable {
+  cursor: pointer; user-select: none;
+  transition: color .15s ease, background .15s ease;
+}
+th.sortable:hover { color: var(--text-primary); background: var(--bg-elevated); }
+th.sortable.active { color: var(--primary); }
+th.sortable .th-label {
+  display: inline-flex; align-items: center; gap: 4px;
+}
+th.sortable .sort-ic {
+  width: 12px; height: 12px; flex-shrink: 0;
+  stroke: currentColor; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0; transform: rotate(0deg); transition: opacity .15s ease, transform .2s ease;
+}
+th.sortable:hover .sort-ic { opacity: .45; }
+th.sortable.active .sort-ic { opacity: 1; }
+th.sortable.active .sort-ic.desc { transform: rotate(180deg); }
 td { padding: 13px 18px; border-bottom: 1px solid #f7f8fa; vertical-align: middle; }
 tr:hover td { background: var(--bg-base); }
 tr.disabled td { opacity: .62; }
@@ -941,6 +1057,37 @@ tr:hover .ops { background: var(--bg-base); }
 .ops .btn-soft { border-color: transparent; background: transparent; color: var(--primary-hover); }
 .ops .btn-soft:hover { background: var(--bg-elevated); border-color: var(--primary-container-strong); }
 .empty-cell { text-align: center; color: var(--text-tertiary); padding: 36px !important; }
+
+.author {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 140px;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.muted { color: var(--text-tertiary); }
+.repo-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  transition: color .15s ease;
+}
+.repo-link:hover { color: var(--primary-hover); text-decoration: underline; }
+.repo-link svg {
+  width: 13px; height: 13px; flex-shrink: 0;
+  fill: currentColor; stroke: none;
+}
 
 .keys-bar {
   background: var(--bg-elevated); border-radius: 14px; padding: 16px 18px;

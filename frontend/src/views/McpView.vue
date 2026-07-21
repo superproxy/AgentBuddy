@@ -2,10 +2,12 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMcpStore, MCP_SOURCE_ORDER, MCP_SOURCE_LABELS, PULSEMCP_DOCS_URL, PULSEMCP_API_URL, PULSEMCP_MAILTO, type McpSourceId } from '../stores/mcp'
+import { useUiStore } from '../stores/ui'
 
 const emit = defineEmits<{ 'go-tab': [key: string] }>()
 
 const mcp = useMcpStore()
+const ui = useUiStore()
 const {
   mcpTemplate, mcpConfigData, mcpTab, mcpMarketQ, mcpMarketResults, mcpSearched,
   mcpMarketLoading, mcpMarketMeta, mcpMarketSources, pulseMcpConfigured,
@@ -25,6 +27,56 @@ const {
 type DrawerMode = 'add' | 'edit' | null
 const drawer = ref<DrawerMode>(null)
 const marketInput = ref<HTMLInputElement | null>(null)
+
+// ===== 导出弹层 =====
+const exportOpen = ref(false)
+const exportIncludeDisabled = ref(false)
+const exportJson = computed(() => {
+  const src = mcpTemplate.value.mcpServers || {}
+  const out: Record<string, any> = {}
+  for (const [name, cfg] of Object.entries(src)) {
+    const c: any = cfg
+    if (!exportIncludeDisabled.value && (c?.disabled === true || c?.disabled === 'true')) continue
+    const clone: any = { ...c }
+    delete clone.disabled
+    out[name] = clone
+  }
+  return JSON.stringify({ mcpServers: out }, null, 2)
+})
+const exportCount = computed(() => {
+  const src = mcpTemplate.value.mcpServers || {}
+  if (exportIncludeDisabled.value) return Object.keys(src).length
+  return Object.entries(src).filter(([, c]) => {
+    const cfg: any = c
+    return !(cfg?.disabled === true || cfg?.disabled === 'true')
+  }).length
+})
+function openExport() {
+  exportIncludeDisabled.value = false
+  exportOpen.value = true
+}
+function closeExport() {
+  exportOpen.value = false
+}
+async function copyExport() {
+  try {
+    await navigator.clipboard?.writeText(exportJson.value)
+    ui.toast('已复制到剪贴板')
+  } catch {
+    // fallback: 选中文本
+  }
+}
+function downloadExport() {
+  const blob = new Blob([exportJson.value], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'mcp.json'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 function gotoKeys() {
   emit('go-tab', 'keys')
@@ -192,6 +244,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <button type="button" class="btn btn-secondary" @click="gotoKeys">
           <svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
           密钥
+        </button>
+        <button type="button" class="btn btn-secondary" @click="openExport" :disabled="!mcpServerEntries.length">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          导出
         </button>
         <button type="button" class="btn btn-soft" @click="openDrawer('add')">
           <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
@@ -613,6 +669,58 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </div>
             </div>
           </aside>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 导出弹层 -->
+    <Teleport to="body">
+      <Transition name="mcp-export">
+        <div v-if="exportOpen" class="export-root" @click.self="closeExport">
+          <div class="export-panel" role="dialog" aria-modal="true" aria-labelledby="mcp-export-title">
+            <header class="export-head">
+              <h3 id="mcp-export-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                导出 MCP 配置
+              </h3>
+              <button type="button" class="btn btn-icon btn-ghost" aria-label="关闭" @click="closeExport">
+                <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </header>
+
+            <div class="export-body">
+              <div class="export-meta">
+                <span>将导出 <strong>{{ exportCount }}</strong> 个服务（标准 <code>mcpServers</code> 格式）</span>
+              </div>
+
+              <label class="export-opt">
+                <input type="checkbox" v-model="exportIncludeDisabled" />
+                <span>包含已禁用的服务</span>
+              </label>
+
+              <pre class="export-json">{{ exportJson }}</pre>
+
+              <p class="export-tip">
+                环境变量占位符（如 <code>${TAVILY_API_KEY}</code>）保持原样导出，导入方需自行配置对应密钥。
+              </p>
+            </div>
+
+            <footer class="export-foot">
+              <button type="button" class="btn btn-ghost" @click="closeExport">取消</button>
+              <button type="button" class="btn btn-secondary" @click="copyExport">
+                <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制
+              </button>
+              <button type="button" class="btn btn-primary" @click="downloadExport">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                下载 mcp.json
+              </button>
+            </footer>
+          </div>
         </div>
       </Transition>
     </Teleport>
@@ -1092,5 +1200,95 @@ tr:hover .ops { background: var(--bg-base); }
   .mcp-studio-enter-active .studio, .mcp-studio-leave-active .studio {
     transition: none !important; animation: none !important;
   }
+}
+
+/* ===== 导出弹层 ===== */
+.export-root {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(15, 23, 42, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.export-panel {
+  width: min(680px, 96vw);
+  max-height: 88vh;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px rgba(0,0,0,.18);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.export-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-base);
+  background: var(--bg-base);
+}
+.export-head h3 {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; font-size: 14px; font-weight: 600;
+  color: var(--text-primary);
+}
+.export-head h3 svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.export-body {
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 12px;
+  overflow-y: auto;
+}
+.export-meta {
+  font-size: 12px; color: var(--text-secondary);
+}
+.export-meta strong { color: var(--primary); font-weight: 600; }
+.export-meta code, .export-tip code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--bg-base);
+  border: 1px solid var(--border-base);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+.export-opt {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+  cursor: pointer; user-select: none;
+}
+.export-opt input { accent-color: var(--primary); cursor: pointer; }
+.export-json {
+  margin: 0;
+  background: var(--bg-base);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre;
+}
+.export-tip {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+.export-foot {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-base);
+  background: var(--bg-base);
+}
+.export-foot .btn svg { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.mcp-export-enter-active, .mcp-export-leave-active { transition: opacity .18s ease; }
+.mcp-export-enter-active .export-panel, .mcp-export-leave-active .export-panel { transition: transform .18s ease, opacity .18s ease; }
+.mcp-export-enter-from, .mcp-export-leave-to { opacity: 0; }
+.mcp-export-enter-from .export-panel, .mcp-export-leave-to .export-panel { transform: translateY(8px) scale(.98); opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .mcp-export-enter-active, .mcp-export-leave-active,
+  .mcp-export-enter-active .export-panel, .mcp-export-leave-active .export-panel { transition: none !important; }
 }
 </style>

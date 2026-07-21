@@ -10,6 +10,14 @@ export interface InstalledSkill {
   path: string
   skill_md_exists: boolean
   enabled: boolean
+  /** GitHub 作者（来自 skills-index.csv 的 source=owner/repo） */
+  author?: string
+  /** GitHub 仓库名 */
+  repo?: string
+  /** GitHub 仓库 URL（可点击跳转） */
+  github_url?: string
+  /** 来源类型：remote / local */
+  source_type?: string
 }
 
 export type SkillSourceId = 'skillssh' | 'smithery' | 'modelscope' | 'skillsmp' | 'clawhub' | 'anthropics' | 'github'
@@ -81,7 +89,12 @@ export const useSkillStore = defineStore('skill', () => {
       if (listFilter.value === 'on' && !s.enabled) return false
       if (listFilter.value === 'off' && s.enabled) return false
       if (!q) return true
-      return s.name.toLowerCase().includes(q) || (s.path || '').toLowerCase().includes(q)
+      return (
+        s.name.toLowerCase().includes(q) ||
+        (s.path || '').toLowerCase().includes(q) ||
+        (s.author || '').toLowerCase().includes(q) ||
+        (s.repo || '').toLowerCase().includes(q)
+      )
     })
   })
 

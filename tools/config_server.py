@@ -1343,6 +1343,44 @@ def list_local_skills():
 @app.route("/api/skills/installed", methods=["GET"])
 def list_installed_skills():
     enabled_set = get_enabled_skills(SKILL_YAML)
+    # 预读 skills-index.csv，用于补充 github 作者/仓库信息
+    csv_map: dict[str, dict] = {}
+    if SKILLS_CSV.exists():
+        try:
+            with open(SKILLS_CSV, "r", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    name = row.get("skill_name") or row.get("name") or ""
+                    if name:
+                        csv_map[name] = row
+        except Exception:
+            pass
+
+    def _parse_github_source(meta: dict) -> tuple[str, str, str]:
+        """从 CSV 行解析 (author, repo, github_url)。
+
+        source 字段格式：
+          - remote: "owner/repo"（可能带 @skill 后缀，如 "owner/repo@skill"）
+          - local:  仅技能名（无 github 信息）
+        url 字段优先作为 github_url。
+        """
+        source = (meta.get("source") or "").strip()
+        url = (meta.get("url") or "").strip()
+        # 去掉 @skill 后缀
+        if "@" in source:
+            source = source.split("@", 1)[0].strip()
+        author = ""
+        repo = ""
+        if "/" in source:
+            parts = source.split("/", 1)
+            author = parts[0].strip()
+            repo = parts[1].strip() if len(parts) > 1 else ""
+        # 仅当 url 看起来是 github 链接时才返回
+        github_url = url if url and "github.com" in url else ""
+        # 若无 url 但有 author/repo，构造 github url
+        if not github_url and author and repo:
+            github_url = f"https://github.com/{author}/{repo}"
+        return author, repo, github_url
+
     installed = []
     seen = set()
     # 扫描两个项目级技能目录：.agents/skills/（安装目标）+ config/skills/（项目复制）
@@ -1363,11 +1401,18 @@ def list_installed_skills():
                 rel = str(d.relative_to(PROJECT_ROOT))
             except ValueError:
                 rel = str(d)
+            # 从 CSV 补充 github 作者/仓库信息
+            meta = csv_map.get(d.name, {})
+            author, repo, github_url = _parse_github_source(meta)
             installed.append({
                 "name": d.name,
                 "path": rel,
                 "skill_md_exists": True,
                 "enabled": d.name in enabled_set,
+                "author": author,
+                "repo": repo,
+                "github_url": github_url,
+                "source_type": meta.get("source_type") or "",
             })
     return jsonify({"ok": True, "data": installed})
 
