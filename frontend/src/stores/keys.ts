@@ -191,6 +191,10 @@ export const useKeysStore = defineStore('keys', () => {
    *   export KEY="value"
    *   $env:KEY = "value"     (PowerShell)
    *   set KEY=value           (Windows CMD)
+   *   "KEY": "value"          (JSON 风，含尾逗号)
+   *   "KEY":"value",
+   *   KEY: value              (YAML 风)
+   *   整体 JSON 对象 {"K":"v",...}
    *   # 注释行 跳过
    *   空行 跳过
    * 多行粘贴会拆分为多条目。
@@ -199,27 +203,48 @@ export const useKeysStore = defineStore('keys', () => {
   function parseEnvText(text: string): Array<{ key: string; value: string; description?: string }> {
     if (!text) return []
     const results: Array<{ key: string; value: string; description?: string }> = []
-    const lines = text.split(/\r?\n/)
     const keyRe = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+    // 1) 优先尝试整体 JSON 解析（用户粘贴完整 JSON 对象）
+    const trimmed = text.trim()
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const obj = JSON.parse(trimmed)
+        if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+          for (const [k, v] of Object.entries(obj)) {
+            if (!keyRe.test(k)) continue
+            const value = v === null || v === undefined ? '' : String(v)
+            results.push({ key: k, value })
+          }
+          if (results.length) return results
+        }
+      } catch {
+        // 解析失败，降级到按行解析
+      }
+    }
+
+    const lines = text.split(/\r?\n/)
     for (let raw of lines) {
       let line = raw.trim()
       if (!line) continue
       // 跳过注释
       if (line.startsWith('#') || line.startsWith('//')) continue
+      // 跳过 JSON 容器行 { }
+      if (line === '{' || line === '}' || line === '[' || line === ']') continue
       // 去除前缀
       line = line.replace(/^export\s+/, '') // bash/zsh
       line = line.replace(/^set\s+/i, '') // CMD
       line = line.replace(/^\$env:/, '') // PowerShell 前缀
-      // 拆分 key=value（首个 = 或冒号+空格）
-      let m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
-      if (!m) {
-        // 尝试 KEY : value 格式（YAML 风）
-        m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/)
-        if (!m) continue
-      }
+      // 匹配 "KEY" 或 KEY（支持带引号和不带引号两种 key）
+      // 形式 1: "KEY" : value / "KEY" = value
+      // 形式 2: KEY = value / KEY : value
+      let m = line.match(/^"?([A-Za-z_][A-Za-z0-9_]*)"?\s*[:=]\s*(.*)$/)
+      if (!m) continue
       const key = m[1]
       if (!keyRe.test(key)) continue
       let value = m[2].trim()
+      // 去除尾部逗号（JSON 风）
+      if (value.endsWith(',')) value = value.slice(0, -1).trim()
       // 去除尾部注释（仅当值未被引号包裹时）
       if (value && !/^["']/.test(value)) {
         const hashIdx = value.indexOf(' #')

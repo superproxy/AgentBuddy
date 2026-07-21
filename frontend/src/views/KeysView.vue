@@ -592,7 +592,7 @@ async function confirmImport() {
             </header>
             <div class="modal-body">
               <p class="import-hint">
-                粘贴 <code>KEY=value</code> / <code>export KEY=value</code> / <code>$env:KEY = "value"</code> / <code>set KEY=value</code> 多行文本，自动解析为 key/value。
+                粘贴 <code>KEY=value</code> / <code>export KEY=value</code> / <code>$env:KEY = "value"</code> / <code>set KEY=value</code> / <code>"KEY": "value"</code>（JSON 风，含尾逗号）/ 完整 JSON 对象 <code>{"K":"v",...}</code>，自动解析为 key/value。
               </p>
               <textarea
                 v-model="importText"
