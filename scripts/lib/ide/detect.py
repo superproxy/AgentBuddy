@@ -147,7 +147,7 @@ IDE_DETECT_META = {
     },
     "QoderCN": {
         "label": "Qoder CN",
-        "cli_names": ["qoder-cn"],
+        "cli_names": ["qoderclicn", "qoder-cn"],
         "macos_apps": ["/Applications/Qoder CN.app", "/Applications/Qoder中国版.app"],
         "windows_apps": [
             "{LOCALAPPDATA}/Programs/Qoder CN/Qoder CN.exe",

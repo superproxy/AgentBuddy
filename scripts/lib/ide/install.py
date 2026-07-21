@@ -360,8 +360,8 @@ IDE_INSTALL_META = {
             "method": "script",
             "script_url": "https://qoder.com.cn/install",
             "url": "https://qoder.com.cn/cli",
-            "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true",
-            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
+            "uninstall_cmd_mac": "rm -f ~/.local/bin/qoderclicn ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoderclicn.exe\" \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
         },
         "app_install": {
             "method": "system_uninstall",
