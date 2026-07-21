@@ -35,6 +35,7 @@ const applyResult = ref<{
 // 批量导入弹层状态
 const importOpen = ref(false)
 const importText = ref('')
+const importOverwrite = ref(false)
 const importPreview = computed(() => {
   if (!importText.value.trim()) return []
   return keys.parseEnvText(importText.value)
@@ -47,6 +48,17 @@ const importNewPreview = computed(() => {
   const existing = new Set(Object.keys(keys.keysData.mcp || {}))
   return importPreview.value.filter((it: any) => !existing.has(it.key))
 })
+/** 当 overwrite=true 时，已存在的 key 算"将覆盖"而非"跳过" */
+const importOverwritePreview = computed(() => {
+  if (!importOverwrite.value) return []
+  return importSkippedPreview.value
+})
+/** 真正会被处理的条目数（新增 + 覆盖） */
+const importEffectiveCount = computed(() =>
+  importOverwrite.value
+    ? importNewPreview.value.length + importOverwritePreview.value.length
+    : importNewPreview.value.length,
+)
 
 function detectDefaultShell(): ShellType {
   // 浏览器无 OS 信息，按平台推断：Windows 默认 powershell，macOS 默认 zsh，其他默认 bash
@@ -254,14 +266,12 @@ async function confirmImport() {
     ui.toast('未识别到任何变量', 'err')
     return
   }
-  const result = await keys.batchImport(items)
+  const result = await keys.batchImport(items, { overwrite: importOverwrite.value })
   importOpen.value = false
   importText.value = ''
-  if (result.created > 0) {
-    ui.toast(`已导入 ${result.created} 条` + (result.skipped.length ? `，跳过 ${result.skipped.length} 条已存在` : ''))
-  } else if (result.skipped.length) {
-    ui.toast(`全部 ${result.skipped.length} 条已存在，未导入`, 'warn')
-  }
+  importOverwrite.value = false
+  // batchImport 内部已 toast，这里无需重复
+  void result
 }
 </script>
 
@@ -605,24 +615,30 @@ async function confirmImport() {
               <div v-if="importPreview.length" class="preview-box">
                 <div class="preview-row">
                   <span class="badge badge-ok">新增 {{ importNewPreview.length }}</span>
-                  <span v-if="importSkippedPreview.length" class="badge badge-warn">跳过（已存在）{{ importSkippedPreview.length }}</span>
+                  <span v-if="importSkippedPreview.length && !importOverwrite" class="badge badge-warn">跳过（已存在）{{ importSkippedPreview.length }}</span>
+                  <span v-if="importSkippedPreview.length && importOverwrite" class="badge badge-warn">覆盖 {{ importSkippedPreview.length }}</span>
                 </div>
                 <ul class="preview-list">
-                  <li v-for="(it, idx) in importPreview" :key="idx" :class="{ skipped: importSkippedPreview.includes(it) }">
+                  <li v-for="(it, idx) in importPreview" :key="idx" :class="{ skipped: importSkippedPreview.includes(it) && !importOverwrite }">
                     <code>{{ it.key }}</code>
                     <span class="eq">=</span>
                     <code class="val">{{ it.value }}</code>
-                    <em v-if="importSkippedPreview.includes(it)">已存在</em>
+                    <em v-if="importSkippedPreview.includes(it) && !importOverwrite">已存在</em>
+                    <em v-else-if="importSkippedPreview.includes(it) && importOverwrite" class="will-overwrite">将覆盖</em>
                   </li>
                 </ul>
               </div>
+              <label v-if="importSkippedPreview.length" class="opt-row overwrite-opt">
+                <input type="checkbox" v-model="importOverwrite" />
+                <span>覆盖已存在的变量（共 {{ importSkippedPreview.length }} 个）</span>
+              </label>
             </div>
             <footer class="modal-foot">
               <span class="foot-hint">{{ importPreview.length }} 条识别</span>
               <div class="foot-actions">
                 <button type="button" class="btn btn-sm btn-ghost" @click="importOpen = false">取消</button>
-                <button type="button" class="btn btn-sm btn-primary" :disabled="!importNewPreview.length" @click="confirmImport">
-                  导入 {{ importNewPreview.length }} 条
+                <button type="button" class="btn btn-sm btn-primary" :disabled="!importEffectiveCount" @click="confirmImport">
+                  导入 {{ importEffectiveCount }} 条
                 </button>
               </div>
             </footer>
@@ -1231,6 +1247,27 @@ async function confirmImport() {
 }
 .opt-row input {
   cursor: pointer;
+}
+
+.overwrite-opt {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-base, #e5e6eb);
+  border-radius: 6px;
+  background: var(--bg-base, #f7f8fa);
+}
+.overwrite-opt input:checked + span {
+  color: var(--brand-600, #0e42d2);
+  font-weight: 600;
+}
+
+.will-overwrite {
+  color: #d97706 !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+  padding: 0 6px !important;
+  border-radius: 3px !important;
+  font-style: normal !important;
+  font-size: 10px !important;
 }
 
 .export-textarea,

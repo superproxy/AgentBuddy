@@ -264,10 +264,16 @@ export const useKeysStore = defineStore('keys', () => {
   }
 
   /**
-   * 批量导入：跳过已存在的 key，返回 {created, skipped} 数量。
+   * 批量导入：跳过已存在的 key，返回 {created, skipped, overwritten} 数量。
+   * @param overwrite 当 key 已存在时是否覆盖其值（默认 false，跳过）
    */
-  async function batchImport(items: Array<{ key: string; value: string; description?: string }>): Promise<{ created: number; skipped: string[] }> {
+  async function batchImport(
+    items: Array<{ key: string; value: string; description?: string }>,
+    options: { overwrite?: boolean } = {},
+  ): Promise<{ created: number; overwritten: number; skipped: string[] }> {
+    const overwrite = !!options.overwrite
     const created: string[] = []
+    const overwritten: string[] = []
     const skipped: string[] = []
     for (const item of items) {
       const key = item.key.trim()
@@ -275,27 +281,56 @@ export const useKeysStore = defineStore('keys', () => {
         skipped.push(item.key || '(invalid)')
         continue
       }
-      if (keysData.mcp[key]) {
+      const exists = !!keysData.mcp[key]
+      if (exists && !overwrite) {
         skipped.push(key)
         continue
       }
-      const r = await api('/api/keys/key', {
-        method: 'POST',
-        body: JSON.stringify({
-          key,
-          value: item.value || '',
-          description: item.description || '',
-        }),
-      })
-      if (r.ok) {
-        keysData.mcp[key] = { value: item.value || '', description: item.description || '' }
-        created.push(key)
+      if (exists && overwrite) {
+        // PATCH 更新现有 key 的 value/description
+        const r = await api('/api/keys/key/' + encodeURIComponent(key), {
+          method: 'PATCH',
+          body: JSON.stringify({
+            value: item.value || '',
+            description: item.description ?? keysData.mcp[key]?.description ?? '',
+          }),
+        })
+        if (r.ok) {
+          keysData.mcp[key] = {
+            value: item.value || '',
+            description: item.description ?? keysData.mcp[key]?.description ?? '',
+          }
+          overwritten.push(key)
+        } else {
+          skipped.push(key)
+        }
       } else {
-        skipped.push(key)
+        // POST 创建新 key
+        const r = await api('/api/keys/key', {
+          method: 'POST',
+          body: JSON.stringify({
+            key,
+            value: item.value || '',
+            description: item.description || '',
+          }),
+        })
+        if (r.ok) {
+          keysData.mcp[key] = { value: item.value || '', description: item.description || '' }
+          created.push(key)
+        } else {
+          skipped.push(key)
+        }
       }
     }
-    if (created.length) ui.toast(`已导入 ${created.length} 条` + (skipped.length ? `，跳过 ${skipped.length} 条` : ''))
-    return { created: created.length, skipped }
+    const total = created.length + overwritten.length
+    if (total) {
+      let msg = `已导入 ${total} 条`
+      if (created.length && overwritten.length) msg += `（新增 ${created.length}，覆盖 ${overwritten.length}）`
+      else if (overwritten.length) msg += `（覆盖 ${overwritten.length}）`
+      if (skipped.length) msg += `，跳过 ${skipped.length} 条`
+      ui.toast(msg)
+    }
+    return { created: created.length, overwritten: overwritten.length, skipped }
   }
 
   /**
