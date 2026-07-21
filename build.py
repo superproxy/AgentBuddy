@@ -192,12 +192,15 @@ def generate_icns() -> None:
         info(f"iconutil 生成 .icns 失败: {r.stderr.strip()}，使用 .ico 回退")
 
 
-def run_pyinstaller(windowed: bool) -> None:
+def run_pyinstaller(windowed: bool, version: str = "1.0.0") -> None:
     # 使用 .spec 文件时，windowed 由 spec 内的 console=False 控制，
     # 不能再传 --windowed（PyInstaller 不允许 spec + --windowed 同时使用）
+    # 通过环境变量 AGENTBUDDY_VERSION 把版本号传给 app.spec（写入 Info.plist）
     cmd = [sys.executable, "-m", "PyInstaller", str(SPEC_FILE), "--noconfirm"]
     info(f"执行: {' '.join(cmd)}")
-    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+    env = os.environ.copy()
+    env["AGENTBUDDY_VERSION"] = version
+    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT), env=env)
     if rc != 0:
         fail(f"PyInstaller 构建失败 (exit={rc})")
 
@@ -508,7 +511,7 @@ def main():
         with _step_timer("清理 dist/build"):
             clean()
     with _step_timer("PyInstaller 打包"):
-        run_pyinstaller(windowed=args.windowed)
+        run_pyinstaller(windowed=args.windowed, version=args.version)
     if not args.no_verify:
         with _step_timer("密钥泄漏扫描"):
             verify_bundle()

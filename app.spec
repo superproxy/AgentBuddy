@@ -16,6 +16,9 @@ import os
 
 block_cipher = None
 
+# 从环境变量读取版本号（由 build.py 的 run_pyinstaller 设置）
+APP_VERSION = os.environ.get("AGENTBUDDY_VERSION", "1.0.0")
+
 # 绝不允许进入 bundle 的文件名 / glob（basename 匹配）
 # 这些是运行态文件（含真实 API Key），由脚本从 *.template.* 生成
 SENSITIVE = {
@@ -144,8 +147,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': '虎翼',
         'CFBundleDisplayName': '虎翼',
-        'CFBundleShortVersionString': '1.0.0',
-        'CFBundleVersion': '1.0.0',
+        'CFBundleShortVersionString': APP_VERSION,
+        'CFBundleVersion': APP_VERSION,
         'NSHighResolutionCapable': True,
         'LSMinimumSystemVersion': '10.13',
     },
