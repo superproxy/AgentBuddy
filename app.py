@@ -90,7 +90,7 @@ def _migrate_legacy_data_dir() -> None:
 
     品牌改名后数据目录路径变化，旧目录里的用户数据（config/、.agents/）
     需迁移到新目录，避免用户密钥等数据丢失。
-    仅在新目录缺少关键用户数据时迁移，迁移后不删除旧目录（留作备份）。
+    迁移后不删除旧目录（留作备份）。
 
     平台差异：
     - macOS: 旧 ~/Library/Application Support/AdeBuddy/ → 新 .../AgentBuddy/
@@ -129,15 +129,17 @@ def _migrate_legacy_data_dir() -> None:
     if legacy is None:
         return
 
-    # 新目录已有 config/keys/keys.yaml 且非空 → 已迁移过，跳过
-    dst_keys = current / "config" / "keys" / "keys.yaml"
-    if dst_keys.exists() and dst_keys.stat().st_size > 16:
-        return
+    # 用户数据文件：旧目录覆盖新目录（用户真实数据优先于模板）
+    USER_DATA_FILES = {
+        "keys.yaml", "llm.yaml", "mcp.yaml", "mcp.json",
+        "skill.yaml", "env.yaml", "env.local.yaml",
+        "installed-plugins.yaml",
+    }
 
     import shutil
 
     def _merge_dir(src: Path, dst: Path) -> None:
-        """递归合并目录：已存在的目录递归拷贝，已存在的文件不覆盖（新版优先）。"""
+        """递归合并目录：用户数据文件强制覆盖，其他文件仅拷贝不存在者。"""
         if not src.exists():
             return
         dst.mkdir(parents=True, exist_ok=True)
@@ -146,7 +148,11 @@ def _migrate_legacy_data_dir() -> None:
             if item.is_dir():
                 _merge_dir(item, dst_item)
             else:
-                if not dst_item.exists():
+                # 用户数据文件：强制覆盖（旧目录是用户真实数据，新目录是模板）
+                if item.name in USER_DATA_FILES:
+                    shutil.copy2(item, dst_item)
+                # 其他文件：仅拷贝不存在者（保留新版）
+                elif not dst_item.exists():
                     shutil.copy2(item, dst_item)
 
     try:

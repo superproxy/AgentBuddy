@@ -253,7 +253,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="app-header command-shell sticky top-0 z-30 relative overflow-hidden">
+  <header class="app-header command-shell sticky top-0 z-30 relative">
     <div class="max-w-[1600px] mx-auto w-full">
       <div
         class="command-bar grid items-center gap-x-4 gap-y-3 px-6 py-3
@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
           aria-label="配置分区"
         >
           <div
-            class="tab-track relative flex items-center gap-0.5 p-1 max-w-full overflow-x-auto"
+            class="tab-track relative flex items-center gap-0.5 p-1 max-w-full"
             role="tablist"
             aria-orientation="horizontal"
             @keydown="onTabKeydown"
