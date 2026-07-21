@@ -145,8 +145,8 @@ app = BUNDLE(
     ),
     bundle_identifier='com.agentbuddy.app',
     info_plist={
-        'CFBundleName': '虎翼',
-        'CFBundleDisplayName': '虎翼',
+        'CFBundleName': '飞翼',
+        'CFBundleDisplayName': '飞翼',
         'CFBundleShortVersionString': APP_VERSION,
         'CFBundleVersion': APP_VERSION,
         'NSHighResolutionCapable': True,

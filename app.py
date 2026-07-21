@@ -1,4 +1,4 @@
-"""虎翼 - pywebview 桌面启动器。
+"""飞翼 - pywebview 桌面启动器。
 
 在后台线程启动 Flask 服务，前台用 pywebview 打开嵌入窗口。
 - 默认窗口 1400x900，最小 1000x680
@@ -516,7 +516,7 @@ def _osascript_to_posix(raw: str) -> str:
     return ""
 
 
-def open_with_pywebview(url: str, title: str = "虎翼", width: int = 1400, height: int = 900) -> bool:
+def open_with_pywebview(url: str, title: str = "飞翼", width: int = 1400, height: int = 900) -> bool:
     """用 pywebview 打开窗口，成功返回 True。"""
     try:
         import webview  # type: ignore
@@ -536,7 +536,7 @@ def open_with_pywebview(url: str, title: str = "虎翼", width: int = 1400, heig
 
 
 def main():
-    parser = argparse.ArgumentParser(description="虎翼 (pywebview 桌面版)")
+    parser = argparse.ArgumentParser(description="飞翼 (pywebview 桌面版)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-webview", action="store_true", help="不使用 pywebview，回退到系统浏览器")

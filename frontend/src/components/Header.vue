@@ -279,7 +279,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="min-w-0">
             <h1 class="text-[15px] font-bold tracking-tight leading-tight whitespace-nowrap" style="color: var(--text-primary)">
-              虎翼
+              飞翼
             </h1>
             <div class="flex items-center gap-1.5 mt-1">
               <!-- 版本胶囊：发光状态点 + 版本号，点击检查/打开升级 -->

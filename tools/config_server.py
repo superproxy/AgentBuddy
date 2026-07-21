@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-虎翼 Web UI 后端
+飞翼 Web UI 后端
 
 启动: python tools/config_server.py
 访问: http://127.0.0.1:5050
@@ -3619,7 +3619,7 @@ def api_ide_session_import():
 # Main
 # ============================================================
 def main():
-    parser = argparse.ArgumentParser(description="虎翼 Web UI")
+    parser = argparse.ArgumentParser(description="飞翼 Web UI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")

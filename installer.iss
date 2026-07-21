@@ -12,13 +12,13 @@
 #endif
 
 [Setup]
-AppName=虎翼
+AppName=飞翼
 AppVersion={#APP_VERSION}
 AppPublisher=AgentBuddy
 AppPublisherURL=https://github.com/superproxy/MyAgentPlugin
 AppSupportURL=https://github.com/superproxy/MyAgentPlugin/issues
 AppUpdatesURL=https://github.com/superproxy/MyAgentPlugin/releases
-AppComments=虎翼 - 多 IDE Agent 配置工具
+AppComments=飞翼 - 多 IDE Agent 配置工具
 DefaultDirName={autopf}\AgentBuddy
 DefaultGroupName=AgentBuddy
 DisableProgramGroupPage=yes
