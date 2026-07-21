@@ -181,6 +181,174 @@ export const useKeysStore = defineStore('keys', () => {
     selectedKey.value = key
   }
 
+  /**
+   * 解析粘贴文本为 key/value 列表。
+   * 支持格式：
+   *   KEY=value
+   *   KEY="value"
+   *   KEY='value'
+   *   export KEY=value       (bash/zsh)
+   *   export KEY="value"
+   *   $env:KEY = "value"     (PowerShell)
+   *   set KEY=value           (Windows CMD)
+   *   # 注释行 跳过
+   *   空行 跳过
+   * 多行粘贴会拆分为多条目。
+   * 返回：[{key, value, description?}, ...]
+   */
+  function parseEnvText(text: string): Array<{ key: string; value: string; description?: string }> {
+    if (!text) return []
+    const results: Array<{ key: string; value: string; description?: string }> = []
+    const lines = text.split(/\r?\n/)
+    const keyRe = /^[A-Za-z_][A-Za-z0-9_]*$/
+    for (let raw of lines) {
+      let line = raw.trim()
+      if (!line) continue
+      // 跳过注释
+      if (line.startsWith('#') || line.startsWith('//')) continue
+      // 去除前缀
+      line = line.replace(/^export\s+/, '') // bash/zsh
+      line = line.replace(/^set\s+/i, '') // CMD
+      line = line.replace(/^\$env:/, '') // PowerShell 前缀
+      // 拆分 key=value（首个 = 或冒号+空格）
+      let m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/)
+      if (!m) {
+        // 尝试 KEY : value 格式（YAML 风）
+        m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/)
+        if (!m) continue
+      }
+      const key = m[1]
+      if (!keyRe.test(key)) continue
+      let value = m[2].trim()
+      // 去除尾部注释（仅当值未被引号包裹时）
+      if (value && !/^["']/.test(value)) {
+        const hashIdx = value.indexOf(' #')
+        if (hashIdx >= 0) value = value.slice(0, hashIdx).trim()
+      }
+      // 去除外层引号
+      if (value.length >= 2) {
+        const first = value[0]
+        const last = value[value.length - 1]
+        if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+          value = value.slice(1, -1)
+        }
+      }
+      results.push({ key, value })
+    }
+    return results
+  }
+
+  /**
+   * 批量导入：跳过已存在的 key，返回 {created, skipped} 数量。
+   */
+  async function batchImport(items: Array<{ key: string; value: string; description?: string }>): Promise<{ created: number; skipped: string[] }> {
+    const created: string[] = []
+    const skipped: string[] = []
+    for (const item of items) {
+      const key = item.key.trim()
+      if (!key || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        skipped.push(item.key || '(invalid)')
+        continue
+      }
+      if (keysData.mcp[key]) {
+        skipped.push(key)
+        continue
+      }
+      const r = await api('/api/keys/key', {
+        method: 'POST',
+        body: JSON.stringify({
+          key,
+          value: item.value || '',
+          description: item.description || '',
+        }),
+      })
+      if (r.ok) {
+        keysData.mcp[key] = { value: item.value || '', description: item.description || '' }
+        created.push(key)
+      } else {
+        skipped.push(key)
+      }
+    }
+    if (created.length) ui.toast(`已导入 ${created.length} 条` + (skipped.length ? `，跳过 ${skipped.length} 条` : ''))
+    return { created: created.length, skipped }
+  }
+
+  /**
+   * 生成 shell 环境变量配置文本（保留作为预览/导出辅助）。
+   * @param shell 'powershell' | 'bash' | 'zsh'
+   * @param includeEmpty 是否包含空值变量
+   */
+  function exportShell(shell: 'powershell' | 'bash' | 'zsh', includeEmpty = false): string {
+    const mcp = keysData.mcp || {}
+    const entries = Object.entries(mcp).map(([k, v]: [string, any]) => ({
+      key: k,
+      ...normalizeEntry(v),
+    }))
+    const lines: string[] = []
+    if (shell === 'powershell') {
+      lines.push('# PowerShell 环境变量配置（Windows）')
+      lines.push('# 用法：将以下内容保存为 env.ps1，或在 PowerShell 会话中直接粘贴执行')
+      lines.push('')
+      for (const e of entries) {
+        if (!e.value && !includeEmpty) continue
+        // PowerShell 单引号转义：' → ''
+        const v = e.value.replace(/'/g, "''")
+        lines.push(`$env:${e.key} = '${v}'`)
+      }
+    } else if (shell === 'zsh') {
+      lines.push('#!/bin/zsh')
+      lines.push('# zsh 环境变量配置（macOS）')
+      lines.push('# 用法：将以下内容追加到 ~/.zshrc，或 source env.zsh')
+      lines.push('')
+      for (const e of entries) {
+        if (!e.value && !includeEmpty) continue
+        const v = e.value.replace(/'/g, "'\\''")
+        lines.push(`export ${e.key}='${v}'`)
+      }
+    } else {
+      // bash
+      lines.push('#!/bin/bash')
+      lines.push('# bash 环境变量配置（Linux）')
+      lines.push('# 用法：将以下内容追加到 ~/.bashrc，或 source env.sh')
+      lines.push('')
+      for (const e of entries) {
+        if (!e.value && !includeEmpty) continue
+        const v = e.value.replace(/'/g, "'\\''")
+        lines.push(`export ${e.key}='${v}'`)
+      }
+    }
+    return lines.join('\n')
+  }
+
+  /**
+   * 把 keys 应用到操作系统（让环境变量在系统中生效）。
+   * @param options.keys 仅应用指定变量；省略则应用全部
+   * @param options.includeEmpty 是否包含空值变量
+   * @returns { ok, applied, skipped, target, note }
+   */
+  async function applyToSystem(options: { keys?: string[]; includeEmpty?: boolean } = {}): Promise<{
+    ok: boolean
+    applied: Array<{ key: string; value: string }>
+    skipped: Array<{ key: string; reason: string }>
+    target: string
+    note: string
+    error?: string
+  }> {
+    const r = await api('/api/keys/apply-env', {
+      method: 'POST',
+      body: JSON.stringify({
+        keys: options.keys || null,
+        includeEmpty: !!options.includeEmpty,
+      }),
+    })
+    if (r.ok) {
+      ui.toast(`已应用 ${r.applied?.length || 0} 个变量到系统`)
+    } else {
+      ui.toast('应用到系统失败: ' + (r.error || ''), 'err')
+    }
+    return r
+  }
+
   return {
     keysData,
     keysPath,
@@ -204,6 +372,10 @@ export const useKeysStore = defineStore('keys', () => {
     updateDescription,
     patchEntry,
     selectKey,
+    parseEnvText,
+    batchImport,
+    exportShell,
+    applyToSystem,
   }
 })
 

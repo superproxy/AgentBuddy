@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref, nextTick } from 'vue'
+import { onMounted, ref, nextTick, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useKeysStore } from '../stores/keys'
 import { useUiStore } from '../stores/ui'
+
+type ShellType = 'powershell' | 'zsh' | 'bash'
 
 const ui = useUiStore()
 const keys = useKeysStore() as any
@@ -14,6 +16,45 @@ const newValueInput = ref<HTMLInputElement | null>(null)
 const newDescInput = ref<HTMLInputElement | null>(null)
 // 行内可见性状态：key -> boolean（局部 UI 状态，不入 store）
 const revealedRows = ref<{ [k: string]: boolean }>({})
+
+// 应用到系统弹层状态
+const applyOpen = ref(false)
+const applyShellType = ref<ShellType>(detectDefaultShell())
+const applyIncludeEmpty = ref(false)
+const applyPreviewText = ref('')
+const applying = ref(false)
+const applyResult = ref<{
+  ok: boolean
+  applied: Array<{ key: string; value: string }>
+  skipped: Array<{ key: string; reason: string }>
+  target: string
+  note: string
+  error?: string
+} | null>(null)
+
+// 批量导入弹层状态
+const importOpen = ref(false)
+const importText = ref('')
+const importPreview = computed(() => {
+  if (!importText.value.trim()) return []
+  return keys.parseEnvText(importText.value)
+})
+const importSkippedPreview = computed(() => {
+  const existing = new Set(Object.keys(keys.keysData.mcp || {}))
+  return importPreview.value.filter((it: any) => existing.has(it.key))
+})
+const importNewPreview = computed(() => {
+  const existing = new Set(Object.keys(keys.keysData.mcp || {}))
+  return importPreview.value.filter((it: any) => !existing.has(it.key))
+})
+
+function detectDefaultShell(): ShellType {
+  // 浏览器无 OS 信息，按平台推断：Windows 默认 powershell，macOS 默认 zsh，其他默认 bash
+  const ua = navigator.userAgent || ''
+  if (/Windows/i.test(ua)) return 'powershell'
+  if (/Macintosh|Mac OS X/i.test(ua)) return 'zsh'
+  return 'bash'
+}
 
 onMounted(() => {
   keys.loadKeys()
@@ -60,6 +101,32 @@ function copyValue(value: string) {
   navigator.clipboard?.writeText(value).then(() => {
     ui.toast('已复制到剪贴板')
   })
+}
+
+/**
+ * 新建行变量名粘贴：自动解析 key=value 文本。
+ * - 多行：弹批量导入弹层
+ * - 单行且能解析为 KEY=value：也弹弹层（避免被当作变量名整体填入）
+ * - 单行且无法解析（纯变量名）：保持默认粘贴行为
+ */
+function onNewKeyPaste(e: ClipboardEvent) {
+  const text = e.clipboardData?.getData('text') || ''
+  if (!text) return
+  const lines = text.split(/\r?\n/).filter((l) => l.trim())
+  // 多行：直接触发批量导入
+  if (lines.length > 1) {
+    e.preventDefault()
+    importText.value = text
+    importOpen.value = true
+    return
+  }
+  // 单行：尝试解析，能解析则触发弹层；不能则保持默认粘贴
+  const parsed = keys.parseEnvText(text)
+  if (parsed.length > 0) {
+    e.preventDefault()
+    importText.value = text
+    importOpen.value = true
+  }
 }
 
 function onNewKeyEnter(e: KeyboardEvent) {
@@ -131,6 +198,71 @@ function usagesSummary(key: string): string {
     .map(([src, scopes]) => `${src}: ${[...scopes].join(', ')}`)
     .join(' | ')
 }
+
+// ===== 应用到系统弹层 =====
+function openApply() {
+  applyOpen.value = true
+  applyResult.value = null
+  regenerateApplyPreview()
+}
+
+function regenerateApplyPreview() {
+  // 仅作为预览展示对应 shell 的写入形式
+  applyPreviewText.value = keys.exportShell(applyShellType.value, applyIncludeEmpty.value)
+}
+
+async function confirmApply() {
+  applying.value = true
+  applyResult.value = null
+  try {
+    const r = await keys.applyToSystem({ includeEmpty: applyIncludeEmpty.value })
+    applyResult.value = r
+  } finally {
+    applying.value = false
+  }
+}
+
+async function copyApplyPreview() {
+  if (!applyPreviewText.value) return
+  await navigator.clipboard?.writeText(applyPreviewText.value)
+  ui.toast('已复制到剪贴板')
+}
+
+function downloadApplyPreview() {
+  const ext = applyShellType.value === 'powershell' ? 'ps1' : applyShellType.value === 'zsh' ? 'zsh' : 'sh'
+  const filename = `env.${ext}`
+  const blob = new Blob([applyPreviewText.value], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+// ===== 导入弹层 =====
+function openImport() {
+  importText.value = ''
+  importOpen.value = true
+}
+
+async function confirmImport() {
+  const items = importPreview.value
+  if (!items.length) {
+    ui.toast('未识别到任何变量', 'err')
+    return
+  }
+  const result = await keys.batchImport(items)
+  importOpen.value = false
+  importText.value = ''
+  if (result.created > 0) {
+    ui.toast(`已导入 ${result.created} 条` + (result.skipped.length ? `，跳过 ${result.skipped.length} 条已存在` : ''))
+  } else if (result.skipped.length) {
+    ui.toast(`全部 ${result.skipped.length} 条已存在，未导入`, 'warn')
+  }
+}
 </script>
 
 <template>
@@ -167,6 +299,16 @@ function usagesSummary(key: string): string {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
         自动保存
       </span>
+      <div class="toolbar-actions">
+        <button type="button" class="btn btn-sm btn-ghost" @click="openImport">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          导入文本
+        </button>
+        <button type="button" class="btn btn-sm btn-soft" @click="openApply">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 12 13 12"/></svg>
+          应用到系统
+        </button>
+      </div>
     </div>
 
     <!-- Excel 风格表格：变量名 / 值 / 描述 / 出处 / 操作 -->
@@ -275,9 +417,10 @@ function usagesSummary(key: string): string {
                 v-model="draft.key"
                 type="text"
                 class="key-name-input"
-                placeholder="变量名（如 TAVILY_API_KEY）"
+                placeholder="变量名（如 TAVILY_API_KEY），粘贴多行可批量解析"
                 @keydown="onNewKeyEnter"
                 @blur="onNewKeyBlur"
+                @paste="onNewKeyPaste"
               />
             </td>
             <td class="cell-value">
@@ -304,7 +447,24 @@ function usagesSummary(key: string): string {
               <span class="usage-empty">新变量</span>
             </td>
             <td class="cell-actions">
-              <span class="draft-hint">Enter 创建 · Esc 取消</span>
+              <button
+                type="button"
+                class="btn btn-icon btn-primary btn-sm"
+                aria-label="确认创建"
+                title="确认创建"
+                @click="handleCommitAdd"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>
+              <button
+                type="button"
+                class="btn btn-icon btn-danger btn-sm"
+                aria-label="取消创建"
+                title="取消创建"
+                @click="handleCancelAdd"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </td>
           </tr>
           <tr v-if="isAdding && draft.error">
@@ -320,6 +480,156 @@ function usagesSummary(key: string): string {
         </tbody>
       </table>
     </div>
+
+    <!-- 应用到系统弹层 -->
+    <Teleport to="body">
+      <Transition name="export-modal">
+        <div v-if="applyOpen" class="modal-mask" @click.self="!applying && (applyOpen = false)">
+          <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="apply-title">
+            <header class="modal-head">
+              <h3 id="apply-title">应用到系统</h3>
+              <button type="button" class="btn btn-icon btn-ghost btn-sm" aria-label="关闭" :disabled="applying" @click="applyOpen = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </header>
+            <div class="modal-body">
+              <p class="apply-intro">
+                把所有密钥/环境变量写入操作系统，让其在终端、IDE 等任意新进程中立即可读。
+                <span class="text-ink-400">Windows 写入用户级注册表；macOS/Linux 追加到对应 rc 文件。</span>
+              </p>
+              <div class="shell-tabs">
+                <label class="shell-tab" :class="{ active: applyShellType === 'powershell' }">
+                  <input type="radio" v-model="applyShellType" value="powershell" @change="regenerateApplyPreview" />
+                  <span>PowerShell</span>
+                  <em>Windows</em>
+                </label>
+                <label class="shell-tab" :class="{ active: applyShellType === 'zsh' }">
+                  <input type="radio" v-model="applyShellType" value="zsh" @change="regenerateApplyPreview" />
+                  <span>zsh</span>
+                  <em>macOS</em>
+                </label>
+                <label class="shell-tab" :class="{ active: applyShellType === 'bash' }">
+                  <input type="radio" v-model="applyShellType" value="bash" @change="regenerateApplyPreview" />
+                  <span>bash</span>
+                  <em>Linux</em>
+                </label>
+              </div>
+              <label class="opt-row">
+                <input type="checkbox" v-model="applyIncludeEmpty" @change="regenerateApplyPreview" />
+                <span>包含未设值的变量</span>
+              </label>
+              <details class="preview-details">
+                <summary>预览将要写入的脚本</summary>
+                <textarea
+                  class="export-textarea"
+                  :value="applyPreviewText"
+                  readonly
+                  rows="10"
+                  spellcheck="false"
+                  aria-label="预览脚本"
+                ></textarea>
+                <div class="preview-actions">
+                  <button type="button" class="btn btn-sm btn-ghost" @click="copyApplyPreview">复制脚本</button>
+                  <button type="button" class="btn btn-sm btn-ghost" @click="downloadApplyPreview">下载文件</button>
+                </div>
+              </details>
+
+              <!-- 应用结果 -->
+              <div v-if="applyResult" class="apply-result" :class="{ ok: applyResult.ok, err: !applyResult.ok }">
+                <div v-if="!applyResult.ok" class="result-row err">
+                  <strong>应用失败：</strong>
+                  <span>{{ applyResult.error }}</span>
+                </div>
+                <div v-else>
+                  <div class="result-row ok">
+                    <strong>已应用 {{ applyResult.applied.length }} 个变量</strong>
+                    <span class="target">{{ applyResult.target }}</span>
+                  </div>
+                  <p v-if="applyResult.note" class="result-note">{{ applyResult.note }}</p>
+                  <div v-if="applyResult.applied.length" class="result-list">
+                    <div v-for="it in applyResult.applied" :key="it.key" class="result-item">
+                      <code>{{ it.key }}</code>
+                      <span class="eq">=</span>
+                      <code class="val">{{ it.value }}</code>
+                    </div>
+                  </div>
+                  <div v-if="applyResult.skipped.length" class="skipped-box">
+                    <span class="badge badge-warn">跳过 {{ applyResult.skipped.length }}</span>
+                    <ul>
+                      <li v-for="s in applyResult.skipped" :key="s.key">
+                        <code>{{ s.key }}</code> — {{ s.reason }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <footer class="modal-foot">
+              <span class="foot-hint">{{ applyPreviewText.split('\n').filter(l => l && !l.startsWith('#') && !l.startsWith('!')).length }} 个变量</span>
+              <div class="foot-actions">
+                <button type="button" class="btn btn-sm btn-ghost" :disabled="applying" @click="applyOpen = false">关闭</button>
+                <button type="button" class="btn btn-sm btn-primary" :disabled="applying || !!applyResult?.ok" @click="confirmApply">
+                  <svg v-if="applying" class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/></svg>
+                  {{ applying ? '应用中…' : applyResult?.ok ? '已应用' : '立即应用到系统' }}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- 批量导入弹层 -->
+    <Teleport to="body">
+      <Transition name="export-modal">
+        <div v-if="importOpen" class="modal-mask" @click.self="importOpen = false">
+          <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="import-title">
+            <header class="modal-head">
+              <h3 id="import-title">批量导入变量</h3>
+              <button type="button" class="btn btn-icon btn-ghost btn-sm" aria-label="关闭" @click="importOpen = false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </header>
+            <div class="modal-body">
+              <p class="import-hint">
+                粘贴 <code>KEY=value</code> / <code>export KEY=value</code> / <code>$env:KEY = "value"</code> / <code>set KEY=value</code> 多行文本，自动解析为 key/value。
+              </p>
+              <textarea
+                v-model="importText"
+                class="import-textarea"
+                rows="10"
+                spellcheck="false"
+                placeholder="TAVILY_API_KEY=tvly-xxx&#10;export OPENAI_API_KEY=sk-xxx&#10;$env:GITHUB_TOKEN = &quot;ghp_xxx&quot;&#10;# 注释会被跳过"
+                aria-label="待导入文本"
+              ></textarea>
+              <div v-if="importPreview.length" class="preview-box">
+                <div class="preview-row">
+                  <span class="badge badge-ok">新增 {{ importNewPreview.length }}</span>
+                  <span v-if="importSkippedPreview.length" class="badge badge-warn">跳过（已存在）{{ importSkippedPreview.length }}</span>
+                </div>
+                <ul class="preview-list">
+                  <li v-for="(it, idx) in importPreview" :key="idx" :class="{ skipped: importSkippedPreview.includes(it) }">
+                    <code>{{ it.key }}</code>
+                    <span class="eq">=</span>
+                    <code class="val">{{ it.value }}</code>
+                    <em v-if="importSkippedPreview.includes(it)">已存在</em>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <footer class="modal-foot">
+              <span class="foot-hint">{{ importPreview.length }} 条识别</span>
+              <div class="foot-actions">
+                <button type="button" class="btn btn-sm btn-ghost" @click="importOpen = false">取消</button>
+                <button type="button" class="btn btn-sm btn-primary" :disabled="!importNewPreview.length" @click="confirmImport">
+                  导入 {{ importNewPreview.length }} 条
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -393,6 +703,26 @@ function usagesSummary(key: string): string {
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+}
+.toolbar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.btn-primary {
+  background: var(--brand-500, #165dff);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-600, #0e42d2);
+}
+.btn-soft {
+  background: var(--primary-container, rgba(22, 93, 255, 0.08));
+  color: var(--brand-600, #0e42d2);
+  border-color: var(--primary-container-strong, rgba(22, 93, 255, 0.16));
+}
+.btn-soft:hover:not(:disabled) {
+  background: rgba(22, 93, 255, 0.16);
 }
 .search-input {
   flex: 1;
@@ -782,6 +1112,391 @@ function usagesSummary(key: string): string {
   }
   .keys-table {
     min-width: 600px;
+  }
+}
+
+/* ===== 弹层（导出/导入） ===== */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 20, 30, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-panel {
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  background: var(--bg-elevated, #fff);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(15, 20, 30, 0.22);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-base, #e5e6eb);
+}
+.modal-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #1f2329);
+}
+.modal-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-base, #e5e6eb);
+  background: var(--bg-base, #f7f8fa);
+}
+.foot-hint {
+  font-size: 11px;
+  color: var(--text-tertiary, #86909c);
+}
+.foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Shell 选项卡 */
+.shell-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.shell-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1px solid var(--border-base, #e5e6eb);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--bg-base, #f7f8fa);
+  position: relative;
+}
+.shell-tab input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.shell-tab span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #4e5969);
+}
+.shell-tab em {
+  font-size: 10px;
+  font-style: normal;
+  color: var(--text-tertiary, #86909c);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.shell-tab:hover {
+  border-color: var(--brand-500, #165dff);
+}
+.shell-tab.active {
+  border-color: var(--brand-500, #165dff);
+  background: var(--primary-container, rgba(22, 93, 255, 0.08));
+}
+.shell-tab.active span {
+  color: var(--brand-600, #0e42d2);
+}
+
+.opt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary, #4e5969);
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.opt-row input {
+  cursor: pointer;
+}
+
+.export-textarea,
+.import-textarea {
+  width: 100%;
+  font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--border-base, #e5e6eb);
+  border-radius: 8px;
+  background: var(--bg-base, #f7f8fa);
+  color: var(--text-primary, #1f2329);
+  resize: vertical;
+  min-height: 200px;
+}
+.export-textarea {
+  background: var(--bg-sunken, #f2f3f5);
+  color: var(--text-secondary, #4e5969);
+}
+.export-textarea:focus,
+.import-textarea:focus {
+  outline: none;
+  border-color: var(--brand-500, #165dff);
+  background: var(--bg-elevated, #fff);
+}
+
+.import-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #4e5969);
+  line-height: 1.6;
+}
+.import-hint code {
+  background: var(--bg-base, #f7f8fa);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--brand-600, #0e42d2);
+}
+
+/* 应用到系统弹层专属 */
+.apply-intro {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary, #4e5969);
+  line-height: 1.6;
+}
+.apply-intro .text-ink-400 {
+  color: var(--text-tertiary, #86909c);
+  display: block;
+  margin-top: 2px;
+}
+.preview-details {
+  margin-top: 10px;
+  border: 1px solid var(--border-base, #e5e6eb);
+  border-radius: 8px;
+  background: var(--bg-base, #f7f8fa);
+  padding: 8px 10px;
+}
+.preview-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #4e5969);
+  user-select: none;
+  margin-bottom: 6px;
+}
+.preview-details[open] summary {
+  margin-bottom: 8px;
+}
+.preview-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.apply-result {
+  margin-top: 12px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-base, #e5e6eb);
+}
+.apply-result.ok {
+  border-color: rgba(5, 150, 105, 0.3);
+  background: rgba(5, 150, 105, 0.06);
+}
+.apply-result.err {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.06);
+}
+.result-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.result-row.ok strong {
+  color: #059669;
+}
+.result-row.err strong {
+  color: #dc2626;
+}
+.result-row .target {
+  font-size: 11px;
+  color: var(--text-tertiary, #86909c);
+  font-family: 'SF Mono', 'Consolas', monospace;
+}
+.result-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--text-secondary, #4e5969);
+  line-height: 1.5;
+}
+.result-list {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border-subtle, #f2f3f5);
+}
+.result-item:last-child {
+  border-bottom: none;
+}
+.result-item code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--brand-600, #0e42d2);
+  background: rgba(22, 93, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.result-item code.val {
+  color: var(--text-secondary, #4e5969);
+  background: var(--bg-elevated, #fff);
+  flex: 1;
+  max-width: 300px;
+}
+.result-item .eq {
+  color: var(--text-tertiary, #86909c);
+}
+.skipped-box {
+  margin-top: 8px;
+  font-size: 11px;
+}
+.skipped-box ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--text-secondary, #4e5969);
+}
+.skipped-box li code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 10px;
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+  width: 13px;
+  height: 13px;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.preview-box {
+  margin-top: 12px;
+  border: 1px solid var(--border-base, #e5e6eb);
+  border-radius: 8px;
+  background: var(--bg-base, #f7f8fa);
+  padding: 10px 12px;
+}
+.preview-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.preview-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle, #f2f3f5);
+}
+.preview-list li:last-child {
+  border-bottom: none;
+}
+.preview-list li.skipped {
+  opacity: 0.55;
+}
+.preview-list code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--brand-600, #0e42d2);
+  background: rgba(22, 93, 255, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-list code.val {
+  color: var(--text-secondary, #4e5969);
+  background: var(--bg-elevated, #fff);
+  flex: 1;
+  max-width: 300px;
+}
+.preview-list .eq {
+  color: var(--text-tertiary, #86909c);
+  font-size: 11px;
+}
+.preview-list em {
+  font-size: 10px;
+  font-style: normal;
+  color: #d97706;
+  margin-left: auto;
+}
+
+/* 弹层过渡动画 */
+.export-modal-enter-active,
+.export-modal-leave-active {
+  transition: opacity 0.18s ease;
+}
+.export-modal-enter-active > .modal-panel,
+.export-modal-leave-active > .modal-panel {
+  transition: transform 0.18s ease;
+}
+.export-modal-enter-from,
+.export-modal-leave-to {
+  opacity: 0;
+}
+.export-modal-enter-from > .modal-panel,
+.export-modal-leave-to > .modal-panel {
+  transform: translateY(8px) scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .export-modal-enter-active,
+  .export-modal-leave-active,
+  .export-modal-enter-active > .modal-panel,
+  .export-modal-leave-active > .modal-panel {
+    transition: none;
   }
 }
 </style>

@@ -3,7 +3,7 @@
 AdeBuddy 配置工具 Web UI 后端
 
 启动: python tools/config_server.py
-访问: http://127.0.0.1:5000
+访问: http://127.0.0.1:5050
 依赖: flask, pyyaml, requests
 """
 
@@ -962,6 +962,172 @@ def delete_key(key):
         return jsonify({"ok": False, "error": f"未找到 key: {key}"}), 404
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/keys/apply-env", methods=["POST"])
+def apply_keys_to_env():
+    """把 keys.yaml 中的变量应用到操作系统，使其在系统中立即生效。
+
+    平台行为：
+      Windows  → 调用 PowerShell [Environment]::SetEnvironmentVariable(name, value, 'User')
+                 写入用户级环境变量（持久化，新开 shell/进程可读）
+      macOS    → 追加 `export KEY='value'` 到 ~/.zshrc
+      Linux    → 追加 `export KEY='value'` 到 ~/.bashrc
+
+    请求体可选字段：
+      - keys: [str]  仅应用指定变量；省略则应用全部
+      - include_empty: bool  是否包含空值变量（默认 False）
+
+    返回：{ok, applied: [{key, value}], skipped: [{key, reason}], target, note}
+    """
+    body = request.get_json(silent=True) or {}
+    only_keys = body.get("keys") or None
+    include_empty = bool(body.get("include_empty", False))
+
+    try:
+        full = _load_keys_full()
+        mcp = full.get("mcp", {}) or {}
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"读取 keys.yaml 失败: {e}"}), 500
+
+    applied: list = []
+    skipped: list = []
+    target = ""
+    note = ""
+
+    if sys.platform == "win32":
+        # Windows: 调用 PowerShell 设置用户级环境变量
+        target = "Windows 用户环境变量（[Environment]::SetEnvironmentVariable 'User'）"
+        note = "已写入注册表（HKCU\\Environment），新开终端/进程即可读取；当前进程不自动刷新。"
+        ps_script_lines = []
+        for k, v in mcp.items():
+            if only_keys and k not in only_keys:
+                skipped.append({"key": k, "reason": "未在指定列表"})
+                continue
+            value = v.get("value", "") if isinstance(v, dict) else (v or "")
+            if not value and not include_empty:
+                skipped.append({"key": k, "reason": "值为空"})
+                continue
+            # PowerShell 单引号转义
+            v_esc = value.replace("'", "''")
+            ps_script_lines.append(
+                f"[Environment]::SetEnvironmentVariable('{k}', '{v_esc}', 'User')"
+            )
+            applied.append({"key": k, "value": value})
+
+        if not ps_script_lines:
+            return jsonify({
+                "ok": True,
+                "applied": [],
+                "skipped": skipped,
+                "target": target,
+                "note": "无变量需要应用",
+            })
+
+        ps_script = "; ".join(ps_script_lines)
+        # 用 PowerShell 执行，-NoProfile 避免用户配置干扰
+        cmd = [
+            "powershell", "-NoProfile", "-NonInteractive",
+            "-Command", ps_script,
+        ]
+        try:
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=30,
+                encoding="utf-8", errors="replace",
+            )
+            if proc.returncode != 0:
+                return jsonify({
+                    "ok": False,
+                    "error": f"PowerShell 执行失败 (code={proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}",
+                    "applied": [],
+                    "skipped": skipped,
+                    "target": target,
+                }), 500
+        except FileNotFoundError:
+            return jsonify({
+                "ok": False,
+                "error": "未找到 powershell 命令",
+                "target": target,
+            }), 500
+        except subprocess.TimeoutExpired:
+            return jsonify({
+                "ok": False,
+                "error": "PowerShell 执行超时",
+                "target": target,
+            }), 500
+
+    elif sys.platform == "darwin":
+        # macOS: 追加到 ~/.zshrc
+        rc_path = Path.home() / ".zshrc"
+        target = f"macOS {rc_path}"
+        note = f"已追加到 {rc_path}，新开终端会话会自动 source；当前会话需手动 `source {rc_path}`。"
+        lines_to_write = []
+        for k, v in mcp.items():
+            if only_keys and k not in only_keys:
+                skipped.append({"key": k, "reason": "未在指定列表"})
+                continue
+            value = v.get("value", "") if isinstance(v, dict) else (v or "")
+            if not value and not include_empty:
+                skipped.append({"key": k, "reason": "值为空"})
+                continue
+            v_esc = value.replace("'", "'\\''")
+            lines_to_write.append(f"export {k}='{v_esc}'")
+            applied.append({"key": k, "value": value})
+
+        if lines_to_write:
+            marker_begin = "# >>> AdeBuddy env >>>"
+            marker_end = "# <<< AdeBuddy env <<<"
+            try:
+                old = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
+            except Exception:
+                old = ""
+            # 替换已有块（若存在）
+            if marker_begin in old and marker_end in old:
+                pre = old[: old.index(marker_begin)]
+                post = old[old.index(marker_end) + len(marker_end):]
+                old = (pre + post).rstrip("\n") + "\n"
+            block = "\n".join([marker_begin] + lines_to_write + [marker_end, ""])
+            rc_path.write_text(old.rstrip("\n") + "\n\n" + block, encoding="utf-8")
+
+    else:
+        # Linux/其他: 追加到 ~/.bashrc
+        rc_path = Path.home() / ".bashrc"
+        target = f"Linux {rc_path}"
+        note = f"已追加到 {rc_path}，新开终端会话会自动 source；当前会话需手动 `source {rc_path}`。"
+        lines_to_write = []
+        for k, v in mcp.items():
+            if only_keys and k not in only_keys:
+                skipped.append({"key": k, "reason": "未在指定列表"})
+                continue
+            value = v.get("value", "") if isinstance(v, dict) else (v or "")
+            if not value and not include_empty:
+                skipped.append({"key": k, "reason": "值为空"})
+                continue
+            v_esc = value.replace("'", "'\\''")
+            lines_to_write.append(f"export {k}='{v_esc}'")
+            applied.append({"key": k, "value": value})
+
+        if lines_to_write:
+            marker_begin = "# >>> AdeBuddy env >>>"
+            marker_end = "# <<< AdeBuddy env <<<"
+            try:
+                old = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
+            except Exception:
+                old = ""
+            if marker_begin in old and marker_end in old:
+                pre = old[: old.index(marker_begin)]
+                post = old[old.index(marker_end) + len(marker_end):]
+                old = (pre + post).rstrip("\n") + "\n"
+            block = "\n".join([marker_begin] + lines_to_write + [marker_end, ""])
+            rc_path.write_text(old.rstrip("\n") + "\n\n" + block, encoding="utf-8")
+
+    return jsonify({
+        "ok": True,
+        "applied": applied,
+        "skipped": skipped,
+        "target": target,
+        "note": note,
+    })
 
 
 # ============================================================
@@ -3257,7 +3423,7 @@ def api_ide_session_import():
 def main():
     parser = argparse.ArgumentParser(description="AdeBuddy 配置工具 Web UI")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     args = parser.parse_args()
 

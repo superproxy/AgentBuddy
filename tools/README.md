@@ -15,7 +15,7 @@ python tools/config_server.py
 python tools/config_server.py --port 8080 --no-open
 ```
 
-启动后自动打开 `http://127.0.0.1:5000`。
+启动后自动打开 `http://127.0.0.1:5050`。
 
 ## 功能页签
 
