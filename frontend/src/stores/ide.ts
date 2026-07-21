@@ -22,6 +22,7 @@ export interface IdeDetect {
   sessions_dir: string
   is_tui?: boolean
   type?: string  // 'ide'（默认）| 'non-ide'（非 IDE，仅配置目录）
+  cli_names?: string[]  // 支持的 CLI 命令名列表（来自 detect，用于判断是否支持 CLI 维度）
 }
 
 export interface IdeSession {

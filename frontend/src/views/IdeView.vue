@@ -123,38 +123,43 @@ function onIconError(key: string) {
   iconErrors[key] = true
 }
 
-/** IDE 原始类型（基于安装信息，不展开） */
-function ideRawType(it: any): 'cli' | 'app' | 'both' | '' {
+/** IDE 是否支持某安装维度（基于 install info 静态配置） */
+function supportsTab(it: any, tab: 'cli' | 'app'): boolean {
   const info = ideInstallInfo.value[it.key]
-  if (!info) return ''
-  const hasCli = !!(info.cli && it.cli_names?.length)
-  const hasApp = !!info.app
-  if (hasCli && hasApp) return 'both'
-  if (hasCli) return 'cli'
-  if (hasApp) return 'app'
+  if (!info) return false
+  if (tab === 'cli') return !!(info.cli && it.cli_names?.length)
+  return !!info.app
+}
+
+/** 条目类型：展开条目用 _tab，未展开条目按唯一支持维度推断 */
+function ideType(it: any): 'cli' | 'app' | '' {
+  if (it._tab) return it._tab as 'cli' | 'app'
+  const cli = supportsTab(it, 'cli')
+  const app = supportsTab(it, 'app')
+  if (cli && !app) return 'cli'
+  if (app && !cli) return 'app'
   return ''
 }
 
-/** 展开后的条目类型：both 拆开后每个条目带 _tab 字段 */
-function ideType(it: any): 'cli' | 'app' | '' {
-  if (it._tab) return it._tab as 'cli' | 'app'
-  return ideRawType(it) === 'app' ? 'app' : (ideRawType(it) === 'cli' ? 'cli' : '')
-}
-
-/** 把 both 类型的 IDE 拆成两个独立条目（CLI / App）
- *
- * 拆分时清空非本 tab 的 path 字段：cli 卡片只保留 exe_path，app 卡片只保留 app_path。
- * 否则两个卡片都继承原 it 的字段，会导致：
- *   - 仅 CLI 装了时，App 卡片被错分到"已安装 · 桌面 App"，但 dock 又显示"安装"按钮
- *   - currentInstalled(app 卡片) 错误命中 it.exe_path 而误判为已安装
+/** 按 CLI / App 维度独立展开条目。
+ * CLI 和 App 各自独立判断，不捆绑为 both：
+ *   - 支持 CLI → 生成 cli 条目（app_path 清空）
+ *   - 支持 App → 生成 app 条目（exe_path 清空）
+ *   - 都不支持 → 单条目（如 Agents，仅配置目录）
+ * 每个条目的 installed 由 currentInstalled 按 exe_path/app_path 独立判定。
  */
 function expandIde(it: any): any[] {
-  const raw = ideRawType(it)
-  if (raw !== 'both') return [it]
-  return [
-    { ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' },
-    { ...it, _tab: 'app', _uid: it.key + ':app', label: it.label + ' App', _expanded: true, exe_path: '' },
-  ]
+  const cli = supportsTab(it, 'cli')
+  const app = supportsTab(it, 'app')
+  if (!cli && !app) return [it]
+  const entries: any[] = []
+  if (cli) {
+    entries.push({ ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' })
+  }
+  if (app) {
+    entries.push({ ...it, _tab: 'app', _uid: it.key + ':app', label: it.label + ' App', _expanded: true, exe_path: '' })
+  }
+  return entries
 }
 
 /** 条目的唯一标识（展开条目用 key:tab，普通条目用 key） */
@@ -173,14 +178,11 @@ function sessionCount(it: any): number {
   return ideSessionsStatsMap.value[it.key]?.total || 0
 }
 
-// 展开后的全部条目（both 拆成两个独立条目，按 sync.ideList 顺序排序）
-// 注意：必须取 installedIdes + notInstalledIdes 的并集（=ideDetects 全量），
-// 否则 both 类型 IDE 在仅 CLI 装时整体算 installed，App 卡片不会进入未装分组。
+// 展开后的全部条目（CLI/App 独立展开），取 ideDetects 全量
 const expandedAll = computed(() =>
   [...installedIdes.value, ...notInstalledIdes.value].flatMap(it => expandIde(it))
 )
-// 已安装/未安装按"每个 tab 的实际安装状态"判定（exe_path / app_path），
-// 而不是用整体的 i.installed（CLI/App 任一装了就 true，会把 App 未装的卡片错分到已装）
+// 已安装/未安装按"每个维度的实际安装状态"独立判定（exe_path / app_path）
 const expandedInstalled = computed(() =>
   expandedAll.value.filter(it => currentInstalled(it))
 )
@@ -188,7 +190,7 @@ const expandedNotInstalled = computed(() =>
   expandedAll.value.filter(it => !currentInstalled(it))
 )
 
-// 按类型分组（展开后只有 cli / app 两组）
+// 按维度分组（cli / app）
 const installedCli = computed(() =>
   expandedInstalled.value.filter(it => ideType(it) === 'cli')
 )
@@ -222,8 +224,16 @@ onMounted(() => {
 <template>
   <div class="ide-launchpad">
     <!-- 右上角刷新按钮 -->
-    <button v-if="!ideDetecting && ideInstallInfoLoaded" @click="loadIdeDetect" :disabled="ideDetecting" class="refresh-btn" type="button" title="重新检测">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+    <button
+      @click="loadIdeDetect"
+      :disabled="ideDetecting"
+      class="refresh-btn"
+      :class="{ 'is-loading': ideDetecting }"
+      type="button"
+      :title="ideDetecting ? '检测中...' : '重新检测已安装的 IDE'"
+    >
+      <svg class="refresh-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      <span>{{ ideDetecting ? '检测中' : '刷新检测' }}</span>
     </button>
 
     <!-- 加载中 -->
@@ -621,21 +631,28 @@ onMounted(() => {
   top: 16px;
   right: 24px;
   z-index: 20;
-  width: 32px;
-  height: 32px;
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
   border-radius: 10px;
   border: 1px solid var(--border-base);
   background: var(--bg-elevated);
   color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 .refresh-btn svg { width: 14px; height: 14px; }
-.refresh-btn:hover:not(:disabled) { background: var(--bg-base); border-color: var(--border-strong); }
-.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.refresh-btn:hover:not(:disabled) {
+  background: var(--bg-base);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.refresh-btn.is-loading .refresh-icon { animation: spin 0.8s linear infinite; }
+@keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* —— 加载 —— */
 .loading {
