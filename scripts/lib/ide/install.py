@@ -214,16 +214,22 @@ IDE_INSTALL_META = {
         # 字节跳动 Trae 国内版（含 trae-cli TUI + App）
         # 最新版本：v3.3.62（2026-07-18）
         # 来源：https://www.trae.cn/
+        # CLI 文档：https://docs.trae.cn/cli_get-started-with-trae-cli
         "label": "Trae CN",
         "version": "3.3.62",
         "release_date": "2026-07-18",
         "homepage": "https://www.trae.cn",
-        "docs_url": "https://www.volcengine.com/docs/86677/1836841",
+        "docs_url": "https://docs.trae.cn/cli_get-started-with-trae-cli",
         "release_url": "https://www.trae.cn/changelog",
         "cli_install": {
-            "method": "powershell_script",
-            "script_url": "https://trae.cn/trae-cli/install.ps1",
-            "url": "https://www.trae.cn",
+            # 官方安装脚本：
+            #   macOS/Linux: sh -c "$(curl -L https://trae.cn/trae-cli/install.sh)"
+            #   Windows:     irm https://trae.cn/trae-cli/install.ps1 | iex
+            # 用 script method（跨平台），script_url 走 .sh，script_url_win 走 .ps1
+            "method": "script",
+            "script_url": "https://trae.cn/trae-cli/install.sh",
+            "script_url_win": "https://trae.cn/trae-cli/install.ps1",
+            "url": "https://docs.trae.cn/cli_get-started-with-trae-cli",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/trae-cli ~/.local/bin/traecli && rm -rf ~/.local/share/trae-cli",
             "uninstall_cmd_win": "powershell -NoProfile -Command \"Remove-Item -Recurse -Force $env:USERPROFILE\\.trae-cli -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\trae-cli.exe -ErrorAction SilentlyContinue; Remove-Item -Force $env:USERPROFILE\\.local\\bin\\traecli.exe -ErrorAction SilentlyContinue\"",
         },
@@ -241,7 +247,7 @@ IDE_INSTALL_META = {
             "linux_x64": "https://www.trae.cn/download",
             "linux_arm64": "https://www.trae.cn/download",
         },
-        "install_methods": ["powershell_script", "app"],
+        "install_methods": ["script", "app"],
     },
     "TraeSoloCN": {
         # 字节跳动 Trae Solo CN（独立 Solo 模式国内版）
