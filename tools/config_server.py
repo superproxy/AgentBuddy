@@ -131,8 +131,8 @@ ENV_FILE = PROJECT_ROOT / "env.yaml"
 LLM_FILE = PROJECT_ROOT / "config" / "llm" / "llm.yaml"
 MCP_CONFIG_FILE = PROJECT_ROOT / "config" / "mcp" / "mcp.yaml"
 # 独立密钥/环境变量文件（优先级高于 mcp.yaml.mcp 段）
-# 独立目录 config/keys/，与 mcp/llm 平级，强调"跨配置共享的密钥层"定位
-KEYS_FILE = PROJECT_ROOT / "config" / "keys" / "keys.yaml"
+# 与 mcp.yaml / llm.yaml 平级，强调"跨配置共享的密钥层"定位
+KEYS_FILE = PROJECT_ROOT / "config" / "keys.yaml"
 # 旧路径（向后兼容迁移用）
 KEYS_FILE_LEGACY = PROJECT_ROOT / "config" / "mcp" / "keys.yaml"
 # 拆分后的示例模板（可安全提交）
@@ -794,18 +794,18 @@ def delete_mcp_config_key(key):
 
 
 # ============================================================
-# Keys API (config/keys/keys.yaml - 独立密钥/环境变量层)
+# Keys API (config/keys.yaml - 独立密钥/环境变量层)
 # ============================================================
 def _ensure_keys_file() -> Path:
     """确保 keys.yaml 存在。优先级：
-      1. 新路径 config/keys/keys.yaml 已存在 → 直接返回
+      1. 路径 config/keys.yaml 已存在 → 直接返回
       2. 旧路径 config/mcp/keys.yaml 存在 → 迁移到新路径，删除旧文件
       3. mcp.yaml 有 mcp: 段且非空 → 迁移到 keys.yaml（清空 mcp.yaml.mcp）
       4. 创建空模板 {"mcp": {}}
     """
     if KEYS_FILE.exists():
         return KEYS_FILE
-    # 旧路径迁移：config/mcp/keys.yaml → config/keys/keys.yaml
+    # 旧路径迁移：config/mcp/keys.yaml → config/keys.yaml
     try:
         if KEYS_FILE_LEGACY.exists():
             legacy_data = load_env_config_file(KEYS_FILE_LEGACY) or {}
@@ -2265,6 +2265,39 @@ def _collect_plugin_hooks(cfg: dict) -> Path | None:
     return None
 
 
+def _rewrite_plugin_for_file_export(cfg: dict, extras: set[str] | None) -> dict:
+    """导出 zip 时重写 plugin.yaml：把内联 mcpServers/llm 改为文件引用。
+
+    策略：
+    - 若 extras 包含 'mcp' → 删除 cfg.mcpServers，改为 cfg.mcp_file = 'mcp.yaml'
+    - 若 extras 包含 'llm' → 删除 cfg.llm（内联 provider 列表），改为 cfg.llm_file = 'llm.yaml'
+    - 若 extras 包含 'keys' → 增加 cfg.keys_file = 'keys.yaml'（若 plugin.keys 非空）
+    - skills 保持引用列表（不内联），本地 skill 目录已单独打包到 skills/ 下
+    """
+    import copy
+    out = copy.deepcopy(cfg)
+    if extras is None:
+        return out
+    if "mcp" in extras and out.get("mcpServers"):
+        # 保留 mcpServers 名称列表作为引用（便于 plugin.yaml 表达依赖了哪些 MCP）
+        out["mcp_servers_ref"] = list(out.get("mcpServers", {}).keys())
+        out["mcp_file"] = "mcp.yaml"
+        del out["mcpServers"]
+    if "llm" in extras and out.get("llm"):
+        # 保留 provider 名称列表作为引用
+        llm_list = out.get("llm", [])
+        if isinstance(llm_list, list):
+            out["llm_ref"] = [
+                (item.get("provider") if isinstance(item, dict) else str(item))
+                for item in llm_list if item
+            ]
+        out["llm_file"] = "llm.yaml"
+        del out["llm"]
+    if "keys" in extras and out.get("keys"):
+        out["keys_file"] = "keys.yaml"
+    return out
+
+
 def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | None = None,
                              key_mode: str = "plain", extras: set[str] | None = None) -> None:
     """将 plugin 关联的 llm/subagents/rules/commands/hooks 打包到 zip。
@@ -2353,8 +2386,8 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
                 if isinstance(k, str) and k.strip():
                     refs.add(k.strip())
         keys_yaml_str = _build_keys_yaml_for_export(refs, include_values=(key_mode == "vault"))
-        if keys_yaml_str and _should_write("keys/keys.yaml"):
-            zf.writestr("keys/keys.yaml", keys_yaml_str)
+        if keys_yaml_str and _should_write("keys.yaml"):
+            zf.writestr("keys.yaml", keys_yaml_str)
 
 
 @app.route("/api/plugins", methods=["GET"])
@@ -2521,7 +2554,12 @@ def export_plugin():
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.write(path, arcname=fname)
+            # 导出 zip 时重写 plugin.yaml：内联 mcpServers/llm 改为文件引用
+            rewritten = _rewrite_plugin_for_file_export(cfg, extras)
+            import yaml as _yaml_export
+            plugin_yaml_str = _yaml_export.dump(rewritten, allow_unicode=True,
+                                                default_flow_style=False, sort_keys=False)
+            zf.writestr(fname, plugin_yaml_str)
             # skills 选择性导出
             if extras is None or "skills" in extras:
                 for skill_name, skill_dir in skill_dirs:
@@ -2567,9 +2605,13 @@ def export_all_plugins():
                 if f.name in seen_files:
                     continue
                 seen_files.add(f.name)
-                zf.write(f, arcname=f.name)
                 try:
                     cfg = load_env_config_file(f)
+                    # 重写 plugin.yaml（文件引用模式）
+                    rewritten = _rewrite_plugin_for_file_export(cfg, extras)
+                    import yaml as _yaml_all
+                    zf.writestr(f.name, _yaml_all.dump(rewritten, allow_unicode=True,
+                                                       default_flow_style=False, sort_keys=False))
                     if extras is None or "skills" in extras:
                         for skill_name, skill_dir in _collect_plugin_skill_dirs(cfg):
                             if skill_name in seen_skills:
@@ -2618,9 +2660,13 @@ def export_selected_plugins():
             path = _resolve_plugin_path(fname)
             if path is None:
                 continue  # 文件不存在，跳过
-            zf.write(path, arcname=fname)
             try:
                 cfg = load_env_config_file(path)
+                # 重写 plugin.yaml（文件引用模式）
+                rewritten = _rewrite_plugin_for_file_export(cfg, extras)
+                import yaml as _yaml_sel
+                zf.writestr(fname, _yaml_sel.dump(rewritten, allow_unicode=True,
+                                                   default_flow_style=False, sort_keys=False))
                 if extras is None or "skills" in extras:
                     for skill_name, skill_dir in _collect_plugin_skill_dirs(cfg):
                         if skill_name in seen_skills:
@@ -2659,6 +2705,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
         plugin_entries: list[tuple[str, bytes]] = []
         skill_entries: dict[str, list[str]] = {}
         llm_content: bytes | None = None
+        mcp_content: bytes | None = None
         subagent_content: bytes | None = None
         rules_entries: list[tuple[str, bytes]] = []  # (rel_path, content)
         commands_content: bytes | None = None
@@ -2680,6 +2727,8 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                     skill_entries.setdefault(skill_name, []).append(name)
             elif name == "llm.yaml":
                 llm_content = zf.read(name)
+            elif name == "mcp.yaml":
+                mcp_content = zf.read(name)
             elif name == "subagents.yaml":
                 subagent_content = zf.read(name)
             elif name == "commands.yaml":
@@ -2786,6 +2835,21 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             except Exception as e:
                 skipped.append({"file": "llm.yaml", "reason": str(e)})
 
+        # 导入 mcp.yaml（合并 mcpServers 到 config/mcp/mcp.yaml）
+        if mcp_content:
+            try:
+                imported_mcp = yaml.safe_load(mcp_content.decode("utf-8"))
+                if isinstance(imported_mcp, dict) and isinstance(imported_mcp.get("mcpServers"), dict):
+                    full = _load_mcp_yaml_full()
+                    if not isinstance(full.get("mcpServers"), dict):
+                        full["mcpServers"] = {}
+                    for sname, scfg in imported_mcp["mcpServers"].items():
+                        full["mcpServers"][sname] = scfg  # 覆盖同名
+                    _save_mcp_yaml_full(full)
+                    imported_extras.append("mcp.yaml")
+            except Exception as e:
+                skipped.append({"file": "mcp.yaml", "reason": str(e)})
+
         # 导入 subagents.yaml（合并到 config/subagent/subagent.yaml）
         if subagent_content:
             try:
@@ -2849,7 +2913,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             except Exception as e:
                 skipped.append({"file": "hooks/hooks.json", "reason": str(e)})
 
-        # 导入 keys/keys.yaml → 合并到 config/keys/keys.yaml（不覆盖已有值）
+        # 导入 keys.yaml → 合并到 config/keys.yaml（不覆盖已有值）
         if keys_content:
             try:
                 imported_keys = yaml.safe_load(keys_content.decode("utf-8"))
@@ -2865,9 +2929,9 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                         added += 1
                     if added:
                         _save_keys_full(full)
-                    imported_extras.append(f"keys/keys.yaml (+{added})")
+                    imported_extras.append(f"keys.yaml (+{added})")
             except Exception as e:
-                skipped.append({"file": "keys/keys.yaml", "reason": str(e)})
+                skipped.append({"file": "keys.yaml", "reason": str(e)})
 
     result = {
         "ok": True,
