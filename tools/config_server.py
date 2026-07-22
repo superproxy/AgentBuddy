@@ -225,15 +225,51 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# 旧语法 env:VAR_NAME → 新语法 ${VAR_NAME}（仅完整匹配 api_key 字段值时迁移）
+_ENV_REF_RE = re.compile(r"^env:([A-Za-z_]\w*)$")
+
+
+def _migrate_env_ref_to_placeholder(llm_section: dict) -> int:
+    """把 llm 段中 api_key 字段的 env:VAR_NAME 旧语法迁移为 ${VAR_NAME}。
+
+    仅迁移完整匹配（值正好是 env:VAR_NAME 形式），避免误伤含冒号的明文 key。
+    Returns: 迁移的字段数。
+    """
+    if not isinstance(llm_section, dict):
+        return 0
+    migrated = 0
+    for pname, pcfg in llm_section.items():
+        if pname.startswith("_") or not isinstance(pcfg, dict):
+            continue
+        for proto, cfg in pcfg.items():
+            if proto.startswith("_") or not isinstance(cfg, dict):
+                continue
+            v = cfg.get("api_key")
+            if isinstance(v, str):
+                m = _ENV_REF_RE.match(v.strip())
+                if m:
+                    cfg["api_key"] = "${" + m.group(1) + "}"
+                    migrated += 1
+    return migrated
+
+
 def _ensure_llm_file() -> Path:
     """确保 llm.yaml 存在。
     优先级：
-      1. llm.yaml 已存在 → 直接返回
+      1. llm.yaml 已存在 → 迁移旧 env:VAR 语法后返回
       2. llm-env-example.yaml 存在 → 直接复制（推荐方式）
       3. env.yaml / env.example.yaml 存在 → 从中拆出 llm/embedding/tts/asr/vision/misc 部分（向后兼容）
       4. 创建空模板
     """
     if LLM_FILE.exists():
+        # 一次性迁移：api_key 中的 env:VAR_NAME → ${VAR_NAME}（统一环境变量引用语法）
+        try:
+            data = load_env_config_file(LLM_FILE)
+            if isinstance(data, dict) and isinstance(data.get("llm"), dict):
+                if _migrate_env_ref_to_placeholder(data["llm"]) > 0:
+                    save_env_config_file(LLM_FILE, data)
+        except Exception:
+            pass
         return LLM_FILE
     # 优先使用拆分后的示例文件
     if LLM_EXAMPLE.exists():
@@ -2845,16 +2881,19 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             imported_skills.append(skill_name)
 
         # 导入 llm.yaml（合并到 config/llm/llm.yaml）
+        # 自动迁移：api_key 中的 env:VAR_NAME → ${VAR_NAME}（统一环境变量引用语法）
         if llm_content:
             try:
                 imported_llm = yaml.safe_load(llm_content.decode("utf-8"))
                 if isinstance(imported_llm, dict) and isinstance(imported_llm.get("llm"), dict):
+                    _migrate_env_ref_to_placeholder(imported_llm["llm"])
                     llm_path = _ensure_llm_file()
                     existing = load_env_config_file(llm_path)
                     if not isinstance(existing, dict):
                         existing = {}
                     if not isinstance(existing.get("llm"), dict):
                         existing["llm"] = {}
+                    _migrate_env_ref_to_placeholder(existing["llm"])
                     for pname, pcfg in imported_llm["llm"].items():
                         if pname.startswith("_"):
                             if pname not in existing["llm"]:
@@ -4574,18 +4613,43 @@ def save_subagent():
 # ============================================================
 @app.route("/api/llm/env-vars", methods=["GET"])
 def list_llm_env_vars():
-    """返回系统中可用的环境变量名（仅含 KEY/TOKEN/SECRET 关键字），用于 api_key 引用选择。"""
+    """返回可用于 api_key 引用的变量名，用于 api_key 引用选择器。
+
+    来源：
+      1. os.environ 中含 KEY/TOKEN/SECRET 关键字的环境变量
+      2. config/keys.yaml 中的密钥名（用户添加的密钥可能尚未应用到 os.environ）
+    """
     import re as _re
     pattern = _re.compile(r"KEY|TOKEN|SECRET", _re.IGNORECASE)
-    names = sorted({k for k in os.environ.keys() if pattern.search(k)})
+    names = {k for k in os.environ.keys() if pattern.search(k)}
+    # 合并 keys.yaml 中的密钥名（用户刚添加的密钥可能尚未应用到 os.environ）
+    try:
+        full = _load_keys_full()
+        all_keys = full.get("mcp", {}) if isinstance(full, dict) else {}
+        for k in all_keys.keys():
+            names.add(k)
+    except Exception:
+        pass
+    names = sorted(names)
     return jsonify({"ok": True, "names": names, "count": len(names)})
 
 
 def _resolve_api_key(raw: str) -> str:
-    """解析 api_key 字段：支持 env:VAR_NAME 形式从环境变量读取实际值。"""
+    """解析 api_key 字段中的环境变量引用。
+
+    支持两种语法（统一期保留兼容）：
+      - ${VAR_NAME}  （新语法，与 mcp/placeholder/IDE 同步一致，推荐）
+      - env:VAR_NAME （旧语法，向后兼容）
+    从 OS 环境变量读取实际值；未设置时返回空串。
+    """
     if not raw:
         return ""
     s = raw.strip()
+    # 新语法：${VAR_NAME}
+    m = re.fullmatch(r"\$\{(\w+)\}", s)
+    if m:
+        return os.environ.get(m.group(1), "")
+    # 旧语法：env:VAR_NAME（向后兼容）
     if s.startswith("env:"):
         var_name = s[4:].strip()
         if not var_name:
@@ -4600,7 +4664,7 @@ def verify_llm():
 
     Body: {base_url, api_key, protocol?}
     调 base_url + /models（OpenAI 兼容），成功返回 model 列表。
-    api_key 支持 env:VAR_NAME 引用形式。
+    api_key 支持 ${VAR_NAME} 或 env:VAR_NAME 引用形式（后者向后兼容）。
     """
     body = request.get_json(force=True)
     base_url = (body.get("base_url") or "").rstrip("/")
@@ -4610,7 +4674,8 @@ def verify_llm():
     if not base_url:
         return jsonify({"ok": False, "error": "base_url 必填"}), 400
     if not api_key:
-        hint = "（api_key 为 env: 引用但环境变量未设置）" if api_key_raw.startswith("env:") else ""
+        is_ref = api_key_raw.strip().startswith(("env:", "${"))
+        hint = "（api_key 为环境变量引用但未设置）" if is_ref else ""
         return jsonify({"ok": False, "error": f"api_key 无效{hint}"}), 400
     try:
         import requests as _req

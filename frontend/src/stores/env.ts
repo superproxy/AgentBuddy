@@ -83,10 +83,10 @@ export const useEnvStore = defineStore('env', () => {
     }
   }
 
-  /** 将 api_key 字段设为 env:VAR_NAME 引用形式 */
+  /** 将 api_key 字段设为 ${VAR_NAME} 引用形式（与 mcp/placeholder 语法统一） */
   function setApiKeyFromEnv(pn: string, proto: string, varName: string) {
     if (!envData.llm?.[pn]?.[proto]) return
-    envData.llm[pn][proto].api_key = 'env:' + varName
+    envData.llm[pn][proto].api_key = '${' + varName + '}'
     ui.toast(`已引用环境变量 ${varName}`)
   }
 

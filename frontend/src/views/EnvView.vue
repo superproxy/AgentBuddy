@@ -91,7 +91,8 @@ function toggleKeyVisible(pn: string, proto: string) {
 }
 
 function isEnvRef(val: string) {
-  return typeof val === 'string' && val.startsWith('env:')
+  // 兼容 ${VAR} 新语法与 env:VAR 旧语法（旧导出迁移期间可能残留）
+  return typeof val === 'string' && /^\$\{[\w]+\}$/.test(val)
 }
 
 async function openEnvVarPicker(pn: string, proto: string) {
@@ -300,13 +301,13 @@ function clearEnvRef() {
                     <span
                       v-if="isEnvRef(envData.llm[selectedProvider][proto].api_key)"
                       class="text-[10px] font-semibold text-emerald-600"
-                    >env 引用</span>
+                    >环境变量引用</span>
                   </label>
                   <div class="relative flex items-center">
                     <input
                       :type="isKeyVisible(selectedProvider, proto) ? 'text' : 'password'"
                       v-model="envData.llm[selectedProvider][proto].api_key"
-                      :placeholder="isEnvRef(envData.llm[selectedProvider][proto].api_key) ? 'env:VAR_NAME' : 'sk-...'"
+                      :placeholder="isEnvRef(envData.llm[selectedProvider][proto].api_key) ? '${VAR_NAME}' : 'sk-...'"
                       class="w-full px-2.5 py-2 pr-20 text-xs border border-ink-300 rounded-lg font-mono"
                       :class="{ 'border-emerald-300 bg-emerald-50/40': isEnvRef(envData.llm[selectedProvider][proto].api_key) }"
                     />
@@ -513,7 +514,7 @@ function clearEnvRef() {
             </header>
             <div class="envvar-body">
               <p class="envvar-target">
-                将为 <code>{{ envVarPicker.pn }}</code> / <code>{{ envVarPicker.proto }}</code> 的 api_key 设置 <code>env:VAR_NAME</code> 引用。
+                将为 <code>{{ envVarPicker.pn }}</code> / <code>{{ envVarPicker.proto }}</code> 的 api_key 设置 <code>${VAR_NAME}</code> 引用。
               </p>
               <input
                 v-model="envVarFilter"
