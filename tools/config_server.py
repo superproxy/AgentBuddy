@@ -135,6 +135,8 @@ MCP_CONFIG_FILE = PROJECT_ROOT / "config" / "mcp" / "mcp.yaml"
 KEYS_FILE = PROJECT_ROOT / "config" / "keys.yaml"
 # 旧路径（向后兼容迁移用）
 KEYS_FILE_LEGACY = PROJECT_ROOT / "config" / "mcp" / "keys.yaml"
+# 旧路径2：config/keys/keys.yaml → config/keys.yaml（曾用 keys/ 子目录存放）
+KEYS_FILE_LEGACY_2 = PROJECT_ROOT / "config" / "keys" / "keys.yaml"
 # 拆分后的示例模板（可安全提交）
 LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
 MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
@@ -799,12 +801,33 @@ def delete_mcp_config_key(key):
 def _ensure_keys_file() -> Path:
     """确保 keys.yaml 存在。优先级：
       1. 路径 config/keys.yaml 已存在 → 直接返回
-      2. 旧路径 config/mcp/keys.yaml 存在 → 迁移到新路径，删除旧文件
-      3. mcp.yaml 有 mcp: 段且非空 → 迁移到 keys.yaml（清空 mcp.yaml.mcp）
-      4. 创建空模板 {"mcp": {}}
+      2. 旧路径 config/keys/keys.yaml 存在 → 迁移到新路径，删除旧文件
+      3. 旧路径 config/mcp/keys.yaml 存在 → 迁移到新路径，删除旧文件
+      4. mcp.yaml 有 mcp: 段且非空 → 迁移到 keys.yaml（清空 mcp.yaml.mcp）
+      5. 创建空模板 {"mcp": {}}
     """
     if KEYS_FILE.exists():
         return KEYS_FILE
+    # 旧路径迁移：config/keys/keys.yaml → config/keys.yaml
+    try:
+        if KEYS_FILE_LEGACY_2.exists():
+            legacy_data = load_env_config_file(KEYS_FILE_LEGACY_2) or {}
+            KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            save_env_config_file(KEYS_FILE, legacy_data)
+            # 删除旧文件，避免双源冲突
+            try:
+                KEYS_FILE_LEGACY_2.unlink()
+            except Exception:
+                pass
+            # 清理空的 config/keys/ 目录
+            try:
+                if KEYS_FILE_LEGACY_2.parent.exists() and not any(KEYS_FILE_LEGACY_2.parent.iterdir()):
+                    KEYS_FILE_LEGACY_2.parent.rmdir()
+            except Exception:
+                pass
+            return KEYS_FILE
+    except Exception:
+        pass
     # 旧路径迁移：config/mcp/keys.yaml → config/keys.yaml
     try:
         if KEYS_FILE_LEGACY.exists():

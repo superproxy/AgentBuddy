@@ -49,17 +49,22 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
 
     密钥层（env_config["mcp"]）来源优先级：
       1. config/keys.yaml 存在 → 读 keys.yaml 的 mcp: 段
-      2. 旧路径 config/mcp/keys.yaml 存在 → 读旧路径（向后兼容）
-      3. 都不存在 → 回退到 mcp.yaml 的 mcp: 段（向后兼容）
-      4. 同时存在 → keys.yaml 的 key 覆盖 mcp.yaml.mcp 同名 key（鼓励迁移到独立文件）
+      2. 旧路径 config/keys/keys.yaml 存在 → 读旧路径（向后兼容）
+      3. 旧路径 config/mcp/keys.yaml 存在 → 读旧路径（向后兼容）
+      4. 都不存在 → 回退到 mcp.yaml 的 mcp: 段（向后兼容）
+      5. 同时存在 → keys.yaml 的 key 覆盖 mcp.yaml.mcp 同名 key（鼓励迁移到独立文件）
     """
     llm_file = project_root / "config" / "llm" / "llm.yaml"
     mcp_file = project_root / "config" / "mcp" / "mcp.yaml"
     # 新路径优先，旧路径向后兼容
     keys_file = project_root / "config" / "keys.yaml"
     keys_file_legacy = project_root / "config" / "mcp" / "keys.yaml"
-    if not keys_file.exists() and keys_file_legacy.exists():
-        keys_file = keys_file_legacy
+    keys_file_legacy_2 = project_root / "config" / "keys" / "keys.yaml"
+    if not keys_file.exists():
+        if keys_file_legacy_2.exists():
+            keys_file = keys_file_legacy_2
+        elif keys_file_legacy.exists():
+            keys_file = keys_file_legacy
     env_file = project_root / "env.yaml"
 
     if llm_file.exists():
