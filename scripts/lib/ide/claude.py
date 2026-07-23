@@ -1,4 +1,4 @@
-"""Claude IDE 分发器。
+﻿"""Claude IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_claude() 和 _generate_claude_settings()。
 生成 .claude/settings.json（从模板 + llm.yaml 占位符替换）。
@@ -136,6 +136,6 @@ class ClaudeTarget(IdeTarget):
         # 同步到全局目录（~/.claude/skills/）
         claude_skills_dir = Path.home() / ".claude" / "skills"
         copy_skills_safe(source_skills_dir, claude_skills_dir, "~/.claude/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, claude_skills_dir / "README.md",
                            "Claude", self.force, self.include_skills)

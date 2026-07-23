@@ -170,11 +170,12 @@ export const useSkillStore = defineStore('skill', () => {
       skillSearchHint.value = ''
     }
   }
-  async function installFromSearch(s: any) {
+  async function installFromSearch(s: any, force: boolean = false) {
+    const forceParam = force ? '&force=1' : ''
     // 本地预置技能：直接从 template/skills/ 复制
     if (s.source === 'local' || (s.install_command === '' && s.source === 'local')) {
       ui.clearLog()
-      await runSse('/api/skills/install?source=local:' + encodeURIComponent(s.name), (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
+      await runSse('/api/skills/install?source=local:' + encodeURIComponent(s.name) + forceParam, (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
       return
     }
     let cmd = s.install_command || ''
@@ -187,17 +188,18 @@ export const useSkillStore = defineStore('skill', () => {
         if (!/\s-y(\s|$)/.test(cmd)) cmd += ' -y'
       }
       ui.clearLog()
-      await runSse('/api/skills/install?command=' + encodeURIComponent(cmd), (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
+      await runSse('/api/skills/install?command=' + encodeURIComponent(cmd) + forceParam, (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
       return
     }
     const src = s.author ? s.author + '/' + s.name : s.name
     ui.clearLog()
-    await runSse('/api/skills/install?source=' + encodeURIComponent(src), (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
+    await runSse('/api/skills/install?source=' + encodeURIComponent(src) + forceParam, (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
   }
-  async function installManualSkill() {
+  async function installManualSkill(force: boolean = false) {
     if (!manualSkillInput.value.trim()) return
     ui.clearLog()
-    await runSse('/api/skills/install?source=' + encodeURIComponent(manualSkillInput.value.trim()), (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
+    const forceParam = force ? '&force=1' : ''
+    await runSse('/api/skills/install?source=' + encodeURIComponent(manualSkillInput.value.trim()) + forceParam, (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
   }
 
   function clearManualPreview() {
@@ -256,7 +258,7 @@ export const useSkillStore = defineStore('skill', () => {
     manualSelected.value = on ? manualPreview.value.skills.map((s) => s.name) : []
   }
 
-  async function installSelectedManualSkills() {
+  async function installSelectedManualSkills(force: boolean = false) {
     if (!manualPreview.value) {
       await previewManualSource()
       return
@@ -272,7 +274,8 @@ export const useSkillStore = defineStore('skill', () => {
     try {
       const qs =
         '/api/skills/install?source=' + encodeURIComponent(src) +
-        '&skills=' + encodeURIComponent(selected.join(','))
+        '&skills=' + encodeURIComponent(selected.join(',')) +
+        (force ? '&force=1' : '')
       await runSse(qs, (line) => ui.appendLog(line), { onDone: () => loadInstalledSkills() })
       ui.toast(`已提交安装 ${selected.length} 个技能`)
     } finally {
@@ -333,6 +336,24 @@ export const useSkillStore = defineStore('skill', () => {
     await loadInstalledSkills()
     await checkUpdates()
     ui.toast(`已升级 ${targets.length} 个技能`)
+  }
+
+  /** 通过市场搜索为无来源记录的 skill 补全来源 */
+  async function fillSources(names?: string[]) {
+    ui.clearLog()
+    const qs = names && names.length
+      ? '?names=' + encodeURIComponent(names.join(','))
+      : ''
+    let successCount = 0
+    await runSse(
+      '/api/skills/fill-sources' + qs,
+      (line) => {
+        ui.appendLog(line)
+        if (line.startsWith('[OK]')) successCount++
+      },
+      { onDone: () => loadInstalledSkills() },
+    )
+    return successCount
   }
   async function viewSkillMd(name: string) {
     const r = await api<{ ok: boolean; content?: string; error?: string }>('/api/skills/' + encodeURIComponent(name) + '/skillmd')
@@ -553,7 +574,7 @@ export const useSkillStore = defineStore('skill', () => {
     filteredInstalled,
     // 升级检查
     updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount,
-    checkUpdates, upgradeSkill, upgradeAll,
+    checkUpdates, upgradeSkill, upgradeAll, fillSources,
     loadLocalSkills, searchSkills, toggleSkillSource, installFromSearch, installManualSkill,
     previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
     loadInstalledSkills,

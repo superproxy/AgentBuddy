@@ -1,4 +1,4 @@
-"""OpenCode IDE 分发器。
+﻿"""OpenCode IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_opencode()。
 生成 ~/.config/opencode/opencode.json（从模板 + llm.yaml/mcp.yaml 注入模型）。
@@ -53,6 +53,6 @@ class OpenCodeTarget(IdeTarget):
     def init_skills(self, source_skills_dir: Path):
         opencode_skills_dir = Path.home() / ".config" / "opencode" / "skills"
         copy_skills_safe(source_skills_dir, opencode_skills_dir, ".opencode/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, opencode_skills_dir / "README.md",
                            "OpenCode", self.force, self.include_skills)

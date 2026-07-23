@@ -1,4 +1,4 @@
-"""IntelliJ IDEA (JetBrains) 分发器。
+﻿"""IntelliJ IDEA (JetBrains) 分发器。
 
 迁移自 scripts/init-ide.py 的 init_idea() 和 _deploy_acp_to_jetbrains()。
 部署 acp.json 到 JetBrains IDE 配置目录（跨平台）。
@@ -96,6 +96,6 @@ class IdeATarget(IdeTarget):
         # 同步到全局目录（~/.idea/skills/）
         idea_skills_dir = Path.home() / ".idea" / "skills"
         copy_skills_safe(source_skills_dir, idea_skills_dir, "~/.idea/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, idea_skills_dir / "README.md",
                            "IDEA", self.force, self.include_skills)

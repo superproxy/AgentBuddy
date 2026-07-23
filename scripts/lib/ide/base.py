@@ -38,18 +38,24 @@ class IdeTarget:
 
     子类需设置类属性：
         name: IDE 名称（用于日志标识）
-    并按需覆写 init_rules / init_mcp / init_skills / init_llm / init_manifest。
+    并按需覆写 init_rules / init_mcp / init_skills / init_llm。
 
     通用流程（run 方法）：rules → mcp → llm → skills → manifest
+
+    link_skills: True 时同步 skills 用软链接（单个 skill 级别，非整个 skills 目录）。
+                 Windows 下非管理员会自动回退到 junction 或复制。
     """
     name: str = ""
+    link_skills: bool = True
 
     def __init__(self, project_root: Path, force: bool = False,
-                 include_skills=None, scope=None):
+                 include_skills=None, scope=None, link_skills=None):
         self.root = project_root
         self.force = force
         self.include_skills = include_skills
         self.scope = scope if scope is not None else set(DEFAULT_SCOPE)
+        if link_skills is not None:
+            self.link_skills = link_skills
 
     # ---------- 各阶段钩子（子类按需覆写） ----------
 

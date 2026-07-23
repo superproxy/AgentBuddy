@@ -1,4 +1,4 @@
-"""Qoder CN（国内版）IDE 分发器。
+﻿"""Qoder CN（国内版）IDE 分发器。
 
 与 QoderTarget 结构相同，差异在配置目录名（.qoder-cn）。
 国际版见 qoder.py。
@@ -30,6 +30,6 @@ class QoderCNTarget(IdeTarget):
     def init_skills(self, source_skills_dir: Path):
         skills_dir = Path.home() / ".qoder-cn" / "skills"
         copy_skills_safe(source_skills_dir, skills_dir, "~/.qoder-cn/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, skills_dir / "README.md",
                            "Qoder CN", self.force, self.include_skills)

@@ -1,4 +1,4 @@
-"""Qoder IDE 分发器。
+﻿"""Qoder IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_qoder()。
 """
@@ -30,6 +30,6 @@ class QoderTarget(IdeTarget):
         # 同步到全局目录（~/.qoder/skills/）
         qoder_skills_dir = Path.home() / ".qoder" / "skills"
         copy_skills_safe(source_skills_dir, qoder_skills_dir, "~/.qoder/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, qoder_skills_dir / "README.md",
                            "Qoder", self.force, self.include_skills)

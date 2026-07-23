@@ -1,4 +1,4 @@
-"""Hermes Agent IDE 分发器。
+﻿"""Hermes Agent IDE 分发器。
 
 配置目录 .ade-hermes，CLI 命令 hermes。
 """
@@ -29,6 +29,6 @@ class HermesTarget(IdeTarget):
     def init_skills(self, source_skills_dir: Path):
         skills_dir = Path.home() / ".ade-hermes" / "skills"
         copy_skills_safe(source_skills_dir, skills_dir, "~/.ade-hermes/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, skills_dir / "README.md",
                            "Hermes", self.force, self.include_skills)

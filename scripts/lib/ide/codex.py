@@ -1,4 +1,4 @@
-"""Codex IDE 分发器。
+﻿"""Codex IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_codex()。
 MCP 配置转换为 Codex TOML 格式（.codex/config.toml），并复制 auth.json。
@@ -50,6 +50,6 @@ class CodexTarget(IdeTarget):
         # 同步到全局目录（~/.codex/skills/）
         codex_skills_dir = Path.home() / ".codex" / "skills"
         copy_skills_safe(source_skills_dir, codex_skills_dir, "~/.codex/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, codex_skills_dir / "README.md",
                            "Codex", self.force, self.include_skills)

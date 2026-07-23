@@ -103,13 +103,15 @@ def _normalize_skill_sources(src) -> list:
 
 
 def copy_skills_safe(src, dst: Path, label: str, force: bool,
-                     include_skills=None) -> None:
-    """复制技能目录到 IDE skills 目录。
+                     include_skills=None, link: bool = False) -> None:
+    """复制（或软链接）技能目录到 IDE skills 目录。
 
     Args:
         src: 源目录，支持 Path 或 list[Path]（多源时前者优先，后者补充同名以外的 skill）。
         include_skills: 白名单集合，仅复制名称在此集合内的技能；
                         None 表示复制全部。
+        link: True 时以软链接方式安装单个 skill（不复制整个 skills 目录）。
+              Windows 下非管理员会自动回退到 junction 或复制。
     """
     srcs = _normalize_skill_sources(src)
     if not srcs:
@@ -136,20 +138,37 @@ def copy_skills_safe(src, dst: Path, label: str, force: bool,
             if include_skills is not None and skill_dir.name not in include_skills:
                 continue
             skill_dst = dst / skill_dir.name
-            if skill_dst.exists():
+            if skill_dst.exists() or skill_dst.is_symlink():
                 if force:
-                    shutil.rmtree(str(skill_dst), ignore_errors=True)
+                    try:
+                        if skill_dst.is_symlink() or skill_dst.is_file():
+                            skill_dst.unlink()
+                        else:
+                            shutil.rmtree(str(skill_dst), ignore_errors=True)
+                    except Exception as e:
+                        print(f"{COLOR_YELLOW}[!] 清理旧 skill 失败 {skill_dir.name}: {e}{COLOR_RESET}")
+                        skipped += 1
+                        continue
                 else:
                     skipped += 1
                     continue
             try:
-                shutil.copytree(str(skill_dir), str(skill_dst), ignore=shutil.ignore_patterns('.git'))
+                if link:
+                    ok, msg = link_skill_dir(skill_dir, skill_dst, force=False)
+                    if not ok:
+                        # 软链接失败 → 回退到复制
+                        shutil.copytree(str(skill_dir), str(skill_dst),
+                                        ignore=shutil.ignore_patterns('.git'))
+                else:
+                    shutil.copytree(str(skill_dir), str(skill_dst),
+                                    ignore=shutil.ignore_patterns('.git'))
                 copied += 1
             except Exception as e:
                 print(f"{COLOR_RED}[!] Failed to copy skill {skill_dir.name}: {e}{COLOR_RESET}")
 
     if copied > 0:
-        print(f"{COLOR_GREEN}[OK] {label}: {copied} skills copied{COLOR_RESET}")
+        action = "linked" if link else "copied"
+        print(f"{COLOR_GREEN}[OK] {label}: {copied} skills {action}{COLOR_RESET}")
     if skipped > 0:
         print(f"{COLOR_DARKGRAY}[~] {label}: {skipped} skills skipped (already exist){COLOR_RESET}")
 
@@ -603,6 +622,65 @@ def ensure_npx_yes(cmd: str) -> str:
     return cmd
 
 
+def link_skill_dir(src: Path, dst: Path, force: bool = False) -> tuple:
+    """以软链接方式安装单个 skill 目录。
+
+    Args:
+        src: 源目录（缓存/源仓库中的 skill 目录）
+        dst: 目标目录（config/skills/<name> 或 .agents/skills/<name>）
+        force: 目标已存在时是否强制覆盖
+
+    Returns: (ok: bool, message: str)
+    """
+    if not src or not Path(src).exists():
+        return False, f"源目录不存在: {src}"
+    src = Path(src).resolve()
+    dst = Path(dst)
+    # 目标已存在
+    if dst.exists() or dst.is_symlink():
+        if not force:
+            return False, f"目标已存在: {dst}（需 force=True 覆盖）"
+        try:
+            if dst.is_symlink() or dst.is_file():
+                dst.unlink()
+            else:
+                shutil.rmtree(dst, ignore_errors=True)
+        except Exception as e:
+            return False, f"清理旧目标失败: {e}"
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        # Windows 下非管理员创建符号链接会失败，回退到 junction（目录）或复制
+        try:
+            os.symlink(str(src), str(dst))
+            return True, f"已创建软链接: {dst} → {src}"
+        except OSError as e:
+            # Windows: 尝试 junction（仅目录）
+            if sys.platform == "win32" and src.is_dir():
+                try:
+                    import ctypes
+                    CREATE_NO_WINDOW = 0x08000000
+                    subprocess.run(
+                        ["cmd", "/c", "mklink", "/J", str(dst), str(src)],
+                        check=True,
+                        capture_output=True,
+                        creationflags=CREATE_NO_WINDOW,
+                    )
+                    return True, f"已创建 junction: {dst} → {src}"
+                except Exception as je:
+                    # junction 也失败 → 回退到复制
+                    shutil.copytree(str(src), str(dst), ignore=shutil.ignore_patterns('.git'))
+                    return True, f"软链接不可用，已复制: {dst}（{e}; {je}）"
+            else:
+                # 非 Windows 或非目录 → 复制
+                if src.is_dir():
+                    shutil.copytree(str(src), str(dst), ignore=shutil.ignore_patterns('.git'))
+                else:
+                    shutil.copy2(str(src), str(dst))
+                return True, f"软链接不可用，已复制: {dst}（{e}）"
+    except Exception as e:
+        return False, f"创建软链接失败: {e}"
+
+
 def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
     """构建安装命令，返回 (skill_name, install_command)。
 
@@ -888,10 +966,12 @@ def record_skill_source(
     url: str = "",
     installed_sha: str = "",
     installed_ref: str = "",
+    fetch_sha: bool = True,
 ) -> None:
     """记录一个 skill 的安装来源到 skill.yaml。
 
-    若 installed_sha 为空，会尝试查询 GitHub HEAD SHA（保证"默认最新"语义）。
+    若 fetch_sha=True 且 installed_sha 为空，会尝试查询 GitHub HEAD SHA
+    （保证"默认最新"语义）。惰性补全场景应传 fetch_sha=False 避免网络阻塞。
     """
     if not skill_name:
         return
@@ -900,13 +980,14 @@ def record_skill_source(
     if not isinstance(sources, dict):
         sources = {}
     # 自动补 SHA（仅 GitHub 源）
-    owner, repo = resolve_github_owner_repo(source) if source else ("", "")
-    if not installed_sha and owner and repo:
-        info = _fetch_github_head_sha(owner, repo)
-        if info.get("sha"):
-            installed_sha = info["sha"]
-            if not installed_ref:
-                installed_ref = info.get("ref", "")
+    if fetch_sha and not installed_sha:
+        owner, repo = resolve_github_owner_repo(source) if source else ("", "")
+        if owner and repo:
+            info = _fetch_github_head_sha(owner, repo)
+            if info.get("sha"):
+                installed_sha = info["sha"]
+                if not installed_ref:
+                    installed_ref = info.get("ref", "")
     entry = {
         "source": source,
         "installed_at": _now_utc_iso(),
@@ -976,7 +1057,16 @@ def check_skill_updates(skill_yaml_path: Path, only_names: list = None) -> list:
             continue
         head = _fetch_github_head_sha(owner, repo)
         latest_sha = head.get("sha", "").strip()
-        has_update = bool(latest_sha) and bool(installed_sha) and latest_sha != installed_sha
+        # has_update 判断：
+        # - 两者都有且不同 → 有更新
+        # - 本地 SHA 为空但远端有 → 视为有更新（版本未知，保守升级）
+        # - 两者相同 → 无更新
+        if latest_sha and not installed_sha:
+            has_update = True
+        elif latest_sha and installed_sha and latest_sha != installed_sha:
+            has_update = True
+        else:
+            has_update = False
         out.append({
             "name": name,
             "source": source,
@@ -991,4 +1081,113 @@ def check_skill_updates(skill_yaml_path: Path, only_names: list = None) -> list:
             "message": head.get("message") if not latest_sha else "",
         })
     return out
+
+
+def find_source_via_search(skill_name: str, timeout: int = 15) -> dict:
+    """通过市场搜索查找 skill 的来源（owner/repo）。
+
+    Returns: {source, skill_filter, url, method, message}
+      - source: owner/repo 字符串，未找到为空
+      - skill_filter: 若搜索结果带 @skill 后缀则为 skill 名
+      - method: skillssh/github/modelscope/...
+      - message: 失败原因
+    """
+    if not skill_name:
+        return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "缺少 skill 名"}
+    try:
+        from lib.skill_market import search_skill_market
+    except ImportError:
+        try:
+            from skill_market import search_skill_market
+        except Exception:
+            return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "无法导入 skill_market"}
+    try:
+        result = search_skill_market(skill_name, sources=None, limit_per_source=8)
+    except Exception as e:
+        return {"source": "", "skill_filter": "", "url": "", "method": "", "message": f"搜索失败: {e}"}
+    items = result.get("data") or []
+    if not items:
+        return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "搜索无结果"}
+    # 优先找 name 完全匹配的项
+    best = None
+    for it in items:
+        nm = (it.get("name") or "").strip().lower()
+        if nm == skill_name.lower():
+            best = it
+            break
+    # 退而求其次：取第一项
+    if not best:
+        best = items[0]
+    # 从 install_command 提取 source：npx skills add owner/repo[@skill]
+    cmd = (best.get("install_command") or "").strip()
+    m = re.search(r'skills\s+add\s+([^\s]+)', cmd)
+    spec = m.group(1) if m else ""
+    # 从 source 字段提取
+    if not spec:
+        spec = (best.get("source") or "").strip()
+    # 从 author/repo 拼接
+    if not spec:
+        author = (best.get("author") or "").strip()
+        repo = (best.get("repo") or "").strip()
+        if author and repo:
+            spec = f"{author}/{repo}"
+    if not spec:
+        return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "搜索结果无法解析来源"}
+    # 拆分 @skill 后缀
+    skill_filter = ""
+    if "@" in spec:
+        parts = spec.split("@", 1)
+        spec = parts[0].strip()
+        skill_filter = parts[1].strip()
+    # 校验 spec 是 owner/repo 格式
+    if "/" not in spec:
+        return {"source": "", "skill_filter": "", "url": "", "method": "", "message": f"来源格式异常: {spec}"}
+    url = (best.get("url") or "").strip()
+    if not url:
+        url = f"https://github.com/{spec}"
+    return {
+        "source": spec,
+        "skill_filter": skill_filter,
+        "url": url,
+        "method": best.get("source_type") or "search",
+        "message": "",
+    }
+
+
+def fill_sources_via_search(skill_yaml_path: Path, installed_names: list) -> list:
+    """对指定的 skill 列表，通过市场搜索补全来源记录。
+
+    Returns: [{name, source, skill_filter, url, ok, message}]
+    """
+    if not installed_names:
+        return []
+    sources_map = get_skill_sources(skill_yaml_path)
+    results = []
+    for name in installed_names:
+        if name in sources_map:
+            results.append({"name": name, "source": "", "ok": False, "message": "已有来源记录，跳过"})
+            continue
+        info = find_source_via_search(name)
+        if info.get("source"):
+            try:
+                record_skill_source(
+                    skill_yaml_path, name,
+                    source=info["source"],
+                    skill_filter=info.get("skill_filter", ""),
+                    url=info.get("url", ""),
+                    fetch_sha=False,  # 搜索补全时不查询 SHA，避免阻塞
+                )
+                results.append({
+                    "name": name,
+                    "source": info["source"],
+                    "skill_filter": info.get("skill_filter", ""),
+                    "url": info.get("url", ""),
+                    "ok": True,
+                    "message": f"已补全: {info['source']}",
+                })
+            except Exception as e:
+                results.append({"name": name, "source": "", "ok": False, "message": f"写入失败: {e}"})
+        else:
+            results.append({"name": name, "source": "", "ok": False, "message": info.get("message", "未找到来源")})
+    return results
 

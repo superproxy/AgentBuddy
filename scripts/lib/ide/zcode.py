@@ -1,4 +1,4 @@
-"""ZCode（智谱 ADE）IDE 分发器。
+﻿"""ZCode（智谱 ADE）IDE 分发器。
 
 同步 MCP 到 ~/.zcode/cli/config.json（mcp.servers 格式，ZCode 实际读取的文件），
 同步 LLM 模型到 ~/.zcode/v2/config.json（ZCode provider 格式），
@@ -181,6 +181,6 @@ class ZCodeTarget(IdeTarget):
     def init_skills(self, source_skills_dir: Path):
         zcode_skills_dir = Path.home() / ".zcode" / "skills"
         copy_skills_safe(source_skills_dir, zcode_skills_dir, "~/.zcode/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, zcode_skills_dir / "README.md",
                            "ZCode", self.force, self.include_skills)

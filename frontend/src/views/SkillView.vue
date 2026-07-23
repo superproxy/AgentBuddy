@@ -24,7 +24,7 @@ const {
   onToggleSkill, toggleAllInstalled,
   toggleSkillList, deleteSkillList, exportSkills, importSkills,
   previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
-  checkUpdates, upgradeSkill, upgradeAll,
+  checkUpdates, upgradeSkill, upgradeAll, fillSources,
 } = skill
 
 // ===== 升级检查 =====
@@ -46,6 +46,21 @@ function closeUpdatePanel() { updatePanelOpen.value = false }
 async function refreshUpdates() { await checkUpdates() }
 async function doUpgrade(name: string) { await upgradeSkill(name) }
 async function doUpgradeAll() { await upgradeAll() }
+const fillingSources = ref(false)
+async function doFillSources() {
+  fillingSources.value = true
+  try {
+    const n = await fillSources()
+    if (n > 0) {
+      ui.toast(`已补全 ${n} 个技能来源`)
+      await checkUpdates()
+    } else {
+      ui.toast('未找到可补全的来源', 'warn')
+    }
+  } finally {
+    fillingSources.value = false
+  }
+}
 function shortSha(s: string) { return (s || '').slice(0, 7) }
 function formatCheckedAt(s: string) {
   if (!s) return ''
@@ -860,6 +875,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 <button type="button" class="btn btn-secondary btn-sm" :disabled="updateChecking" @click="refreshUpdates">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spin: updateChecking }"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
                   {{ updateChecking ? '检查中...' : '重新检查' }}
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" :disabled="fillingSources" @click="doFillSources" title="通过市场搜索为无来源记录的技能补全来源">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ spin: fillingSources }"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  {{ fillingSources ? '搜索中...' : '搜索补全来源' }}
                 </button>
                 <button v-if="updatableCount > 0" type="button" class="btn btn-soft btn-sm" @click="doUpgradeAll">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m6 9 6 6 6-6"/><path d="M21 21H3"/></svg>

@@ -1,4 +1,4 @@
-"""Cursor IDE 分发器。
+﻿"""Cursor IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_cursor()。
 MCP 配置转换为 Cursor 格式（提取 mcpServers 到 .cursor/mcp.json）。
@@ -31,6 +31,6 @@ class CursorTarget(IdeTarget):
         # 同步到全局目录（~/.cursor/skills/）
         cursor_skills_dir = Path.home() / ".cursor" / "skills"
         copy_skills_safe(source_skills_dir, cursor_skills_dir, "~/.cursor/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, cursor_skills_dir / "README.md",
                            "Cursor", self.force, self.include_skills)

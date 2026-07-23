@@ -1,4 +1,4 @@
-"""WorkBuddy IDE 分发器。
+﻿"""WorkBuddy IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_workbuddy() 和 generate_workbuddy_models()。
 生成 .workbuddy/models.json（从 llm.yaml 展开模型列表）。
@@ -110,6 +110,6 @@ class WorkBuddyTarget(IdeTarget):
         # 同步到全局目录（~/.workbuddy/skills/）
         wb_skills_dir = Path.home() / ".workbuddy" / "skills"
         copy_skills_safe(source_skills_dir, wb_skills_dir, "~/.workbuddy/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, wb_skills_dir / "README.md",
                            "WorkBuddy", self.force, self.include_skills)

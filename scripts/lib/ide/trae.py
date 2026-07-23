@@ -1,4 +1,4 @@
-"""Trae IDE 分发器（含 Trae / Trae CN / Trae Work CN）。
+﻿"""Trae IDE 分发器（含 Trae / Trae CN / Trae Work CN）。
 
 迁移自 scripts/init-ide.py 的 init_trae() / init_trae_cn() / init_trae_solo_cn()。
 三个变体共享相同结构，差异在全局目录名和 IDE User 目录名。
@@ -44,7 +44,7 @@ class _TraeBaseTarget(IdeTarget):
         skills_dir = global_dir / "skills"
         copy_skills_safe(source_skills_dir, skills_dir,
                          f"~/{self._global_dirname}/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
 
         if isinstance(source_skills_dir, list):
             srcs = [s for s in source_skills_dir if s.exists()]

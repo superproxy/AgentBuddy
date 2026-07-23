@@ -1,4 +1,4 @@
-"""OpenClaw IDE 分发器。
+﻿"""OpenClaw IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_openclaw()。
 """
@@ -30,6 +30,6 @@ class OpenClawTarget(IdeTarget):
         # 同步到全局目录（~/.openclaw/skills/）
         oc_skills_dir = Path.home() / ".openclaw" / "skills"
         copy_skills_safe(source_skills_dir, oc_skills_dir, "~/.openclaw/skills/",
-                         self.force, self.include_skills)
+                         self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, oc_skills_dir / "README.md",
                            "OpenClaw", self.force, self.include_skills)
