@@ -1225,16 +1225,17 @@ def find_source_via_search(skill_name: str, timeout: int = 15) -> dict:
     items = result.get("data") or []
     if not items:
         return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "搜索无结果"}
-    # 优先找 name 完全匹配的项
+    # 只接受 name 完全匹配（精确匹配），不取模糊匹配的第一项
+    # 避免"本地开发的 skill 名"被错误关联到不相关的远程仓库
     best = None
     for it in items:
         nm = (it.get("name") or "").strip().lower()
         if nm == skill_name.lower():
             best = it
             break
-    # 退而求其次：取第一项
     if not best:
-        best = items[0]
+        return {"source": "", "skill_filter": "", "url": "", "method": "",
+                "message": f"未找到精确匹配（搜索到 {len(items)} 项，但 name 均不等于 {skill_name}）"}
     # 从 install_command 提取 source：npx skills add owner/repo[@skill]
     cmd = (best.get("install_command") or "").strip()
     m = re.search(r'skills\s+add\s+([^\s]+)', cmd)

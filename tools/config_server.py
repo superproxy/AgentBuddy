@@ -2052,6 +2052,34 @@ def skills_check_updates():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/skills/<name>/source", methods=["POST"])
+def set_skill_source(name):
+    """手动设置/认可 skill 的来源（"认可"机制）。
+
+    Body: { source: "owner/repo" | "local:xxx", fetch_sha?: bool }
+    用户可手动指定来源，覆盖自动检测的结果。
+    """
+    name = (name or "").strip()
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        return jsonify({"ok": False, "error": "非法技能名"}), 400
+    body = request.get_json(silent=True) or {}
+    source = (body.get("source") or "").strip()
+    if not source:
+        return jsonify({"ok": False, "error": "缺少 source 参数"}), 400
+    fetch_sha = bool(body.get("fetch_sha", False))
+    try:
+        ref_type = "manual" if not source.startswith("local:") else ""
+        record_skill_source(
+            SKILL_YAML, name,
+            source=source,
+            fetch_sha=fetch_sha,
+            ref_type=ref_type,
+        )
+        return jsonify({"ok": True, "name": name, "source": source})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/skills/upgrade", methods=["GET"])
 def skills_upgrade_sse():
     """SSE: 升级指定 skill（重新拉取并覆盖安装）。

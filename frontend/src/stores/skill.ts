@@ -363,6 +363,19 @@ export const useSkillStore = defineStore('skill', () => {
     )
     return successCount
   }
+  /** 手动设置/认可 skill 来源 */
+  async function setSkillSource(name: string, source: string, fetchSha = false) {
+    const r = await api<{ ok: boolean; error?: string }>(
+      '/api/skills/' + encodeURIComponent(name) + '/source',
+      { method: 'POST', body: JSON.stringify({ source, fetch_sha: fetchSha }) },
+    )
+    if (r.ok) {
+      ui.toast(`已设置来源: ${name} ← ${source}`)
+      await loadInstalledSkills()
+    } else {
+      ui.toast('设置来源失败: ' + (r.error || '未知错误'), 'err')
+    }
+  }
   async function viewSkillMd(name: string) {
     const r = await api<{ ok: boolean; content?: string; error?: string }>('/api/skills/' + encodeURIComponent(name) + '/skillmd')
     if (r.ok) ui.showModal(name + ' / SKILL.md', r.content || '')
@@ -582,7 +595,7 @@ export const useSkillStore = defineStore('skill', () => {
     filteredInstalled,
     // 升级检查
     updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount, rateLimited,
-    checkUpdates, upgradeSkill, upgradeAll, fillSources,
+    checkUpdates, upgradeSkill, upgradeAll, fillSources, setSkillSource,
     loadLocalSkills, searchSkills, toggleSkillSource, installFromSearch, installManualSkill,
     previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
     loadInstalledSkills,

@@ -24,7 +24,7 @@ const {
   onToggleSkill, toggleAllInstalled,
   toggleSkillList, deleteSkillList, exportSkills, importSkills,
   previewManualSource, clearManualPreview, toggleManualSkill, selectAllManualSkills, installSelectedManualSkills,
-  checkUpdates, upgradeSkill, upgradeAll, fillSources,
+  checkUpdates, upgradeSkill, upgradeAll, fillSources, setSkillSource,
 } = skill
 
 // ===== 升级检查 =====
@@ -46,6 +46,13 @@ function closeUpdatePanel() { updatePanelOpen.value = false }
 async function refreshUpdates() { await checkUpdates() }
 async function doUpgrade(name: string, mode: 'source' | 'cli' = 'source') { await upgradeSkill(name, mode) }
 async function doUpgradeAll(mode: 'source' | 'cli' = 'source') { await upgradeAll(mode) }
+async function doSetSource(name: string) {
+  const input = prompt(`手动设置「${name}」的来源\n\n输入 owner/repo（远程）或 local:xxx（本地标记）：`, '')
+  if (input === null) return
+  const source = input.trim()
+  if (!source) return
+  await setSkillSource(name, source)
+}
 const fillingSources = ref(false)
 async function doFillSources() {
   fillingSources.value = true
@@ -672,6 +679,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
                     查看
                   </button>
+                  <button type="button" class="btn btn-ghost btn-sm" title="手动设置/认可来源" @click="doSetSource(s.name)">来源</button>
                   <button type="button" class="btn btn-danger btn-icon btn-sm" :aria-label="'卸载 ' + s.name" title="卸载" @click="uninstallSkill(s.name)">
                     <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                   </button>
