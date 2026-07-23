@@ -335,6 +335,7 @@ IDE_INSTALL_META = {
         "cli_install": {
             "method": "script",
             "script_url": "https://qoder.com/install",
+            "script_url_win": "https://qoder.com/install.ps1",
             "url": "https://qoder.com/zh/cli",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/qoder; rm -rf ~/.qoder; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoder.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder\" 2>nul & exit /b 0",
@@ -356,7 +357,7 @@ IDE_INSTALL_META = {
     "QoderCN": {
         # Qoder 国内版（阿里云通义灵码升级版，国内合规）
         # 最新版本：v1.4.1（2026-06）
-        # 来源：https://qoder.com.cn/download
+        # 来源：https://qoder.com.cn/download + https://qoder.com.cn/cli
         "label": "Qoder CN",
         "version": "1.4.1",
         "release_date": "2026-06-28",
@@ -366,6 +367,7 @@ IDE_INSTALL_META = {
         "cli_install": {
             "method": "script",
             "script_url": "https://qoder.com.cn/install",
+            "script_url_win": "https://qoder.com.cn/install.ps1",
             "url": "https://qoder.com.cn/cli",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/qoderclicn ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\qoderclicn.exe\" \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0",
@@ -820,8 +822,13 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
                         "message": f"需手动安装，请访问: {url or meta.get('homepage', '')}",
                         "cmd": "", "stdout": "", "stderr": "",
                         "url": url or meta.get("homepage", "")}
+            # 使用 -ExecutionPolicy ByPass 避免被 PowerShell 执行策略拦截
+            # （官方文档推荐此写法，见 openai/codex README）
             shell_cmd = f"irm {script_url_win} | iex"
-            r = _run_cmd(["powershell", "-NoProfile", "-Command", shell_cmd], timeout=600)
+            r = _run_cmd(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "ByPass", "-Command", shell_cmd],
+                timeout=600,
+            )
             # Windows 下安装脚本可能未完整执行（Rename/Copy 失败），补完 CLI 文件
             fix_msg = ""
             if r["ok"]:
@@ -862,7 +869,10 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
             return {"ok": False, "ide": ide_key, "mode": mode, "method": "powershell_script",
                     "message": "未配置 script_url", "cmd": "", "stdout": "", "stderr": ""}
         shell_cmd = f"irm {script_url} | iex"
-        r = _run_cmd(["powershell", "-NoProfile", "-Command", shell_cmd], timeout=600)
+        r = _run_cmd(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "ByPass", "-Command", shell_cmd],
+            timeout=600,
+        )
         return {
             "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "powershell_script",
             "message": "安装成功" if r["ok"] else f"安装失败 (exit={r['returncode']})",
