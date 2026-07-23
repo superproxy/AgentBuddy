@@ -248,6 +248,7 @@ def _user_bin_dirs() -> list[str]:
     macOS GUI 应用（pywebview/PyInstaller 打包）不继承 shell 配置
     （.zshrc/.zprofile 的 export PATH），PATH 仅含 /usr/bin:/bin 等，
     导致 ~/.local/bin、~/.nvm/.../bin 下的 CLI 全部检测不到。
+    Windows 下安装脚本修改的是 User PATH，GUI 进程同样不继承。
     此函数补全这些目录，作为 shutil.which 的兜底搜索范围。
     """
     home = Path.home()
@@ -258,6 +259,17 @@ def _user_bin_dirs() -> list[str]:
         p = home / d
         if p.is_dir():
             dirs.append(str(p))
+    # Windows：各 IDE CLI 的安装目录（安装脚本写入 User PATH，GUI 进程不继承）
+    if sys.platform == "win32":
+        localappdata = os.environ.get("LOCALAPPDATA", str(home / "AppData" / "Local"))
+        # Cursor CLI（agent.exe）→ %LOCALAPPDATA%\cursor-agent
+        cursor_agent = Path(localappdata) / "cursor-agent"
+        if cursor_agent.is_dir():
+            dirs.append(str(cursor_agent))
+        # Trae CLI（trae-cli.exe）→ %LOCALAPPDATA%\trae-cli\bin
+        trae_cli = Path(localappdata) / "trae-cli" / "bin"
+        if trae_cli.is_dir():
+            dirs.append(str(trae_cli))
     # nvm：可能多版本，取所有 node 版本的 bin
     nvm_dir = home / ".nvm" / "versions" / "node"
     if nvm_dir.is_dir():
@@ -285,10 +297,18 @@ def _which(cli_name: str) -> str | None:
         candidate = Path(d) / cli_name
         if candidate.exists() and os.access(candidate, os.X_OK):
             return str(candidate)
-        # macOS/Linux 无后缀，也试 .exe（极少见，跨平台兼容）
-        candidate_exe = Path(d) / f"{cli_name}.exe"
-        if candidate_exe.exists() and os.access(candidate_exe, os.X_OK):
-            return str(candidate_exe)
+        # Windows 下试常见可执行后缀（.cmd/.bat/.ps1/.exe）
+        # macOS/Linux 试 .exe（极少见，跨平台兼容）
+        exts = [".exe", ".cmd", ".bat", ".ps1"] if sys.platform == "win32" else [".exe"]
+        for ext in exts:
+            candidate_ext = Path(d) / f"{cli_name}{ext}"
+            if candidate_ext.exists():
+                # Windows 下 .cmd/.bat/.ps1 不需要 X_OK 权限检查
+                # （os.access X_OK 在 Windows 上对 .cmd 可能误报）
+                if sys.platform == "win32":
+                    return str(candidate_ext)
+                if os.access(candidate_ext, os.X_OK):
+                    return str(candidate_ext)
     return None
 
 
