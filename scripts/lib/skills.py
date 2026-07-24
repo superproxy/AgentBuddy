@@ -7,11 +7,30 @@ scripts/plugin-manager.py（parse_shorthand / build_install_command / install_sk
 INCLUDE_SKILLS 全局变量改为函数参数 include_skills，避免模块级状态。
 """
 import csv
+import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _shell_executable() -> str:
+    """返回 shell=True 时应使用的可执行文件路径（macOS/Linux 用登录 shell 继承 PATH）。
+
+    /bin/sh 的 PATH 不含 npx（在 /usr/local/bin、/opt/homebrew/bin、~/.nvm/.../bin），
+    导致 'npx not found'。改用 $SHELL（zsh/bash）以继承用户 PATH。
+    Windows 返回 None（用默认 cmd.exe）。
+    """
+    if sys.platform == "win32":
+        return None
+    user_shell = os.environ.get("SHELL", "")
+    if user_shell and shutil.which(user_shell):
+        return user_shell
+    for cand in ("/bin/zsh", "/usr/local/bin/zsh", "/bin/bash", "/usr/local/bin/bash"):
+        if Path(cand).exists():
+            return cand
+    return None
 
 from lib.logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_MAGENTA, COLOR_RESET,
@@ -555,15 +574,21 @@ def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
         "--agent", "cursor",
     ]
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            shell=(sys.platform == "win32"),
-        )
+        # macOS/Linux 用登录 shell 继承 PATH（npx 在 /usr/local/bin、~/.nvm 等），
+        # 避免 list 形式 exec 时 PATH 不含 npx 导致 FileNotFoundError
+        if sys.platform == "win32":
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=timeout, shell=True,
+            )
+        else:
+            import shlex
+            shell_cmd = " ".join(shlex.quote(c) for c in cmd)
+            result = subprocess.run(
+                shell_cmd, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=timeout, shell=True,
+                executable=_shell_executable(),
+            )
     except subprocess.TimeoutExpired:
         raise RuntimeError("列出技能超时，请检查网络或仓库地址")
     except FileNotFoundError:
@@ -870,6 +895,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
         result = subprocess.run(
             find_command,
             shell=True,
+            executable=_shell_executable(),
             capture_output=False,
             text=True,
             encoding='utf-8',

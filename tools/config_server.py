@@ -23,6 +23,46 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
+def _shell_executable() -> Optional[str]:
+    """返回 shell=True 时应使用的可执行文件路径。
+
+    macOS/Linux 上 /bin/sh 的 PATH 不含 npx（通常在 /usr/local/bin、
+    /opt/homebrew/bin、~/.nvm/.../bin），导致 'npx not found'。
+    改用用户登录 shell（zsh/bash）以继承用户 PATH（含 nvm/brew 等）。
+    Windows 上 shell=True 已用 cmd.exe，无需调整。
+    """
+    if sys.platform == "win32":
+        return None
+    # 优先用 $SHELL（用户登录 shell，如 /bin/zsh /opt/homebrew/bin/bash）
+    user_shell = os.environ.get("SHELL", "")
+    if user_shell and shutil.which(user_shell):
+        return user_shell
+    # 回退：尝试 zsh → bash → sh
+    for cand in ("/bin/zsh", "/usr/local/bin/zsh", "/bin/bash", "/usr/local/bin/bash"):
+        if Path(cand).exists():
+            return cand
+    return None
+
+
+def _login_shell_cmd(cmd: str) -> str:
+    """把命令包成登录 shell 调用，确保加载用户 profile（PATH 含 nvm/brew）。
+
+    仅在非 Windows 平台生效；Windows 直接返回原命令。
+    """
+    if sys.platform == "win32":
+        return cmd
+    sh = _shell_executable()
+    if not sh:
+        return cmd
+    # -l: 登录 shell（加载 ~/.zprofile/~/.bash_profile）；-c: 执行命令
+    return f'{sh} -l -c {_shell_quote(cmd)}'
+
+
+def _shell_quote(s: str) -> str:
+    """POSIX shell 安全引号。"""
+    return "'" + s.replace("'", "'\\''") + "'"
+
 def _resolve_project_root() -> Path:
     """Frozen-aware 项目根定位。
     - dev: 仓库根（tools/config_server.py 的上两级）
@@ -387,6 +427,7 @@ def _stream_process(cmd: str, cwd: Optional[Path] = None):
         proc = subprocess.Popen(
             cmd,
             shell=True,
+            executable=_shell_executable(),
             cwd=str(cwd) if cwd else None,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
@@ -419,6 +460,7 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
         proc = subprocess.Popen(
             cmd,
             shell=True,
+            executable=_shell_executable(),
             cwd=str(cwd) if cwd else None,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
