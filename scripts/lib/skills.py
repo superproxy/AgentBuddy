@@ -632,7 +632,7 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
 def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
     """回退：调用 npx skills add <source> -l 列出技能。"""
     cmd = [
-        "npx", "--yes", "skills",
+        "npx", "--yes", "skills@latest",
         "add", source,
         "-l", "-y",
         "--agent", "cursor",
