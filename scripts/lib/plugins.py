@@ -31,6 +31,27 @@ from lib.skills import install_skill
 # 已安装插件清单（config/installed-plugins.yaml）
 # ============================================================
 
+# 插件文件 glob 模式（按目录扫描所有 yaml/json 文件）
+_PLUGIN_GLOB_PATTERNS = ("*.yaml", "*.yml", "*.json")
+# 非插件文件黑名单（schema 定义等）
+_PLUGIN_EXCLUDE_FILES = {"plugin.schema.yaml"}
+
+
+def iter_plugin_files(plugins_dir: Path) -> list:
+    """扫描目录下所有插件文件（按目录扫描，不限制 .plugin 后缀）。
+
+    排除 schema 定义等非插件文件。返回排序后的 Path 列表。
+    """
+    if not plugins_dir.exists():
+        return []
+    files = []
+    for pat in _PLUGIN_GLOB_PATTERNS:
+        files.extend(plugins_dir.glob(pat))
+    files = [f for f in files if f.is_file() and f.name not in _PLUGIN_EXCLUDE_FILES
+             and not f.name.endswith(".schema.yaml")]
+    return sorted(files)
+
+
 def _installed_list_path(project_root: Path) -> Path:
     return project_root / "config" / "installed-plugins.yaml"
 
@@ -355,17 +376,15 @@ def list_plugins(plugins_dir: Path) -> None:
         print(f"{COLOR_YELLOW}[!] 插件目录不存在: {plugins_dir}{COLOR_RESET}")
         return
 
-    # 查找插件文件（支持 .plugin.yaml / .plugin.json）
+    # 查找插件文件（按目录扫描所有 yaml/json 文件）
     plugin_files = []
-    for pattern in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-        for file in plugins_dir.glob(pattern):
-            if file.is_file():
-                try:
-                    config = load_env_config_file(file)
-                    if isinstance(config, dict) and "name" in config and "version" in config:
-                        plugin_files.append((file, config))
-                except Exception:
-                    continue
+    for file in iter_plugin_files(plugins_dir):
+        try:
+            config = load_env_config_file(file)
+            if isinstance(config, dict) and "name" in config and "version" in config:
+                plugin_files.append((file, config))
+        except Exception:
+            continue
 
     if not plugin_files:
         print(f"{COLOR_YELLOW}[!] 没有找到有效的插件{COLOR_RESET}")

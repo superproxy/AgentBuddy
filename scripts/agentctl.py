@@ -149,7 +149,7 @@ def _warn_if_mcp_stale(mcp_json: Path) -> None:
         stale_sources.append("config/mcp/mcp.yaml")
     plugins_dir = PROJECT_ROOT / "template" / "plugins"
     if plugins_dir.exists():
-        for p in plugins_dir.glob("*.plugin.yaml"):
+        for p in plugins.iter_plugin_files(plugins_dir):
             if p.stat().st_mtime > target_mtime:
                 stale_sources.append(p.name)
                 break

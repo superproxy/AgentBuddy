@@ -17,6 +17,7 @@ from lib.logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET,
 )
 from lib.placeholder import prune_unresolved_blocks
+from lib.plugins import iter_plugin_files
 
 
 # ============================================================
@@ -103,7 +104,7 @@ def collect_plugin_mcp_servers(plugins_dir: Path, installed_names: list = None) 
         return {}
 
     merged = {}
-    for p in sorted(plugins_dir.glob("*.plugin.yaml")):
+    for p in iter_plugin_files(plugins_dir):
         try:
             cfg = load_env_config_file(p)
             if not isinstance(cfg, dict):

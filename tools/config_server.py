@@ -2913,7 +2913,7 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
 
 @app.route("/api/plugins", methods=["GET"])
 def list_plugins():
-    from lib.plugins import read_installed_plugins
+    from lib.plugins import read_installed_plugins, iter_plugin_files
     installed_names = set(read_installed_plugins(PROJECT_ROOT))
     plugins = []
     seen_files = set()  # 按文件名去重（config/plugins/ 优先覆盖 template/plugins/）
@@ -2921,9 +2921,8 @@ def list_plugins():
     for plugins_dir in _plugin_search_dirs():
         if not plugins_dir.exists():
             continue
-        files = []
-        for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-            files.extend(plugins_dir.glob(pat))
+        files = iter_plugin_files(plugins_dir)
+        print(f"[DEBUG list_plugins] {plugins_dir}: {len(files)} files", flush=True)
         for f in sorted(files):
             if f.name in seen_files:
                 continue
@@ -2938,11 +2937,11 @@ def list_plugins():
                         "description": cfg.get("description", ""),
                         "author": cfg.get("author", ""),
                         "license": cfg.get("license", ""),
-                        "keywords": cfg.get("keywords", []) or [],
-                        "categories": cfg.get("categories", []) or [],
+                        "keywords": cfg.get("keywords") or [],
+                        "categories": cfg.get("categories") or [],
                         "homepage": cfg.get("homepage", ""),
-                        "skills_count": len(cfg.get("skills", [])),
-                        "mcp_count": len(cfg.get("mcpServers", {})),
+                        "skills_count": len(cfg.get("skills") or []),
+                        "mcp_count": len(cfg.get("mcpServers") or {}),
                         "installed": cfg.get("name") in installed_names,
                     })
             except Exception:
@@ -3057,21 +3056,21 @@ def delete_plugin():
 
     # 扫描其他插件是否引用同一 skill（用于无 sources 记录时的保守判断）
     other_plugin_skills: set = set()
+    from lib.plugins import iter_plugin_files as _iter_pf
     for plugins_dir in _plugin_search_dirs():
-        for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-            for f in plugins_dir.glob(pat):
-                if f == path:
+        for f in _iter_pf(plugins_dir):
+            if f == path:
+                continue
+            try:
+                oc = load_env_config_file(f)
+                if not isinstance(oc, dict):
                     continue
-                try:
-                    oc = load_env_config_file(f)
-                    if not isinstance(oc, dict):
-                        continue
-                    for sk in (oc.get("skills", []) or []):
-                        sn = sk.get("skill") or sk.get("name") if isinstance(sk, dict) else str(sk)
-                        if sn:
-                            other_plugin_skills.add(sn)
-                except Exception:
-                    continue
+                for sk in (oc.get("skills", []) or []):
+                    sn = sk.get("skill") or sk.get("name") if isinstance(sk, dict) else str(sk)
+                    if sn:
+                        other_plugin_skills.add(sn)
+            except Exception:
+                continue
 
     deleted_skills: list = []
     kept_skills: list = []
@@ -3221,11 +3220,12 @@ def export_all_plugins():
     seen_skills: set[str] = set()
     seen_files: set[str] = set()
     seen_extras: set[str] = set()  # 去重 llm.yaml / subagents.yaml 等
+    from lib.plugins import iter_plugin_files as _iter_pf3
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for plugins_dir in _plugin_search_dirs():
             if not plugins_dir.exists():
                 continue
-            for f in plugins_dir.glob("*.plugin.yaml"):
+            for f in _iter_pf3(plugins_dir):
                 if f.name in seen_files:
                     continue
                 seen_files.add(f.name)
@@ -3689,18 +3689,16 @@ def uninstall_plugin_api():
     # 2. 删除 config/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
     # 在 config/plugins/ + template/plugins/ 中查找
     plugin_file = None
+    from lib.plugins import iter_plugin_files as _iter_pf2
     for plugins_dir in _plugin_search_dirs():
-        for pat in ("*.plugin.yaml", "*.plugin.yml", "*.plugin.json"):
-            for f in plugins_dir.glob(pat):
-                try:
-                    cfg = load_env_config_file(f)
-                    if isinstance(cfg, dict) and cfg.get("name") == name:
-                        plugin_file = f
-                        break
-                except Exception:
-                    continue
-            if plugin_file:
-                break
+        for f in _iter_pf2(plugins_dir):
+            try:
+                cfg = load_env_config_file(f)
+                if isinstance(cfg, dict) and cfg.get("name") == name:
+                    plugin_file = f
+                    break
+            except Exception:
+                continue
         if plugin_file:
             break
 
