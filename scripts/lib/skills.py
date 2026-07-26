@@ -632,7 +632,7 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
 def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
     """回退：调用 npx skills add <source> -l 列出技能。"""
     cmd = [
-        "npx", "--yes", "skills@latest",
+        "npx", "skills",
         "add", source,
         "-l", "-y",
         "--agent", "cursor",
@@ -806,7 +806,7 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
         url = skill_config.get("url", "")
 
         if url:
-            install_command = f"npx --yes skills add {url} --skill {skill_name}".strip()
+            install_command = f"npx skills add {url} --skill {skill_name}".strip()
         elif source:
             parsed_source, parsed_skill = parse_shorthand(source)
             # source 是 "owner/repo@skill" 格式 → parsed_source 和 parsed_skill 都有值
@@ -824,11 +824,11 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
                 effective_skill = ""
 
             if effective_skill:
-                install_command = f"npx --yes skills add {effective_source} --skill {effective_skill}".strip()
+                install_command = f"npx skills add {effective_source} --skill {effective_skill}".strip()
             else:
-                install_command = f"npx --yes skills add {effective_source}".strip()
+                install_command = f"npx skills add {effective_source}".strip()
         else:
-            install_command = f"npx --yes skills add {skill_name}".strip()
+            install_command = f"npx skills add {skill_name}".strip()
     elif isinstance(skill_config, str):
         if skill_config.startswith("npx"):
             install_command = skill_config
@@ -845,16 +845,16 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
             parsed_source, parsed_skill = parse_shorthand(skill_config)
             if parsed_source and parsed_skill:
                 skill_name = parsed_skill
-                install_command = f"npx --yes skills add {parsed_source} --skill {parsed_skill}".strip()
+                install_command = f"npx skills add {parsed_source} --skill {parsed_skill}".strip()
             elif parsed_source:
                 skill_name = parsed_source
-                install_command = f"npx --yes skills add {parsed_source}".strip()
+                install_command = f"npx skills add {parsed_source}".strip()
             else:
                 skill_name = parsed_skill
-                install_command = f"npx --yes skills add {parsed_skill}".strip()
+                install_command = f"npx skills add {parsed_skill}".strip()
     else:
         skill_name = str(skill_config)
-        install_command = f"npx --yes skills add {skill_name}".strip()
+        install_command = f"npx skills add {skill_name}".strip()
 
     install_command = ensure_npx_yes(re.sub(r'\s+', ' ', install_command).strip())
     return skill_name, install_command
@@ -949,7 +949,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
             print(f"{COLOR_YELLOW}[!] source 安装错误: {e}，尝试 find-skills 按名查找{COLOR_RESET}")
 
     # Step 3: find-skills 按名查找（市场搜索，忽略可能无效的 source）
-    find_command = f"npx --yes skills add {skill_name}"
+    find_command = f"npx skills add {skill_name}"
     print(f"{COLOR_MAGENTA}[-] find-skills 查找: {find_command}{COLOR_RESET}")
     try:
         result = subprocess.run(
