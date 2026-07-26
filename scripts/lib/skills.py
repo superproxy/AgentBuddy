@@ -72,6 +72,43 @@ def _login_shell_cmd(cmd: str) -> str:
     return f'{sh} -i -c {_shell_quote(wrapped)}'
 
 
+# skills@latest 依赖 simple-git.mjs 使用 ES2022 类静态初始化块 (static { })，
+# 需要 Node >= 16.11。保守要求 Node >= 18 (LTS)。
+MIN_NODE_VERSION = (18, 0, 0)
+
+
+def _check_node_version() -> None:
+    """运行时检查 node 版本，不满足则抛出明确错误。
+
+    在执行 npx skills 命令前调用，避免因 node 版本过低导致 skills 包加载失败、
+    子命令未注册（如 'command not found: add'）等难以定位的错误。
+    """
+    try:
+        result = subprocess.run(
+            _login_shell_cmd("node --version"),
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=10, shell=True,
+        )
+        version_str = (result.stdout or "").strip() or (result.stderr or "").strip()
+        if not version_str or not version_str.startswith("v"):
+            raise RuntimeError(
+                "无法检测 Node.js 版本，请确保已安装 Node.js >= 18。"
+                "若已安装但仍报错，检查 PATH 配置或重启 AgentBuddy。"
+            )
+        parts = version_str.lstrip("v").split(".")
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+        if (major, minor) < (MIN_NODE_VERSION[0], MIN_NODE_VERSION[1]):
+            raise RuntimeError(
+                f"Node.js 版本过低: v{major}.{minor}，skills 需要 Node >= 18。"
+                f"请升级 Node.js（推荐用 nvm 安装 LTS 版本: nvm install --lts）。"
+            )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("检测 Node.js 版本超时，请检查环境配置")
+    except FileNotFoundError:
+        raise RuntimeError("未找到 node 命令，请先安装 Node.js >= 18")
+
+
 def _is_junction(path: Path) -> bool:
     """检测 Windows junction（reparse point 但非 symlink）。
 
@@ -638,6 +675,7 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
 
 def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
     """回退：调用 npx skills@latest add <source> -l 列出技能。"""
+    _check_node_version()  # 提前校验，避免因 node 版本过低导致难以定位的错误
     cmd = [
         "npx", "skills@latest",
         "add", source,
@@ -891,6 +929,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
     Returns:
         True 安装成功（含跳过），False 安装失败。
     """
+    _check_node_version()  # 提前校验 node 版本，避免 skills 包加载失败
     skill_name, source_command = build_install_command(skill_config, use_symlink=use_symlink)
     # 判断 source 是否有效（含 owner/repo 或 url）
     has_explicit_source = bool(source_command) and (
