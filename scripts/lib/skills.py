@@ -16,21 +16,88 @@ from pathlib import Path
 
 
 def _shell_executable() -> str:
-    """返回 shell=True 时应使用的可执行文件路径（macOS/Linux 用登录 shell 继承 PATH）。
-
-    /bin/sh 的 PATH 不含 npx（在 /usr/local/bin、/opt/homebrew/bin、~/.nvm/.../bin），
-    导致 'npx not found'。改用 $SHELL（zsh/bash）以继承用户 PATH。
-    Windows 返回 None（用默认 cmd.exe）。
-    """
+    """返回用户登录 shell 路径（macOS/Linux），Windows 返回 None。"""
     if sys.platform == "win32":
         return None
     user_shell = os.environ.get("SHELL", "")
-    if user_shell and shutil.which(user_shell):
+    if user_shell and Path(user_shell).exists():
         return user_shell
     for cand in ("/bin/zsh", "/usr/local/bin/zsh", "/bin/bash", "/usr/local/bin/bash"):
         if Path(cand).exists():
             return cand
     return None
+
+
+def _mac_node_paths() -> list:
+    """检测 macOS 上常见 Node/npx 安装路径（nvm/brew/volta/fnm）。"""
+    if sys.platform != "darwin":
+        return []
+    home = Path.home()
+    paths = ["/usr/local/bin", "/opt/homebrew/bin", str(home / ".volta" / "bin")]
+    nvm_node = home / ".nvm" / "versions" / "node"
+    if nvm_node.is_dir():
+        versions = sorted([d for d in nvm_node.iterdir() if d.is_dir()], reverse=True)
+        if versions:
+            paths.append(str(versions[0] / "bin"))
+    fnm_dir = home / ".fnm"
+    if fnm_dir.is_dir():
+        paths.append(str(fnm_dir / "node-versions"))
+    return [p for p in paths if Path(p).exists()]
+
+
+def _shell_quote(s: str) -> str:
+    """POSIX shell 安全引号。"""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _login_shell_cmd(cmd: str) -> str:
+    """把命令包成交互式 shell 调用（macOS/Linux），确保加载 ~/.zshrc（nvm PATH）。"""
+    if sys.platform == "win32":
+        return cmd
+    sh = _shell_executable()
+    if not sh:
+        return cmd
+    node_paths = _mac_node_paths()
+    path_prefix = ""
+    if node_paths:
+        path_prefix = f'export PATH="{":".join(node_paths)}:$PATH"; '
+    wrapped = f"{path_prefix}unset PROMPT RPROMPT PS1 PS2 2>/dev/null; {cmd}"
+    return f'{sh} -i -c {_shell_quote(wrapped)}'
+
+
+def _is_junction(path: Path) -> bool:
+    """检测 Windows junction（reparse point 但非 symlink）。
+
+    Path.is_symlink() 对 junction 返回 False，需用 Attributes 检测 ReparsePoint。
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import stat
+        attrs = os.lstat(str(path)).st_file_attributes
+        return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, AttributeError):
+        return False
+
+
+def _remove_link_or_dir(path: Path) -> None:
+    """安全删除 symlink/junction/目录/文件。
+
+    - symlink → unlink()
+    - junction（reparse point）→ os.rmdir()（不删源内容！）
+    - 真实目录 → shutil.rmtree()
+    - 文件 → unlink()
+
+    关键：junction 必须用 os.rmdir，不能用 rmtree（会递归删除源目录内容）。
+    """
+    if path.is_symlink():
+        path.unlink()
+    elif _is_junction(path):
+        os.rmdir(str(path))  # junction: 只删链接本身
+    elif path.is_file():
+        path.unlink()
+    else:
+        shutil.rmtree(str(path), ignore_errors=True)
 
 from lib.logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_MAGENTA, COLOR_RESET,
@@ -182,13 +249,10 @@ def copy_skills_safe(src, dst: Path, label: str, force: bool,
             if include_skills is not None and skill_dir.name not in include_skills:
                 continue
             skill_dst = dst / skill_dir.name
-            if skill_dst.exists() or skill_dst.is_symlink():
+            if skill_dst.exists() or skill_dst.is_symlink() or _is_junction(skill_dst):
                 if force:
                     try:
-                        if skill_dst.is_symlink() or skill_dst.is_file():
-                            skill_dst.unlink()
-                        else:
-                            shutil.rmtree(str(skill_dst), ignore_errors=True)
+                        _remove_link_or_dir(skill_dst)
                     except Exception as e:
                         print(f"{COLOR_YELLOW}[!] 清理旧 skill 失败 {skill_dir.name}: {e}{COLOR_RESET}")
                         skipped += 1
@@ -574,8 +638,7 @@ def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
         "--agent", "cursor",
     ]
     try:
-        # macOS/Linux 用登录 shell 继承 PATH（npx 在 /usr/local/bin、~/.nvm 等），
-        # 避免 list 形式 exec 时 PATH 不含 npx 导致 FileNotFoundError
+        # macOS/Linux 用交互式 shell 继承 nvm PATH（~/.zshrc），避免 npx not found
         if sys.platform == "win32":
             result = subprocess.run(
                 cmd, capture_output=True, text=True, encoding="utf-8",
@@ -584,10 +647,10 @@ def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
         else:
             import shlex
             shell_cmd = " ".join(shlex.quote(c) for c in cmd)
+            shell_cmd = _login_shell_cmd(shell_cmd)
             result = subprocess.run(
                 shell_cmd, capture_output=True, text=True, encoding="utf-8",
                 errors="replace", timeout=timeout, shell=True,
-                executable=_shell_executable(),
             )
     except subprocess.TimeoutExpired:
         raise RuntimeError("列出技能超时，请检查网络或仓库地址")
@@ -687,14 +750,11 @@ def link_skill_dir(src: Path, dst: Path, force: bool = False) -> tuple:
     src = Path(src).resolve()
     dst = Path(dst)
     # 目标已存在
-    if dst.exists() or dst.is_symlink():
+    if dst.exists() or dst.is_symlink() or _is_junction(dst):
         if not force:
             return False, f"目标已存在: {dst}（需 force=True 覆盖）"
         try:
-            if dst.is_symlink() or dst.is_file():
-                dst.unlink()
-            else:
-                shutil.rmtree(dst, ignore_errors=True)
+            _remove_link_or_dir(dst)
         except Exception as e:
             return False, f"清理旧目标失败: {e}"
     try:
@@ -746,7 +806,7 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
         url = skill_config.get("url", "")
 
         if url:
-            install_command = f"npx --yes skills add {url} --skill {skill_name} -y".strip()
+            install_command = f"npx --yes skills add {url} --skill {skill_name}".strip()
         elif source:
             parsed_source, parsed_skill = parse_shorthand(source)
             # source 是 "owner/repo@skill" 格式 → parsed_source 和 parsed_skill 都有值
@@ -764,11 +824,11 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
                 effective_skill = ""
 
             if effective_skill:
-                install_command = f"npx --yes skills add {effective_source} --skill {effective_skill} -y".strip()
+                install_command = f"npx --yes skills add {effective_source} --skill {effective_skill}".strip()
             else:
-                install_command = f"npx --yes skills add {effective_source} -y".strip()
+                install_command = f"npx --yes skills add {effective_source}".strip()
         else:
-            install_command = f"npx --yes skills add {skill_name} -y".strip()
+            install_command = f"npx --yes skills add {skill_name}".strip()
     elif isinstance(skill_config, str):
         if skill_config.startswith("npx"):
             install_command = skill_config
@@ -785,16 +845,16 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
             parsed_source, parsed_skill = parse_shorthand(skill_config)
             if parsed_source and parsed_skill:
                 skill_name = parsed_skill
-                install_command = f"npx --yes skills add {parsed_source} --skill {parsed_skill} -y".strip()
+                install_command = f"npx --yes skills add {parsed_source} --skill {parsed_skill}".strip()
             elif parsed_source:
                 skill_name = parsed_source
-                install_command = f"npx --yes skills add {parsed_source} -y".strip()
+                install_command = f"npx --yes skills add {parsed_source}".strip()
             else:
                 skill_name = parsed_skill
-                install_command = f"npx --yes skills add {parsed_skill} -y".strip()
+                install_command = f"npx --yes skills add {parsed_skill}".strip()
     else:
         skill_name = str(skill_config)
-        install_command = f"npx --yes skills add {skill_name} -y".strip()
+        install_command = f"npx --yes skills add {skill_name}".strip()
 
     install_command = ensure_npx_yes(re.sub(r'\s+', ' ', install_command).strip())
     return skill_name, install_command
@@ -873,7 +933,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
         print(f"{COLOR_MAGENTA}[-] Installing skill via source: {source_command}{COLOR_RESET}")
         try:
             result = subprocess.run(
-                source_command,
+                _login_shell_cmd(source_command),
                 shell=True,
                 capture_output=False,
                 text=True,
@@ -889,13 +949,12 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
             print(f"{COLOR_YELLOW}[!] source 安装错误: {e}，尝试 find-skills 按名查找{COLOR_RESET}")
 
     # Step 3: find-skills 按名查找（市场搜索，忽略可能无效的 source）
-    find_command = f"npx --yes skills add {skill_name} -y"
+    find_command = f"npx --yes skills add {skill_name}"
     print(f"{COLOR_MAGENTA}[-] find-skills 查找: {find_command}{COLOR_RESET}")
     try:
         result = subprocess.run(
-            find_command,
+            _login_shell_cmd(find_command),
             shell=True,
-            executable=_shell_executable(),
             capture_output=False,
             text=True,
             encoding='utf-8',

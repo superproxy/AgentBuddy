@@ -25,38 +25,66 @@ from typing import Any, Dict, List, Optional
 
 
 def _shell_executable() -> Optional[str]:
-    """返回 shell=True 时应使用的可执行文件路径。
+    """返回用户登录 shell 路径（macOS/Linux）。
 
-    macOS/Linux 上 /bin/sh 的 PATH 不含 npx（通常在 /usr/local/bin、
-    /opt/homebrew/bin、~/.nvm/.../bin），导致 'npx not found'。
-    改用用户登录 shell（zsh/bash）以继承用户 PATH（含 nvm/brew 等）。
-    Windows 上 shell=True 已用 cmd.exe，无需调整。
+    GUI 应用（PyInstaller .app）从 Finder 启动时 $SHELL 可能未设置，
+    fallback 到 /bin/zsh（macOS 默认）→ /bin/bash。
+    Windows 返回 None（用默认 cmd.exe）。
     """
     if sys.platform == "win32":
         return None
-    # 优先用 $SHELL（用户登录 shell，如 /bin/zsh /opt/homebrew/bin/bash）
     user_shell = os.environ.get("SHELL", "")
-    if user_shell and shutil.which(user_shell):
+    if user_shell and Path(user_shell).exists():
         return user_shell
-    # 回退：尝试 zsh → bash → sh
     for cand in ("/bin/zsh", "/usr/local/bin/zsh", "/bin/bash", "/usr/local/bin/bash"):
         if Path(cand).exists():
             return cand
     return None
 
 
-def _login_shell_cmd(cmd: str) -> str:
-    """把命令包成登录 shell 调用，确保加载用户 profile（PATH 含 nvm/brew）。
+def _mac_node_paths() -> list:
+    """检测 macOS 上常见 Node/npx 安装路径（nvm/brew/volta/fnm）。"""
+    if sys.platform != "darwin":
+        return []
+    home = Path.home()
+    paths = [
+        "/usr/local/bin",       # Homebrew Intel
+        "/opt/homebrew/bin",    # Homebrew Apple Silicon
+        str(home / ".volta" / "bin"),  # Volta
+    ]
+    # nvm: 取最新 node 版本的 bin
+    nvm_node = home / ".nvm" / "versions" / "node"
+    if nvm_node.is_dir():
+        versions = sorted([d for d in nvm_node.iterdir() if d.is_dir()], reverse=True)
+        if versions:
+            paths.append(str(versions[0] / "bin"))
+    # fnm 多版本
+    fnm_dir = home / ".fnm"
+    if fnm_dir.is_dir():
+        paths.append(str(fnm_dir / "node-versions"))
+    return [p for p in paths if Path(p).exists()]
 
-    仅在非 Windows 平台生效；Windows 直接返回原命令。
+
+def _login_shell_cmd(cmd: str) -> str:
+    """把命令包成交互式 shell 调用，确保加载 ~/.zshrc（nvm PATH 通常在此）。
+
+    -i: 交互式（读 ~/.zshrc/~/.bashrc，nvm 在这里 export PATH）
+    unset PROMPT: 避免 prompt 输出污染日志
+    GUI 应用启动时 PATH 缺失，额外注入 nvm/brew 路径作为兜底。
     """
     if sys.platform == "win32":
         return cmd
     sh = _shell_executable()
     if not sh:
         return cmd
-    # -l: 登录 shell（加载 ~/.zprofile/~/.bash_profile）；-c: 执行命令
-    return f'{sh} -l -c {_shell_quote(cmd)}'
+    # 显式注入 Node 路径（GUI 应用 PATH 兜底）
+    node_paths = _mac_node_paths()
+    path_prefix = ""
+    if node_paths:
+        path_prefix = f'export PATH="{":".join(node_paths)}:$PATH"; '
+    # -i: 交互式读 ~/.zshrc；unset PROMPT 清除 prompt 噪音
+    wrapped = f"{path_prefix}unset PROMPT RPROMPT PS1 PS2 2>/dev/null; {cmd}"
+    return f'{sh} -i -c {_shell_quote(wrapped)}'
 
 
 def _shell_quote(s: str) -> str:
@@ -454,13 +482,13 @@ def _stream_process(cmd: str, cwd: Optional[Path] = None):
 
 def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
     """类似 _stream_process，但返回 returncode（用于安装流程判断），不发 [DONE]。"""
+    cmd = _login_shell_cmd(cmd)  # macOS 用交互式 shell 继承 nvm PATH
     yield f"data: [CMD] {cmd}\n\n"
     rc = 1
     try:
         proc = subprocess.Popen(
             cmd,
             shell=True,
-            executable=_shell_executable(),
             cwd=str(cwd) if cwd else None,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
