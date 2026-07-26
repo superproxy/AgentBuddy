@@ -43,15 +43,16 @@ def _shell_executable() -> Optional[str]:
 
 
 def _mac_node_paths() -> list:
-    """检测 macOS 上常见 Node/npx 安装路径（nvm/brew/volta/fnm）。"""
+    """检测 macOS 上常见 Node/npx 安装路径（nvm/brew/volta/fnm）。
+
+    顺序原则：用户主动安装的新版（nvm/volta/fnm）在前，系统级 brew（可能是旧版）在后。
+    避免 /usr/local/bin/node (如 v14) 优先于 nvm v24 导致语法不兼容。
+    """
     if sys.platform != "darwin":
         return []
     home = Path.home()
-    paths = [
-        "/usr/local/bin",       # Homebrew Intel
-        "/opt/homebrew/bin",    # Homebrew Apple Silicon
-        str(home / ".volta" / "bin"),  # Volta
-    ]
+    # 用户主动安装的版本管理器优先（通常版本更新）
+    paths = [str(home / ".volta" / "bin")]  # Volta
     # nvm: 取最新 node 版本的 bin
     nvm_node = home / ".nvm" / "versions" / "node"
     if nvm_node.is_dir():
@@ -62,6 +63,11 @@ def _mac_node_paths() -> list:
     fnm_dir = home / ".fnm"
     if fnm_dir.is_dir():
         paths.append(str(fnm_dir / "node-versions"))
+    # 系统级 brew 放最后（可能含旧版 node）
+    paths.extend([
+        "/opt/homebrew/bin",    # Homebrew Apple Silicon
+        "/usr/local/bin",       # Homebrew Intel
+    ])
     return [p for p in paths if Path(p).exists()]
 
 
