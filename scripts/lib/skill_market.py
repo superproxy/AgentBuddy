@@ -2,7 +2,7 @@
 
 数据源：
   - modelscope  ModelScope OpenAPI（国内，与 MCP 共用生态）
-  - skillssh    skills.sh（Vercel 官方目录，npx skills add）
+  - skillssh    skills.sh（Vercel 官方目录，npx skills@latest add）
   - skillsmp    SkillsMP（大规模 GitHub SKILL.md 索引，匿名可搜）
   - smithery    Smithery Skills（GET /skills，与 MCP 同源平台）
   - clawhub     ClawHub / OpenClaw 技能注册表（向量语义搜索）
@@ -91,7 +91,7 @@ def _skills_add_cmd(spec: str) -> str:
     spec = (spec or "").strip()
     if not spec:
         return ""
-    return f"npx --yes skills add {spec} --copy -y"
+    return f"npx --yes skills@latest add {spec} --copy -y"
 
 
 def _github_tree_to_spec(url: str, skill_name: str = "") -> str:
@@ -151,7 +151,7 @@ class ModelScopeSkillsClient:
                     if owner and name:
                         spec = f"{owner}/{name}" if "/" not in str(owner) else f"{owner}@{name}"
                 cmd = _skills_add_cmd(spec) if spec else ""
-            elif cmd.startswith("npx") and "--copy" not in cmd:
+            elif cmd.startswith("npx") and "skills" in cmd and "--copy" not in cmd:
                 cmd = cmd.replace(" -y", "").rstrip() + " --copy -y"
             out.append(_item(
                 source="modelscope",

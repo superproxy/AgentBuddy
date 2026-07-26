@@ -182,7 +182,7 @@ export const useSkillStore = defineStore('skill', () => {
     let cmd = s.install_command || ''
     if (cmd && /^\s*npx\b/.test(cmd)) {
       // 仅对 skills add 补 --copy / npx --yes；clawhub 等其它 CLI 不改写
-      if (/\bskills\s+add\b/.test(cmd)) {
+      if (/\bskills(@[\w.]+)?\s+add\b/.test(cmd)) {
         // 避免 npx 交互提示 Need to install the following packages: skills@...
         if (!/\bnpx\s+(-y|--yes)\b/.test(cmd)) cmd = cmd.replace(/^\s*npx\b/, 'npx --yes')
         if (!cmd.includes('--copy')) cmd = cmd.replace(/ -y$/, '').trimEnd() + ' --copy -y'

@@ -1970,11 +1970,11 @@ def install_skill_sse():
 
         if selected:
             skill_flags = " ".join(f'--skill {s}' for s in selected)
-            cmd = f"npx --yes skills add {effective_source} {skill_flags} --copy -y"
+            cmd = f"npx --yes skills@latest add {effective_source} {skill_flags} --copy -y"
             skill_name = ",".join(selected)
         else:
             # 未指定技能：仍允许安装全部（兼容旧行为）；UI 会先引导勾选
-            cmd = f"npx --yes skills add {effective_source} --copy -y"
+            cmd = f"npx --yes skills@latest add {effective_source} --copy -y"
             skill_name = effective_source
 
     cmd = ensure_npx_yes(cmd)
@@ -2156,8 +2156,8 @@ def skills_upgrade_sse():
     Query:
       name=skill_name  必填
       mode=source|cli  可选，默认 source。
-        - source: 用记录的 GitHub 源 `npx skills add <src> --copy`（需源记录）
-        - cli:    用 `npx skills update <name> -y`，走 skills 注册表，绕过 GitHub API 限流
+        - source: 用记录的 GitHub 源 `npx --yes skills@latest add <src> --copy -y`（需源记录）
+        - cli:    用 `npx skills@latest update <name> -y`，走 skills 注册表，绕过 GitHub API 限流
     """
     name = request.args.get("name", "").strip()
     mode = (request.args.get("mode") or "source").strip().lower()
@@ -2169,7 +2169,7 @@ def skills_upgrade_sse():
 
     if mode == "cli":
         # CLI 模式：直接用 skills update，不依赖源记录，绕过 GitHub API
-        cmd = ensure_npx_yes(f"npx --yes skills update {name} -y")
+        cmd = ensure_npx_yes(f"npx --yes skills@latest update {name} -y")
     else:
         if not info or not isinstance(info, dict):
             return Response(f"data: [ERROR] 未找到 {name} 的来源记录，无法升级（可改用 CLI 模式）\n\n", mimetype="text/event-stream")
@@ -2179,9 +2179,9 @@ def skills_upgrade_sse():
         skill_filter = info.get("skill") or ""
         # 重新安装：复用 install 路由的逻辑，但走 source 模式
         if skill_filter:
-            cmd = f"npx --yes skills add {src} --skill {skill_filter} --copy -y"
+            cmd = f"npx --yes skills@latest add {src} --skill {skill_filter} --copy -y"
         else:
-            cmd = f"npx --yes skills add {src} --copy -y"
+            cmd = f"npx --yes skills@latest add {src} --copy -y"
         cmd = ensure_npx_yes(cmd)
 
     def _stream_upgrade():
@@ -4002,7 +4002,7 @@ def install_plugin_sse():
                         yield f"data: [!] source 安装失败(rc={rc})，尝试 find-skills\n\n"
 
                 # Step 3: find-skills 按名查找
-                find_cmd = f"npx --yes skills add {skill_name} -y"
+                find_cmd = f"npx --yes skills@latest add {skill_name} --copy -y"
                 rc = yield from _stream_process_rc(find_cmd, cwd=PROJECT_ROOT)
                 if rc == 0 and (is_whole_repo or _skill_exists(skill_name)):
                     yield f"data: [OK] Skill installed from marketplace: {skill_name}\n\n"

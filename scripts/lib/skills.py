@@ -513,7 +513,7 @@ def _strip_ansi(text: str) -> str:
 
 
 def _parse_skills_cli_list(output: str) -> list:
-    """解析 `npx skills add <src> -l` 的终端输出为 [{name, description}]。"""
+    """解析 `npx skills@latest add <src> -l` 的终端输出为 [{name, description}]。"""
     clean = _strip_ansi(output)
     skills = []
     # 定位 Available Skills 段
@@ -630,9 +630,9 @@ def _list_skills_via_github(owner: str, repo: str, timeout: int = 20) -> list:
 
 
 def _list_skills_via_cli(source: str, timeout: int = 120) -> list:
-    """回退：调用 npx skills add <source> -l 列出技能。"""
+    """回退：调用 npx skills@latest add <source> -l 列出技能。"""
     cmd = [
-        "npx", "skills",
+        "npx", "skills@latest",
         "add", source,
         "-l", "-y",
         "--agent", "cursor",
@@ -794,8 +794,10 @@ def link_skill_dir(src: Path, dst: Path, force: bool = False) -> tuple:
 def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
     """构建安装命令，返回 (skill_name, install_command)。
 
-    use_symlink 参数保留以兼容调用方，但不再生成 --copy/symlink 标志
-    （统一使用 npx skills add 默认行为）。
+    统一格式：npx --yes skills@latest add <source> [--skill <name>] --copy -y
+    - --yes: npx 自动确认安装 skills 包
+    - --copy: 强制复制（避免 Trae 沙箱下 symlink 失败）
+    - -y: skills CLI 自动确认
     """
     skill_name = ""
 
@@ -806,7 +808,7 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
         url = skill_config.get("url", "")
 
         if url:
-            install_command = f"npx skills add {url} --skill {skill_name}".strip()
+            install_command = f"npx skills@latest add {url} --skill {skill_name}".strip()
         elif source:
             parsed_source, parsed_skill = parse_shorthand(source)
             # source 是 "owner/repo@skill" 格式 → parsed_source 和 parsed_skill 都有值
@@ -824,11 +826,11 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
                 effective_skill = ""
 
             if effective_skill:
-                install_command = f"npx skills add {effective_source} --skill {effective_skill}".strip()
+                install_command = f"npx skills@latest add {effective_source} --skill {effective_skill}".strip()
             else:
-                install_command = f"npx skills add {effective_source}".strip()
+                install_command = f"npx skills@latest add {effective_source}".strip()
         else:
-            install_command = f"npx skills add {skill_name}".strip()
+            install_command = f"npx skills@latest add {skill_name}".strip()
     elif isinstance(skill_config, str):
         if skill_config.startswith("npx"):
             install_command = skill_config
@@ -845,18 +847,25 @@ def build_install_command(skill_config, use_symlink: bool = False) -> tuple:
             parsed_source, parsed_skill = parse_shorthand(skill_config)
             if parsed_source and parsed_skill:
                 skill_name = parsed_skill
-                install_command = f"npx skills add {parsed_source} --skill {parsed_skill}".strip()
+                install_command = f"npx skills@latest add {parsed_source} --skill {parsed_skill}".strip()
             elif parsed_source:
                 skill_name = parsed_source
-                install_command = f"npx skills add {parsed_source}".strip()
+                install_command = f"npx skills@latest add {parsed_source}".strip()
             else:
                 skill_name = parsed_skill
-                install_command = f"npx skills add {parsed_skill}".strip()
+                install_command = f"npx skills@latest add {parsed_skill}".strip()
     else:
         skill_name = str(skill_config)
-        install_command = f"npx skills add {skill_name}".strip()
+        install_command = f"npx skills@latest add {skill_name}".strip()
 
-    install_command = ensure_npx_yes(re.sub(r'\s+', ' ', install_command).strip())
+    install_command = re.sub(r'\s+', ' ', install_command).strip()
+    # 统一追加 --copy -y（仅对 skills@latest add 命令）
+    if 'skills@latest add' in install_command:
+        if '--copy' not in install_command:
+            install_command = re.sub(r'\s+-y\s*$', '', install_command) + ' --copy -y'
+        elif not re.search(r'\s-y(\s|$)', install_command):
+            install_command += ' -y'
+    install_command = ensure_npx_yes(install_command)
     return skill_name, install_command
 
 
@@ -865,10 +874,10 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
 
     流程：
       1. 已存在于 config/skills/ 或 .agents/skills/ → 跳过（成功）
-      2. source 有效（owner/repo 或 url）→ npx skills add <source> [--skill <name>]
+      2. source 有效（owner/repo 或 url）→ npx skills@latest add <source> [--skill <name>]
          - 有 --skill → 安装指定技能，按 <name> 验证
          - 无 --skill（整个仓库）→ returncode==0 即视为成功
-      3. find-skills 按名查找：npx skills add <name> -y（市场搜索）
+      3. find-skills 按名查找：npx skills@latest add <name> -y（市场搜索）
       4. 本地缓存 template/skills/<name> → 复制到 config/skills/
       5. 仍未成功 → 返回 False（失败）
 
@@ -949,7 +958,7 @@ def install_skill(skill_config, source_dir: Path = None, use_symlink: bool = Fal
             print(f"{COLOR_YELLOW}[!] source 安装错误: {e}，尝试 find-skills 按名查找{COLOR_RESET}")
 
     # Step 3: find-skills 按名查找（市场搜索，忽略可能无效的 source）
-    find_command = f"npx skills add {skill_name}"
+    find_command = ensure_npx_yes(f"npx skills@latest add {skill_name} --copy -y")
     print(f"{COLOR_MAGENTA}[-] find-skills 查找: {find_command}{COLOR_RESET}")
     try:
         result = subprocess.run(
@@ -1358,7 +1367,7 @@ def find_source_via_search(skill_name: str, timeout: int = 15) -> dict:
     if not best:
         return {"source": "", "skill_filter": "", "url": "", "method": "",
                 "message": f"未找到精确匹配（搜索到 {len(items)} 项，但 name 均不等于 {skill_name}）"}
-    # 从 install_command 提取 source：npx skills add owner/repo[@skill]
+    # 从 install_command 提取 source：npx skills@latest add owner/repo[@skill]
     cmd = (best.get("install_command") or "").strip()
     m = re.search(r'skills\s+add\s+([^\s]+)', cmd)
     spec = m.group(1) if m else ""
