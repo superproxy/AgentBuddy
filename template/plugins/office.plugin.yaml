@@ -6,7 +6,10 @@ license: MIT
 keywords: [office, document, browser, automation]
 categories: [office, browser]
 scripts:
-  install: npm i -g open-computer-use && npm i -g open-browser-use && open-browser-use setup
+  install: |
+    npm i -g open-computer-use
+    npm i -g open-browser-use
+    open-browser-use setup
 mcpServers:
   open-computer-use:
     command: open-computer-use
@@ -63,3 +66,17 @@ skills:
     source: anthropics/skills
     skill: doc-coauthoring
     description: 文档协作 - 分阶段协作流程组织与完善文档内容
+  - name: tts
+    source: openclaw/openclaw
+    skill: sherpa-onnx-tts 
+    description: 文本转语音 - 生成自然语音
+
+  - name: hyperframes
+    source: heygen-com/hyperframes
+    skill: hyperframes
+    description: 视频处理 - 视频编辑、剪辑、合并
+
+  - name: gpt-image-2
+    source: pilioai/skills
+    skill: gpt-image-2
+    description: 图片生成 - 基于 GPT-2 模型的图片生成
