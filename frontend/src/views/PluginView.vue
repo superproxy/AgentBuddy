@@ -22,6 +22,11 @@ const exportMenu = ref<string | null>(null)
 const dragging = ref(false)
 const dragCounter = ref(0)
 
+// ===== 导入弹层 =====
+const importOpen = ref(false)
+const importDragOver = ref(false)
+const importFileInput = ref<HTMLInputElement | null>(null)
+
 // ===== 视图切换：列表（默认）/ 图标 =====
 type ViewMode = 'list' | 'grid'
 const viewMode = ref<ViewMode>('list')
@@ -106,7 +111,30 @@ function selectVisible() {
   selectFilesForExport(sortedPlugins.value.map((p) => p.file))
 }
 
-function triggerImport() { inputRef.value?.click() }
+function triggerImport() { importOpen.value = true }
+function closeImport() { importOpen.value = false }
+function onImportFileClick() { importFileInput.value?.click() }
+function onImportFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) doImportFile(file)
+  input.value = ''
+}
+async function onImportDrop(e: DragEvent) {
+  e.preventDefault()
+  importDragOver.value = false
+  const file = e.dataTransfer?.files?.[0]
+  if (file) doImportFile(file)
+}
+async function doImportFile(file: File) {
+  const ok = /\.(ya?ml|zip)$/i.test(file.name)
+  if (!ok) {
+    ui.toast('仅支持 .zip / .yaml / .yml', 'warn')
+    return
+  }
+  importOpen.value = false
+  await importPluginFile(file)
+}
 
 // ===== 导出选项弹窗 =====
 type KeyMode = 'plain' | 'vault' | 'redacted'
@@ -520,6 +548,47 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
       </div>
     </Teleport>
 
+    <!-- 导入弹层 -->
+    <Teleport to="body">
+      <Transition name="modal-fade">
+        <div v-if="importOpen" class="modal-mask" @click.self="closeImport">
+          <div class="modal-card import-modal" role="dialog" aria-modal="true" aria-labelledby="plugin-import-title">
+            <header class="modal-head">
+              <h2 id="plugin-import-title">导入插件</h2>
+              <button type="button" class="modal-close" aria-label="关闭" @click="closeImport">×</button>
+            </header>
+            <div class="modal-body">
+              <div
+                class="import-dropzone"
+                :class="{ over: importDragOver }"
+                @dragover.prevent="importDragOver = true"
+                @dragleave.prevent="importDragOver = false"
+                @drop="onImportDrop"
+                @click="onImportFileClick"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="dz-text">
+                  <b>点击选择文件</b> 或拖拽到此处
+                  <div class="dz-formats">支持 .zip（含 Skills）或 .yaml / .yml</div>
+                </div>
+                <input
+                  ref="importFileInput"
+                  type="file"
+                  accept=".yaml,.yml,.zip"
+                  style="display:none"
+                  @change="onImportFileChange"
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 拖拽导入浮层 -->
     <Transition name="drop-fade">
       <div v-if="dragging" class="drop-overlay" @drop="onDrop" @dragover.prevent @dragleave.prevent>
@@ -880,6 +949,24 @@ th.sortable.active .sort-ic.desc { transform: rotate(180deg); }
 }
 .modal-close:hover { background: var(--bg-base); color: var(--text-primary); }
 .modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+/* 导入弹层专属 */
+.import-modal { max-width: 480px; }
+.import-dropzone {
+  display: flex; align-items: center; gap: 14px;
+  padding: 24px 20px;
+  border: 2px dashed var(--border-base);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s;
+  background: var(--bg-base);
+}
+.import-dropzone:hover { border-color: var(--primary); background: var(--primary-container); }
+.import-dropzone.over { border-color: var(--primary); background: var(--primary-container); transform: scale(1.01); }
+.import-dropzone svg { width: 32px; height: 32px; color: var(--text-tertiary); flex-shrink: 0; }
+.import-dropzone .dz-text { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.import-dropzone .dz-text b { color: var(--primary); font-weight: 600; }
+.import-dropzone .dz-formats { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
 .modal-hint { margin: 0 0 4px; font-size: 12px; color: var(--text-tertiary); }
 .opt-row {
   display: flex; gap: 10px; padding: 12px 14px;

@@ -22,8 +22,8 @@ export default defineConfig({
     assetsDir: 'assets',
   },
   server: {
-    port: 5173,
-    strictPort: true,
+    port: 19527,
+    strictPort: false,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:5050',
