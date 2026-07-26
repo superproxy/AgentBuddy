@@ -3629,11 +3629,9 @@ def import_plugin():
     content = body.get("content") or ""
     if not fname:
         return jsonify({"ok": False, "error": "缺少 filename"}), 400
-    if not fname.endswith(".plugin.yaml"):
-        return jsonify({"ok": False, "error": "文件名必须以 .plugin.yaml 结尾"}), 400
-    safe_name = "".join(c for c in fname if c.isalnum() or c in ("-", "_", "."))
-    if safe_name != fname:
-        return jsonify({"ok": False, "error": "文件名含非法字符"}), 400
+    # 放宽文件名后缀校验：接受 .plugin.yaml/.plugin.yml/.yaml/.yml
+    if not fname.lower().endswith((".plugin.yaml", ".plugin.yml", ".yaml", ".yml")):
+        return jsonify({"ok": False, "error": "仅支持 .yaml/.yml/.plugin.yaml 文件"}), 400
     # yaml 校验
     try:
         data = yaml.safe_load(content)
@@ -3641,13 +3639,22 @@ def import_plugin():
         return jsonify({"ok": False, "error": f"YAML 解析失败: {e}"}), 400
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "yaml 顶层应为 dict"}), 400
-    if not data.get("name"):
-        return jsonify({"ok": False, "error": "缺少 name 字段"}), 400
-    out_path = CONFIG_PLUGINS_DIR / safe_name
+    # 生成安全输出文件名：优先用 yaml.name（建议名），为空则回退到原始 fname
+    # name 字段为建议文件名，不强制必填
+    plugin_name = str(data.get("name") or "").strip()
+    candidate = plugin_name if plugin_name else Path(fname).stem
+    # 去掉 candidate 末尾可能存在的 .plugin 后缀（避免 test.plugin.yml → test.plugin.plugin.yaml）
+    if candidate.lower().endswith(".plugin"):
+        candidate = candidate[:-len(".plugin")]
+    safe_name = "".join(c for c in candidate if c.isalnum() or c in ("-", "_", "."))
+    if not safe_name:
+        return jsonify({"ok": False, "error": "无法生成有效的文件名（name 和 filename 均含非法字符）"}), 400
+    out_filename = f"{safe_name}.plugin.yaml"
+    out_path = CONFIG_PLUGINS_DIR / out_filename
     overwrite = bool(body.get("overwrite"))
     if out_path.exists() and not overwrite:
         return jsonify({"ok": False, "error": "exists",
-                        "msg": f"{safe_name} 已存在，是否覆盖？"}), 409
+                        "msg": f"{out_filename} 已存在，是否覆盖？"}), 409
     try:
         CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")

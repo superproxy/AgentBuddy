@@ -1,0 +1,20 @@
+name: download
+version: 1.0.0
+description: 常用下载
+author: AgentBuddy
+license: MIT
+scripts:
+  install:
+    default: |
+      pip install yt-dlp
+    macos: |
+      brew install ffmpeg
+    windows: |
+      winget install ffmpeg
+    linux: |
+      sudo apt install -y ffmpeg
+mcpServers:
+skills:
+  - name: yt-dlp-downloader-skill
+    source: MapleShaw/yt-dlp-downloader-skill/
+    description: 视频下载 - 使用 yt-dlp 下载视频

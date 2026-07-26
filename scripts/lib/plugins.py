@@ -170,6 +170,49 @@ def _run_script(cmd: str, label: str, timeout: int = 300) -> bool:
         return False
 
 
+def _current_platform_key() -> str:
+    """返回当前平台标识：macos / windows / linux。"""
+    if sys.platform == "darwin":
+        return "macos"
+    if sys.platform == "win32":
+        return "windows"
+    return "linux"
+
+
+def _resolve_platform_script(script_field) -> list:
+    """解析脚本字段，返回当前平台应执行的命令列表。
+
+    支持两种格式：
+    - str: 所有平台通用，返回 [cmd]
+    - dict: 按 macos/windows/linux/default 分脚本
+            先执行 default（如有），再执行当前平台脚本
+
+    示例 dict:
+        install:
+          default: pip install yt-dlp
+          macos: brew install ffmpeg
+          windows: winget install ffmpeg
+          linux: sudo apt install -y ffmpeg
+    """
+    if not script_field:
+        return []
+    if isinstance(script_field, str):
+        return [script_field]
+    if isinstance(script_field, dict):
+        cmds = []
+        # default 先执行（所有平台通用部分）
+        default_cmd = script_field.get("default")
+        if default_cmd:
+            cmds.append(default_cmd)
+        # 平台特定脚本
+        platform_key = _current_platform_key()
+        platform_cmd = script_field.get(platform_key)
+        if platform_cmd:
+            cmds.append(platform_cmd)
+        return cmds
+    return []
+
+
 def run_plugin_scripts(plugin_config: dict) -> None:
     """执行插件安装脚本（对齐 npm 生命周期：preinstall → install → postinstall）
 
@@ -189,11 +232,13 @@ def run_plugin_scripts(plugin_config: dict) -> None:
     # 按 npm 生命周期顺序执行
     for stage in ("preinstall", "install", "postinstall"):
         if stage in scripts and scripts[stage]:
-            _run_script(scripts[stage], f"插件 {stage} 脚本")
+            for cmd in _resolve_platform_script(scripts[stage]):
+                _run_script(cmd, f"插件 {stage} 脚本")
 
     # prepare 通常在打包阶段，安装时也执行一次（与 npm 行为一致）
     if "prepare" in scripts and scripts["prepare"]:
-        _run_script(scripts["prepare"], "插件 prepare 脚本")
+        for cmd in _resolve_platform_script(scripts["prepare"]):
+            _run_script(cmd, "插件 prepare 脚本")
 
 
 def run_plugin_uninstall_scripts(plugin_config: dict) -> None:
@@ -210,7 +255,8 @@ def run_plugin_uninstall_scripts(plugin_config: dict) -> None:
 
     for stage in ("preuninstall", "uninstall", "postuninstall"):
         if stage in scripts and scripts[stage]:
-            _run_script(scripts[stage], f"插件 {stage} 脚本", timeout=120)
+            for cmd in _resolve_platform_script(scripts[stage]):
+                _run_script(cmd, f"插件 {stage} 脚本", timeout=120)
 
 
 def install_skills(plugin_config: dict, source_dir: Path, use_symlink: bool = False) -> tuple:

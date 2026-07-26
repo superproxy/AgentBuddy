@@ -73,7 +73,6 @@ skills:
 
   - name: hyperframes
     source: heygen-com/hyperframes
-    skill: hyperframes
     description: 视频处理 - 视频编辑、剪辑、合并
 
   - name: gpt-image-2
