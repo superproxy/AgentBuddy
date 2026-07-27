@@ -236,16 +236,22 @@ install_meta:
       url: jetbrains://plugin/24326
       extension_id: "24326"
       note: 点击安装将在 JetBrains IDE 中打开插件安装页面（需 JetBrains 2022.1+）
+    # Trae CN ACP：通过 ACP 协议接入 JetBrains IDE
+    acp_install:
+      method: manual
+      url: https://www.jetbrains.com/acp/
+      cmd: trae acp
+      note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 trae acp 后连接
     download_urls:
       macos_arm64: https://www.trae.cn/download
       macos_x64: https://www.trae.cn/download
       windows_x64: https://www.trae.cn/download
       linux_x64: https://www.trae.cn/download
       linux_arm64: https://www.trae.cn/download
-    install_methods: [script, app, jetbrains]
+    install_methods: [script, app, jetbrains, acp]
     brand: Trae CN
     category: code
-    forms: [app, cli, vscode, idea]
+    forms: [app, cli, vscode, idea, acp]
 
   TraeSoloCN:
     # 字节跳动 Trae Solo CN（独立 Solo 模式国内版）
@@ -770,6 +776,49 @@ install_meta:
     category: code
     forms: [app]
 
+  Copilot:
+    # GitHub Copilot（GitHub 官方 AI 编程助手）
+    # 官网：https://github.com/features/copilot
+    # 三种形态：CLI（copilot-cli）、Desktop App（GitHub Copilot App）、VS Code 扩展
+    # 来源：
+    #   - CLI: https://github.com/features/copilot/cli
+    #   - App: https://github.com/features/ai/github-app
+    #   - VS Code: https://github.com/features/copilot/ai-code-editor
+    label: GitHub Copilot
+    version: latest
+    release_date: "2026-07-01"
+    homepage: https://github.com/features/copilot
+    docs_url: https://docs.github.com/en/copilot
+    release_url: https://github.com/github/copilot-sdk/releases
+    cli_install:
+      # npm 安装：npm install -g @github/copilot
+      # brew 安装：brew install copilot-cli
+      method: npm
+      package: "@github/copilot"
+      url: https://github.com/features/copilot/cli
+      uninstall_cmd_mac: "npm uninstall -g @github/copilot 2>/dev/null; brew uninstall copilot-cli 2>/dev/null; rm -f ~/.local/bin/copilot; true"
+      uninstall_cmd_win: "npm uninstall -g @github/copilot 2>nul & del /q \"%APPDATA%\\npm\\copilot\" \"%APPDATA%\\npm\\copilot.cmd\" \"%APPDATA%\\npm\\copilot.ps1\" 2>nul & exit /b 0"
+    app_install:
+      # GitHub Copilot App（桌面应用，macOS/Windows/Linux）
+      method: system_uninstall
+      url: https://github.com/features/ai/github-app
+      uninstall_cmd_mac: "rm -rf '/Applications/GitHub Copilot.app' ~/.copilot 2>/dev/null; true"
+      uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\GitHub Copilot\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.copilot\" 2>nul & exit /b 0"
+    vscode_install:
+      # Copilot in VS Code（需先安装 VS Code，然后在扩展市场搜索 GitHub Copilot）
+      method: manual
+      url: https://github.com/features/copilot/ai-code-editor
+      note: "在 VS Code 扩展市场搜索 GitHub Copilot 安装（扩展 ID: GitHub.copilot）"
+    download_urls:
+      macos_arm64: https://github.com/features/ai/github-app
+      macos_x64: https://github.com/features/ai/github-app
+      windows_x64: https://github.com/features/ai/github-app
+      linux_x64: https://github.com/features/ai/github-app
+    install_methods: [npm, brew, app, vscode]
+    brand: Copilot
+    category: code
+    forms: [cli, app, vscode]
+
 
 # ============================================================
 # detect_meta: IDE 检测元数据
@@ -1033,4 +1082,16 @@ detect_meta:
       - "{LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe"
       - "{ProgramFiles}/Microsoft VS Code/Code.exe"
     config_dirs: [".vscode"]
+    is_tui: false
+
+  Copilot:
+    label: GitHub Copilot
+    # CLI: copilot 命令（npm @github/copilot 或 brew copilot-cli）
+    cli_names: [copilot]
+    # App: GitHub Copilot.app（桌面应用）
+    macos_apps: ["/Applications/GitHub Copilot.app"]
+    windows_apps:
+      - "{LOCALAPPDATA}/Programs/GitHub Copilot/GitHub Copilot.exe"
+      - "{ProgramFiles}/GitHub Copilot/GitHub Copilot.exe"
+    config_dirs: [.copilot, .config/gh]
     is_tui: false
