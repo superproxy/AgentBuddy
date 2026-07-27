@@ -41,6 +41,9 @@ export interface IdeInstallInfo {
   available: boolean
   cli?: { method: string; package?: string; url?: string; script_url?: string; [k: string]: any }
   app?: { method: string; package?: string; url?: string; [k: string]: any }
+  vscode?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
+  jetbrains?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
+  acp?: { method: string; url?: string; cmd?: string; note?: string; [k: string]: any }
   homepage?: string
   // 新分类字段：品牌 + 顶层 Code/Work + 形式子集
   brand?: string       // 'Kimi' | 'Claude' | 'Codex' | 'Trae' | 'Qoder' | 'JetBrains' | ...
@@ -279,9 +282,26 @@ export const useIdeStore = defineStore('ide', () => {
     window.open(url, '_blank')
   }
 
-  /** 兼容旧调用名：打开外部下载页 */
-  function downloadUrl(url: string) {
-    openExternal(url)
+  /** 打开 URL 或 deep link 协议（vscode: / jetbrains: / https: 等）。
+   * pywebview 桌面模式下 openExternal 对 deep link 协议无效（系统浏览器不识别 vscode: 协议），
+   * 通过后端 /api/ide/open-url 用系统命令打开（macOS: open, Windows: start, Linux: xdg-open）。
+   * 用于 VSCode 扩展（vscode:extension/xxx）、JetBrains 插件（jetbrains://plugin/xxx）等 deep link。
+   */
+  async function openIdeUrl(url?: string) {
+    if (!url) return
+    try {
+      const r = await api<{ ok: boolean; error?: string }>('/api/ide/open-url', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      })
+      if (!r.ok) {
+        // 后端失败，回退到 openExternal（浏览器模式或老版本后端）
+        openExternal(url)
+      }
+    } catch {
+      // 网络错误等，回退到 openExternal
+      openExternal(url)
+    }
   }
 
   async function loadIdeDetect() {
@@ -420,7 +440,9 @@ export const useIdeStore = defineStore('ide', () => {
         await loadIdeDetect()
       } else if (r.url) {
         ui.toast(`${r.message || '需手动安装'}：${r.url}`, 'warn')
-        downloadUrl(r.url)
+        // vscode/jetbrains/acp 等 deep link 协议走 openIdeUrl（后端用系统命令打开）
+        // https/http 普通链接也走 openIdeUrl（统一入口，后端会自动处理）
+        openIdeUrl(r.url)
       } else {
         ui.toast(`安装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
       }
@@ -467,7 +489,7 @@ export const useIdeStore = defineStore('ide', () => {
         await loadIdeDetect()
       } else if (r.url) {
         ui.toast(`${r.message || '需手动安装'}：${r.url}`, 'warn')
-        downloadUrl(r.url)
+        openIdeUrl(r.url)
       } else {
         ui.toast(`重装 ${ideKey} ${mode.toUpperCase()} 失败: ${r.message || r.error || ''}`, 'err')
       }
@@ -651,5 +673,6 @@ export const useIdeStore = defineStore('ide', () => {
     openShareModal,
     importSession,
     openExternal,
+    openIdeUrl,
   }
 })

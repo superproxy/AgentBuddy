@@ -207,7 +207,7 @@ const { dragIdeKey, dragOverIdeKey } = storeToRefs(sync)
 const {
   loadIdeDetect, launchIde, installIde, uninstallIde, reinstallIde, openIdeConfig,
   syncIdeConfig, toggleIdeSessions, closeSessionDrawer, toggleIdeCard, setIdeCardTab, exportSession,
-  openShareModal, importSession, openExternal,
+  openShareModal, importSession, openExternal, openIdeUrl,
 } = ide
 const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
@@ -668,7 +668,7 @@ watch(
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步到 JetBrains' }}
             </button>
-            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
+            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
           </template>
           <template v-else-if="currentInstalled(currentSelectedIde)">
             <button @click="launchIde(currentSelectedIde.key, null, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">
@@ -689,18 +689,28 @@ watch(
             <button v-if="currentMethod(currentSelectedIde) && currentMethod(currentSelectedIde) !== 'manual'" @click="uninstallIde(currentSelectedIde.key, currentTab(currentSelectedIde), true)" :disabled="ideUninstalling === busyKey(currentSelectedIde) + ':force'" class="dock-item danger" type="button" title="跳过系统卸载程序，直接强删目录">{{ ideUninstalling === busyKey(currentSelectedIde) + ':force' ? '...' : '强删' }}</button>
           </template>
           <template v-else>
-            <button v-if="currentMethod(currentSelectedIde) === 'extension'" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item primary" type="button">
+            <!-- 安装按钮：extension 走 deep link 跳转市场，其他 method 走后端安装，manual 走下载页 -->
+            <button v-if="currentMethod(currentSelectedIde) === 'extension'" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-              安装
+              安装插件
             </button>
             <button v-else-if="currentMethod(currentSelectedIde) && currentMethod(currentSelectedIde) !== 'manual'" @click="installIde(currentSelectedIde.key, currentTab(currentSelectedIde))" :disabled="ideInstalling === busyKey(currentSelectedIde)" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
               {{ ideInstalling === busyKey(currentSelectedIde) ? '...' : '安装' }}
             </button>
-            <a v-else-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item">下载</a>
+            <a v-else-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">下载</a>
+            <!-- 打开宿主 IDE：vscode tab → 打开 VSCode 应用；jetbrains tab → 打开 JetBrains IDEA 应用 -->
+            <button v-if="currentTab(currentSelectedIde) === 'vscode'" @click="launchIde('VSCode', null, 'app')" :disabled="ideLaunching === 'VSCode'" class="dock-item" type="button" title="打开 VSCode 编辑器">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === 'VSCode' ? '...' : '打开 VSCode' }}
+            </button>
+            <button v-if="currentTab(currentSelectedIde) === 'jetbrains'" @click="launchIde('IDEA', null, 'app')" :disabled="ideLaunching === 'IDEA'" class="dock-item" type="button" title="打开 IntelliJ IDEA">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === 'IDEA' ? '...' : '打开 IDEA' }}
+            </button>
             <button v-if="currentSelectedIde.config_paths?.length" @click="openIdeConfig(currentSelectedIde.key)" :disabled="ideOpeningConfig === currentSelectedIde.key" class="dock-item" type="button">{{ ideOpeningConfig === currentSelectedIde.key ? '...' : '配置' }}</button>
           </template>
-          <a v-if="ideInstallInfo[currentSelectedIde.key]?.homepage" href="javascript:void(0)" @click.prevent="openExternal(ideInstallInfo[currentSelectedIde.key].homepage)" class="dock-item">官网</a>
+          <a v-if="ideInstallInfo[currentSelectedIde.key]?.homepage" href="javascript:void(0)" @click.prevent="openIdeUrl(ideInstallInfo[currentSelectedIde.key].homepage)" class="dock-item">官网</a>
           <button @click="toggleIdeCard(expandedIde)" class="dock-item close" type="button" title="关闭">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
@@ -788,10 +798,10 @@ watch(
                   </div>
                 </div>
                 <div class="sess-item-actions">
-                  <button v-if="exportingSession !== s.id" @click="exportSession(s.id)" type="button" class="btn btn-sm btn-ink">导出</button>
+                  <button v-if="exportingSession !== s.id" @click="exportSession(expandedIde, s)" type="button" class="btn btn-sm btn-ink">导出</button>
                   <button v-else type="button" disabled class="btn btn-sm btn-ink">导出中</button>
-                  <button @click="openShareModal(s.id)" type="button" class="btn btn-sm btn-soft">分享</button>
-                  <button @click="launchIde(expandedIde, s.id, 'cli')" :disabled="ideResuming === s.id || !!ideLaunching" type="button" class="btn btn-sm btn-primary">
+                  <button @click="openShareModal(expandedIde, s)" type="button" class="btn btn-sm btn-soft">分享</button>
+                  <button @click="launchIde(expandedIde, s, 'cli')" :disabled="ideResuming === s.id || !!ideLaunching" type="button" class="btn btn-sm btn-primary">
                     {{ ideResuming === s.id ? '...' : '恢复' }}
                   </button>
                 </div>
