@@ -658,11 +658,15 @@ watch(
         </div>
 
         <div class="dock-actions">
-          <!-- ACP 专属按钮：启动 ACP 命令 + 同步到 JetBrains -->
+          <!-- ACP 专属按钮：启动 ACP 命令 + 同步到 JetBrains + 打开 IDEA -->
           <template v-if="currentTab(currentSelectedIde) === 'acp'">
             <button @click="launchIde(currentSelectedIde.key, null, 'acp')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 ACP' }}
+            </button>
+            <button @click="launchIde('IDEA', null, 'app')" :disabled="ideLaunching === 'IDEA'" class="dock-item" type="button" title="打开 IntelliJ IDEA">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === 'IDEA' ? '...' : '打开 IDEA' }}
             </button>
             <button @click="syncIdeConfig(currentSelectedIde.key)" :disabled="ideSyncing === currentSelectedIde.key" class="dock-item" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
