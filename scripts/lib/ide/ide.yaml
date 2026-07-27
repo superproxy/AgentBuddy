@@ -415,7 +415,7 @@ install_meta:
     category: code
     forms: [cli]
 
-  Hermes:
+  HermesAgent:
     # Hermes Agent（Nous Research 开源自进化 AI Agent）
     # 官网：https://hermes-agent.nousresearch.com/
     # 文档：https://hermes-agent.nousresearch.com/docs
@@ -622,28 +622,36 @@ install_meta:
     forms: [cli]
 
   KimiCode:
-    # Kimi Code（新版 Node.js 二进制 CLI，Moonshot AI）
+    # Kimi Code CLI（Moonshot AI 官方终端 AI Agent，TypeScript/Node.js）
+    # 官网：https://code.kimi.com
+    # 文档：https://www.kimi.com/code/docs/kimi-code-cli/guides/getting-started.html
     # 仓库：https://github.com/MoonshotAI/kimi-code
+    # 安装方式：脚本安装（推荐，无需 Node.js）或 npm 全局安装（需 Node.js 22.19.0+）
     label: Kimi Code
     version: "0.4.0"
     release_date: "2026-07-22"
     homepage: https://code.kimi.com
-    docs_url: https://moonshotai.github.io/kimi-code/zh/
+    docs_url: https://www.kimi.com/code/docs/kimi-code-cli/guides/getting-started.html
     release_url: https://github.com/MoonshotAI/kimi-code/releases
     cli_install:
+      # 脚本安装（推荐）：自动下载最新版本、校验 checksum，把 kimi 可执行文件放到 PATH
       method: script
       script_url: https://code.kimi.com/kimi-code/install.sh
       script_url_win: https://code.kimi.com/kimi-code/install.ps1
-      url: https://code.kimi.com
-      uninstall_cmd_mac: "rm -f $(which kimi) 2>/dev/null; rm -rf ~/.kimi-code; true"
-      uninstall_cmd_win: "del /q \"%USERPROFILE%\\.local\\bin\\kimi.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi-code\" 2>nul & exit /b 0"
+      # npm 安装（备选）：npm install -g @moonshot-ai/kimi-code（需 Node.js 22.19.0+）
+      npm_package: "@moonshot-ai/kimi-code"
+      url: https://www.kimi.com/code/docs/kimi-code-cli/guides/getting-started.html
+      uninstall_cmd_mac: "rm -f $(which kimi) 2>/dev/null; npm uninstall -g @moonshot-ai/kimi-code 2>/dev/null; rm -rf ~/.kimi-code; true"
+      uninstall_cmd_win: "del /q \"%USERPROFILE%\\.local\\bin\\kimi.exe\" 2>nul & npm uninstall -g @moonshot-ai/kimi-code 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi-code\" 2>nul & exit /b 0"
     app_install:
       method: manual
       url: https://code.kimi.com
     vscode_install:
-      method: manual
-      url: https://code.kimi.com
-      note: 在 VS Code 扩展市场搜索 Kimi Code 安装
+      # VS Code 扩展：moonshot-ai.kimi-code（需 VS Code 1.100.0+）
+      method: extension
+      url: vscode:extension/moonshot-ai.kimi-code
+      extension_id: moonshot-ai.kimi-code
+      note: 点击安装将在 VS Code 中打开扩展页面（Kimi Code，需 VS Code 1.100.0+）
     idea_install:
       method: manual
       url: https://plugins.jetbrains.com/search?search=kimi+code
@@ -653,7 +661,7 @@ install_meta:
       macos_x64: https://code.kimi.com/kimi-code/install.sh
       windows_x64: https://code.kimi.com/kimi-code/install.ps1
       linux_x64: https://code.kimi.com/kimi-code/install.sh
-    install_methods: [script]
+    install_methods: [script, npm]
     # Kimi Code ACP：通过 ACP 协议接入 JetBrains IDE，运行 kimi acp
     acp_install:
       method: manual
@@ -662,7 +670,7 @@ install_meta:
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 kimi acp 后连接
     brand: Kimi
     category: code
-    forms: [vscode, idea, acp]
+    forms: [cli, vscode, idea, acp]
 
   KimiWork:
     # Kimi Work（桌面 AI Agent，Moonshot AI 桌面应用）
@@ -994,7 +1002,7 @@ detect_meta:
     sessions_subdir: sessions
     is_tui: true
 
-  Hermes:
+  HermesAgent:
     # Hermes Agent（Nous Research 开源自进化 AI Agent）
     label: Hermes Agent
     cli_names: [hermes]
