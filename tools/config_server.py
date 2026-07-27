@@ -4313,17 +4313,17 @@ def api_ide_open_config():
 def api_ide_install():
     """安装 IDE（CLI / App / VSCode 扩展 / JetBrains 插件 / ACP）。
 
-    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "jetbrains" | "acp"}
+    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "idea" | "acp"}
     Returns: {ok, ide, mode, method, message, cmd, stdout, stderr, url?}
     - cli/app：执行实际安装命令
-    - vscode/jetbrains/acp：返回 URL（deep link 或市场页），前端通过 /api/ide/open-url 打开
+    - vscode/idea/acp：返回 URL（deep link 或市场页），前端通过 /api/ide/open-url 打开
     """
     body = request.get_json(silent=True) or {}
     ide_key = (body.get("ide") or "").strip()
     mode = (body.get("mode") or "cli").strip()
     if not ide_key:
         return jsonify({"ok": False, "error": "missing ide"}), 400
-    if mode not in ("cli", "app", "vscode", "jetbrains", "acp"):
+    if mode not in ("cli", "app", "vscode", "idea", "acp"):
         return jsonify({"ok": False, "error": "mode must be 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'"}), 400
     if ide_key not in IDE_INSTALL_META:
         return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
@@ -4336,7 +4336,7 @@ def api_ide_install():
 
 @app.route("/api/ide/open-url", methods=["POST"])
 def api_ide_open_url():
-    """打开 URL 或 deep link 协议（vscode: / jetbrains: / https: 等）。
+    """打开 URL 或 deep link 协议（vscode: / idea: / https: 等）。
 
     pywebview 桌面模式下 window.open 对 deep link 协议无效，
     通过后端用系统命令打开（macOS: open, Windows: start, Linux: xdg-open）。
@@ -4369,7 +4369,7 @@ def api_ide_open_url():
 def api_ide_uninstall():
     """卸载 IDE（CLI / App / VSCode 扩展 / JetBrains 插件 / ACP）。
 
-    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "jetbrains" | "acp", force?: bool}
+    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "idea" | "acp", force?: bool}
     force=true：跳过系统卸载程序，直接强删目录（用于 GUI 卸载器卡死/超时/残留场景）
     """
     body = request.get_json(silent=True) or {}
@@ -4378,7 +4378,7 @@ def api_ide_uninstall():
     force = bool(body.get("force", False))
     if not ide_key:
         return jsonify({"ok": False, "error": "missing ide"}), 400
-    if mode not in ("cli", "app", "vscode", "jetbrains", "acp"):
+    if mode not in ("cli", "app", "vscode", "idea", "acp"):
         return jsonify({"ok": False, "error": "mode must be 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'"}), 400
     if ide_key not in IDE_INSTALL_META:
         return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400
@@ -4393,14 +4393,14 @@ def api_ide_uninstall():
 def api_ide_reinstall():
     """重装 IDE（先卸载再安装）。
 
-    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "jetbrains" | "acp"}
+    Body: {ide: <IDE key>, mode: "cli" | "app" | "vscode" | "idea" | "acp"}
     """
     body = request.get_json(silent=True) or {}
     ide_key = (body.get("ide") or "").strip()
     mode = (body.get("mode") or "cli").strip()
     if not ide_key:
         return jsonify({"ok": False, "error": "missing ide"}), 400
-    if mode not in ("cli", "app", "vscode", "jetbrains", "acp"):
+    if mode not in ("cli", "app", "vscode", "idea", "acp"):
         return jsonify({"ok": False, "error": "mode must be 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'"}), 400
     if ide_key not in IDE_INSTALL_META:
         return jsonify({"ok": False, "error": f"unsupported IDE: {ide_key}"}), 400

@@ -42,13 +42,13 @@ export interface IdeInstallInfo {
   cli?: { method: string; package?: string; url?: string; script_url?: string; [k: string]: any }
   app?: { method: string; package?: string; url?: string; [k: string]: any }
   vscode?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
-  jetbrains?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
+  idea?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
   acp?: { method: string; url?: string; cmd?: string; note?: string; [k: string]: any }
   homepage?: string
   // 新分类字段：品牌 + 顶层 Code/Work + 形式子集
   brand?: string       // 'Kimi' | 'Claude' | 'Codex' | 'Trae' | 'Qoder' | 'JetBrains' | ...
   category?: string    // 'code' | 'work'
-  forms?: string[]     // ['cli', 'app', 'vscode', 'jetbrains']
+  forms?: string[]     // ['cli', 'app', 'vscode', 'idea']
   // 兼容旧字段
   categories?: string[]
 }
@@ -78,7 +78,7 @@ export const FORM_META: Record<string, { label: string; color: string; bg: strin
   cli:       { label: 'CLI',            color: '#c4b5fd', bg: 'rgba(124,92,240,0.15)',  border: 'rgba(124,92,240,0.3)' },
   app:       { label: 'App',            color: '#93c5fd', bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.3)' },
   vscode:    { label: 'VSCode 插件',    color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
-  jetbrains: { label: 'JetBrains 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
+  idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',            color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
 }
 
@@ -158,7 +158,7 @@ export const useIdeStore = defineStore('ide', () => {
     brandLogo: string
   }
 
-  /** 按 brand 分组，组内按 category(code/work) → forms(cli/app/vscode/jetbrains) 二级嵌套 */
+  /** 按 brand 分组，组内按 category(code/work) → forms(cli/app/vscode/idea) 二级嵌套 */
   type BrandGroup = {
     brand: string
     vendor: string
@@ -171,7 +171,7 @@ export const useIdeStore = defineStore('ide', () => {
       category: string  // 'code' | 'work'
       // 按 form 分组：cli / app / vscode / jetbrains
       forms: Array<{
-        form: string  // 'cli' | 'app' | 'vscode' | 'jetbrains'
+        form: string  // 'cli' | 'app' | 'vscode' | 'idea'
         items: IdeWithBrand[]
       }>
     }>
@@ -208,7 +208,7 @@ export const useIdeStore = defineStore('ide', () => {
     }
 
     // 4. 构造 BrandGroup 列表
-    const FORM_ORDER = ['cli', 'app', 'vscode', 'jetbrains', 'acp']
+    const FORM_ORDER = ['cli', 'app', 'vscode', 'idea', 'acp']
     const CAT_ORDER = ['code', 'work']
 
     const groups: BrandGroup[] = []
@@ -282,10 +282,10 @@ export const useIdeStore = defineStore('ide', () => {
     window.open(url, '_blank')
   }
 
-  /** 打开 URL 或 deep link 协议（vscode: / jetbrains: / https: 等）。
+  /** 打开 URL 或 deep link 协议（vscode: / idea: / https: 等）。
    * pywebview 桌面模式下 openExternal 对 deep link 协议无效（系统浏览器不识别 vscode: 协议），
    * 通过后端 /api/ide/open-url 用系统命令打开（macOS: open, Windows: start, Linux: xdg-open）。
-   * 用于 VSCode 扩展（vscode:extension/xxx）、JetBrains 插件（jetbrains://plugin/xxx）等 deep link。
+   * 用于 VSCode 扩展（vscode:extension/xxx）、IDEA 插件（jetbrains://plugin/xxx）等 deep link。
    */
   async function openIdeUrl(url?: string) {
     if (!url) return
@@ -440,7 +440,7 @@ export const useIdeStore = defineStore('ide', () => {
         await loadIdeDetect()
       } else if (r.url) {
         ui.toast(`${r.message || '需手动安装'}：${r.url}`, 'warn')
-        // vscode/jetbrains/acp 等 deep link 协议走 openIdeUrl（后端用系统命令打开）
+        // vscode/idea/acp 等 deep link 协议走 openIdeUrl（后端用系统命令打开）
         // https/http 普通链接也走 openIdeUrl（统一入口，后端会自动处理）
         openIdeUrl(r.url)
       } else {

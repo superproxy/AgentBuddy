@@ -113,7 +113,7 @@ def validate_ide_meta() -> list[str]:
     检查项：
     1. 每个 IDE 必填顶层字段：label/version/release_date/homepage/cli_install/app_install
     2. cli_install / app_install 必填 method
-    3. vscode_install / jetbrains_install / acp_install（若存在）必填 method + url
+    3. vscode_install / idea_install / acp_install（若存在）必填 method + url
     4. 各 method 的额外必填字段（如 brew/npm 必须有 package）
     5. install_methods 列表必须存在（可空）
     6. forms 列表必须存在（用于 UI 分组）
@@ -124,9 +124,9 @@ def validate_ide_meta() -> list[str]:
         for field in _REQUIRED_TOP_FIELDS:
             if field not in meta:
                 warnings.append(f"[{ide_key}] 缺少顶层字段: {field}")
-        # 2. install 块的 method（cli/app 必填，vscode/jetbrains/acp 可选）
+        # 2. install 块的 method（cli/app 必填，vscode/idea/acp 可选）
         required_blocks = ("cli_install", "app_install")
-        optional_blocks = ("vscode_install", "jetbrains_install", "acp_install")
+        optional_blocks = ("vscode_install", "idea_install", "acp_install")
         for install_type in required_blocks:
             block = meta.get(install_type, {})
             if not isinstance(block, dict):
@@ -140,7 +140,7 @@ def validate_ide_meta() -> list[str]:
             for field in _REQUIRED_FIELDS_BY_METHOD.get(method, []):
                 if not block.get(field):
                     warnings.append(f"[{ide_key}] {install_type} method={method} 缺少字段: {field}")
-        # 可选扩展块：vscode/jetbrains/acp（若存在则校验 method + url）
+        # 可选扩展块：vscode/idea/acp（若存在则校验 method + url）
         for install_type in optional_blocks:
             block = meta.get(install_type)
             if block is None:
@@ -309,7 +309,7 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
 
     Args:
         ide_key: IDE 标识（如 "OpenCode"）
-        mode: "cli" / "app" / "vscode" / "jetbrains" / "acp"
+        mode: "cli" / "app" / "vscode" / "idea" / "acp"
 
     Returns:
         {ok: bool, ide: str, mode: str, method: str, message: str, cmd: str, stdout: str, stderr: str, url?}
@@ -319,9 +319,9 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         return {"ok": False, "ide": ide_key, "mode": mode, "method": "",
                 "message": f"Unknown IDE: {ide_key}", "cmd": "", "stdout": "", "stderr": ""}
 
-    # 扩展安装维度（vscode/jetbrains/acp）：仅返回 URL，由前端通过 open-url 接口打开
+    # 扩展安装维度（vscode/idea/acp）：仅返回 URL，由前端通过 open-url 接口打开
     # 这些维度通常是 deep link 协议（vscode:extension/xxx, jetbrains://plugin/xxx）或市场页面
-    if mode in ("vscode", "jetbrains", "acp"):
+    if mode in ("vscode", "idea", "acp"):
         install_meta_key = f"{mode}_install"
         ext_meta = meta.get(install_meta_key, {})
         if not ext_meta:
@@ -707,7 +707,7 @@ def uninstall_ide(ide_key: str, mode: str = "cli", force: bool = False) -> dict:
 
     Args:
         ide_key: IDE 标识
-        mode: "cli" / "app" / "vscode" / "jetbrains" / "acp"
+        mode: "cli" / "app" / "vscode" / "idea" / "acp"
         force: 强制卸载——跳过系统卸载程序，直接按 uninstall_cmd 强删目录。
                用于 GUI 卸载器卡死/超时/需交互弹窗的场景（如 Trae/Cursor app）。
 
@@ -719,8 +719,8 @@ def uninstall_ide(ide_key: str, mode: str = "cli", force: bool = False) -> dict:
         return {"ok": False, "ide": ide_key, "mode": mode, "method": "",
                 "message": f"Unknown IDE: {ide_key}", "cmd": "", "stdout": "", "stderr": ""}
 
-    # 扩展维度（vscode/jetbrains/acp）：无自动卸载，提示用户在 IDE 中手动卸载
-    if mode in ("vscode", "jetbrains", "acp"):
+    # 扩展维度（vscode/idea/acp）：无自动卸载，提示用户在 IDE 中手动卸载
+    if mode in ("vscode", "idea", "acp"):
         ext_meta = meta.get(f"{mode}_install", {})
         note = ext_meta.get("note", "")
         message = note or f"请在 IDE 中手动卸载 {ide_key} 的 {mode.upper()} 扩展"
@@ -933,7 +933,7 @@ def get_install_info(ide_key: str) -> dict:
     cli_install = dict(meta.get("cli_install", {}))
     app_install = dict(meta.get("app_install", {}))
     vscode_install = dict(meta.get("vscode_install", {}))
-    jetbrains_install = dict(meta.get("jetbrains_install", {}))
+    idea_install = dict(meta.get("idea_install", {}))
     acp_install = dict(meta.get("acp_install", {}))
     homepage = meta.get("homepage", "")
 
@@ -961,7 +961,7 @@ def get_install_info(ide_key: str) -> dict:
         "install_methods": meta.get("install_methods", []),
         # 新分类字段：品牌 + 顶层 Code/Work + 形式子集
         # 用于 AIDE 管理页按品牌分组卡片化展示（每个品牌一张大卡片，
-        # 卡片内按 Code/Work 顶层分组，再按 cli/app/vscode/jetbrains 子形式分行）
+        # 卡片内按 Code/Work 顶层分组，再按 cli/app/vscode/idea 子形式分行）
         "brand": meta.get("brand") or "",
         "category": meta.get("category") or "",
         "forms": meta.get("forms") or [],
@@ -971,7 +971,7 @@ def get_install_info(ide_key: str) -> dict:
         "cli": cli_install,
         "app": app_install,
         "vscode": vscode_install,
-        "jetbrains": jetbrains_install,
+        "idea": idea_install,
         "acp": acp_install,
     }
 

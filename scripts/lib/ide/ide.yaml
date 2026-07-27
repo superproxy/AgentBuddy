@@ -17,13 +17,13 @@
 #   cli_install:    CLI 安装配置（见下方 method 说明）
 #   app_install:    App 安装配置
 #   vscode_install: VSCode 扩展安装配置（可选）
-#   jetbrains_install: JetBrains 插件安装配置（可选）
+#   idea_install: IDEA 插件安装配置（可选）
 #   acp_install:    ACP 协议接入配置（可选）
 #   download_urls:  按平台/架构的直达下载地址
 #   install_methods: 该 IDE 支持的所有安装方式（用于 UI 展示）
 #   brand:          品牌（用于 UI 分组）
 #   category:       顶层分类 code（编程）/ work（办公）
-#   forms:          形式子集 [cli, app, vscode, jetbrains, acp]
+#   forms:          形式子集 [cli, app, vscode, idea, acp]
 #   hidden:         是否在 UI 隐藏（占位符用）
 #
 # cli_install / app_install 的 method：
@@ -109,7 +109,7 @@ install_meta:
       url: https://marketplace.visualstudio.com/items?itemName=openai.chatgpt
       note: "在 VS Code 扩展市场搜索 ChatGPT（扩展 ID: openai.chatgpt）安装"
     # Codex JetBrains：2025.3+ 原生集成（无需插件）
-    jetbrains_install:
+    idea_install:
       method: manual
       url: https://developers.openai.com/codex/app
       note: JetBrains 2025.3+ 原生集成 Codex（IntelliJ IDEA/PyCharm/WebStorm 等），无需安装插件
@@ -122,7 +122,7 @@ install_meta:
     install_methods: [script, npm, brew, app, vscode, jetbrains, acp]
     brand: Codex
     category: code
-    forms: [cli, app, vscode, jetbrains, acp]
+    forms: [cli, app, vscode, idea, acp]
 
   Cursor:
     # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -152,7 +152,7 @@ install_meta:
       url: https://marketplace.visualstudio.com/search?term=cursor
       note: Cursor 桌面版基于 VS Code 内核，安装 App 即可获得 VSCode 体验。如需在 VS Code 中使用 Cursor，可在扩展市场搜索
     # Cursor JetBrains：通过 ACP（Agent Client Protocol）协议支持
-    jetbrains_install:
+    idea_install:
       method: manual
       url: https://plugins.jetbrains.com/search?search=cursor+acp
       note: 在 JetBrains IDE 插件市场搜索 Cursor ACP 安装（支持 IntelliJ IDEA/PyCharm/WebStorm 等）
@@ -171,7 +171,7 @@ install_meta:
     install_methods: [script, app, jetbrains]
     brand: Cursor
     category: code
-    forms: [app, cli, vscode, jetbrains, acp]
+    forms: [app, cli, vscode, idea, acp]
 
   Trae:
     # 字节跳动 Trae 国际版（无独立 CLI，仅 App）
@@ -231,7 +231,7 @@ install_meta:
       url: vscode:extension/MarsCode.marscode-extension
       extension_id: MarsCode.marscode-extension
       note: 点击安装将在 VS Code 中打开扩展页面（需 VS Code 1.93+）
-    jetbrains_install:
+    idea_install:
       method: extension
       url: jetbrains://plugin/24326
       extension_id: "24326"
@@ -245,7 +245,7 @@ install_meta:
     install_methods: [script, app, jetbrains]
     brand: Trae CN
     category: code
-    forms: [app, cli, vscode, jetbrains]
+    forms: [app, cli, vscode, idea]
 
   TraeSoloCN:
     # 字节跳动 Trae Solo CN（独立 Solo 模式国内版）
@@ -565,7 +565,7 @@ install_meta:
     install_methods: [app, toolbox]
     brand: JetBrains
     category: code
-    forms: [app, jetbrains]
+    forms: [app]
 
   Agents:
     # 通用 Agents（占位符，无独立下载源）
@@ -638,7 +638,7 @@ install_meta:
       method: manual
       url: https://code.kimi.com
       note: 在 VS Code 扩展市场搜索 Kimi Code 安装
-    jetbrains_install:
+    idea_install:
       method: manual
       url: https://plugins.jetbrains.com/search?search=kimi+code
       note: 在 JetBrains IDE 插件市场搜索 Kimi Code 安装
@@ -656,7 +656,7 @@ install_meta:
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 kimi acp 后连接
     brand: Kimi
     category: code
-    forms: [vscode, jetbrains, acp]
+    forms: [vscode, idea, acp]
 
   KimiWork:
     # Kimi Work（桌面 AI Agent，Moonshot AI 桌面应用）

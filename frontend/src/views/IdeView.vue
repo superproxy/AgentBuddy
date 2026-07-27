@@ -194,7 +194,7 @@ const FORM_META_LOCAL: Record<string, { label: string; color: string; bg: string
   cli:       { label: 'CLI',           color: '#c4b5fd', bg: 'rgba(124,92,240,0.15)',  border: 'rgba(124,92,240,0.3)' },
   app:       { label: 'App',           color: '#93c5fd', bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.3)' },
   vscode:    { label: 'VSCode 插件',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
-  jetbrains: { label: 'JetBrains 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
+  idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',           color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
 }
 
@@ -249,7 +249,7 @@ function currentInfo(it: any): any {
   if (tab === 'cli') return info.cli
   if (tab === 'app') return info.app
   if (tab === 'vscode') return info.vscode
-  if (tab === 'jetbrains') return info.jetbrains
+  if (tab === 'idea') return info.idea
   if (tab === 'acp') return info.acp
   return info.cli || info.app
 }
@@ -315,21 +315,21 @@ function onIconError(key: string) {
 }
 
 /** IDE 是否支持某安装维度（基于 install info 静态配置） */
-function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'): boolean {
+function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp'): boolean {
   const info = ideInstallInfo.value[it.key]
   if (!info) return false
   if (tab === 'cli') return !!(info.cli && it.cli_names?.length)
   if (tab === 'app') return !!info.app
   if (tab === 'vscode') return !!info.vscode
-  if (tab === 'jetbrains') return !!info.jetbrains
+  if (tab === 'idea') return !!info.idea
   if (tab === 'acp') return !!info.acp
   return false
 }
 
 /** 条目类型：展开条目用 _tab，未展开条目按唯一支持维度推断 */
-function ideType(it: any): 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp' | '' {
-  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'
-  const tabs: Array<'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'> = ['cli', 'app', 'vscode', 'jetbrains', 'acp']
+function ideType(it: any): 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | '' {
+  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'idea' | 'acp'
+  const tabs: Array<'cli' | 'app' | 'vscode' | 'idea' | 'acp'> = ['cli', 'app', 'vscode', 'idea', 'acp']
   const supported = tabs.filter(t => supportsTab(it, t))
   if (supported.length === 1) return supported[0]
   return ''
@@ -348,9 +348,9 @@ function expandIde(it: any): any[] {
   const cli = supportsTab(it, 'cli')
   const app = supportsTab(it, 'app')
   const vscode = supportsTab(it, 'vscode')
-  const jetbrains = supportsTab(it, 'jetbrains')
+  const idea = supportsTab(it, 'idea')
   const acp = supportsTab(it, 'acp')
-  if (!cli && !app && !vscode && !jetbrains && !acp) return [it]
+  if (!cli && !app && !vscode && !idea && !acp) return [it]
   const entries: any[] = []
   if (cli) {
     entries.push({ ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' })
@@ -361,8 +361,8 @@ function expandIde(it: any): any[] {
   if (vscode) {
     entries.push({ ...it, _tab: 'vscode', _uid: it.key + ':vscode', label: it.label + ' VSCode', _expanded: true, exe_path: '', app_path: '' })
   }
-  if (jetbrains) {
-    entries.push({ ...it, _tab: 'jetbrains', _uid: it.key + ':jetbrains', label: it.label + ' JetBrains', _expanded: true, exe_path: '', app_path: '' })
+  if (idea) {
+    entries.push({ ...it, _tab: 'idea', _uid: it.key + ':idea', label: it.label + ' IDEA', _expanded: true, exe_path: '', app_path: '' })
   }
   if (acp) {
     entries.push({ ...it, _tab: 'acp', _uid: it.key + ':acp', label: it.label + ' ACP', _expanded: true, exe_path: '', app_path: '' })
@@ -380,7 +380,7 @@ function typeLabel(it: any): string {
   if (t === 'cli') return 'CLI'
   if (t === 'app') return 'App'
   if (t === 'vscode') return 'VSCode'
-  if (t === 'jetbrains') return 'JetBrains'
+  if (t === 'idea') return 'IDEA'
   if (t === 'acp') return 'ACP'
   return '—'
 }
@@ -617,8 +617,8 @@ watch(
                         <span v-else class="icon-text">{{ markText(it.label) }}</span>
                       </div>
                       <div
-                        v-if="fg.form === 'cli' || fg.form === 'app' || fg.form === 'vscode' || fg.form === 'jetbrains' || fg.form === 'acp'"
-                        :class="['type-badge', fg.form === 'vscode' ? 'app' : fg.form === 'jetbrains' ? 'both' : fg.form]"
+                        v-if="fg.form === 'cli' || fg.form === 'app' || fg.form === 'vscode' || fg.form === 'idea' || fg.form === 'acp'"
+                        :class="['type-badge', fg.form === 'vscode' ? 'app' : fg.form === 'idea' ? 'both' : fg.form]"
                         :title="FORM_META_LOCAL[fg.form]?.label || fg.form"
                       >
                         <svg v-if="fg.form === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
@@ -703,12 +703,12 @@ watch(
               {{ ideInstalling === busyKey(currentSelectedIde) ? '...' : '安装' }}
             </button>
             <a v-else-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">下载</a>
-            <!-- 打开宿主 IDE：vscode tab → 打开 VSCode 应用；jetbrains tab → 打开 JetBrains IDEA 应用 -->
+            <!-- 打开宿主 IDE：vscode tab → 打开 VSCode 应用；idea tab → 打开 IDEA 应用 -->
             <button v-if="currentTab(currentSelectedIde) === 'vscode'" @click="launchIde('VSCode', null, 'app')" :disabled="ideLaunching === 'VSCode'" class="dock-item" type="button" title="打开 VSCode 编辑器">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === 'VSCode' ? '...' : '打开 VSCode' }}
             </button>
-            <button v-if="currentTab(currentSelectedIde) === 'jetbrains'" @click="launchIde('IDEA', null, 'app')" :disabled="ideLaunching === 'IDEA'" class="dock-item" type="button" title="打开 IntelliJ IDEA">
+            <button v-if="currentTab(currentSelectedIde) === 'idea'" @click="launchIde('IDEA', null, 'app')" :disabled="ideLaunching === 'IDEA'" class="dock-item" type="button" title="打开 IntelliJ IDEA">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === 'IDEA' ? '...' : '打开 IDEA' }}
             </button>
@@ -1848,7 +1848,7 @@ watch(
   margin-bottom: 8px;
 }
 
-/* 子形式分组（cli/app/vscode/jetbrains） */
+/* 子形式分组（cli/app/vscode/idea） */
 .sub-form {
   margin: 8px 0;
   padding-left: 12px;
@@ -1879,12 +1879,12 @@ watch(
 .brand-view .type-icon.cli { background: rgba(16, 185, 129, 0.12); color: #059669; }
 .brand-view .type-icon.app { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
 .brand-view .type-icon.vscode { background: rgba(16, 185, 129, 0.12); color: #059669; }
-.brand-view .type-icon.jetbrains { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+.brand-view .type-icon.idea { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
 .brand-view .type-icon.other { background: var(--border-base); color: var(--text-tertiary); }
 
 /* 品牌视图下的 type-badge 复用原 .type-badge 配色 */
 .brand-view .type-badge.vscode { background: linear-gradient(145deg, #3b82f6, #2563eb); color: #fff; }
-.brand-view .type-badge.jetbrains { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
+.brand-view .type-badge.idea { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
 .brand-view .type-badge.acp { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
 
 /* 品牌视图下的 grid 保持与经典视图一致（不压缩） */
