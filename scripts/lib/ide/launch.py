@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .detect import detect_ide, IDE_DETECT_META
 from .session import build_resume_command
+from .install import IDE_INSTALL_META
 
 
 # macOS .app 启动命令模板（{app} 为 .app 路径，{cwd} 为工作目录）
@@ -272,6 +273,52 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             "error": f"IDE {ide_key} App 未安装",
             "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
         }
+    if mode == "acp":
+        # ACP 模式：运行 IDE 的 ACP 命令（如 claude acp、codex acp 等）
+        meta = IDE_INSTALL_META.get(ide_key, {})
+        acp_install = meta.get("acp_install", {})
+        acp_cmd = acp_install.get("cmd", "")
+        if not acp_cmd:
+            return {
+                "ok": False, "pid": 0, "cmd": "",
+                "error": f"IDE {ide_key} 无 ACP 命令配置",
+                "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
+            }
+        # 优先用检测到的 exe_path 拼接 acp 子命令
+        if exe_path:
+            parts = acp_cmd.split()
+            # 如果命令以 IDE 的 cli_name 开头，替换为 exe_path
+            cli_names = IDE_DETECT_META.get(ide_key, {}).get("cli_names", [])
+            if parts and any(parts[0] == cn for cn in cli_names):
+                args = parts[1:]
+            else:
+                args = parts
+            if is_tui:
+                result = _launch_cli_in_terminal(
+                    exe_path, args, cwd,
+                    title=f"{meta.get('label', ide_key)} ACP - {cwd or 'Home'}",
+                )
+            else:
+                result = _launch_cli(exe_path, args, cwd)
+            result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "acp"})
+            return result
+        # 无 exe_path，尝试用 shlex 在 shell 中运行
+        try:
+            if sys.platform == "win32":
+                proc = subprocess.Popen(
+                    acp_cmd, cwd=cwd or None, shell=True,
+                    creationflags=0x08000000,
+                )
+            else:
+                proc = subprocess.Popen(
+                    acp_cmd, cwd=cwd or None, shell=True,
+                    start_new_session=True,
+                )
+            return {"ok": True, "pid": proc.pid, "cmd": acp_cmd, "error": "",
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "acp"}
+        except Exception as e:
+            return {"ok": False, "pid": 0, "cmd": acp_cmd, "error": str(e),
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
 
     # 自动模式：优先 CLI（支持 resume），回退 App
     result = _try_cli()

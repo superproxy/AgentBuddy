@@ -42,6 +42,47 @@ export interface IdeInstallInfo {
   cli?: { method: string; package?: string; url?: string; script_url?: string; [k: string]: any }
   app?: { method: string; package?: string; url?: string; [k: string]: any }
   homepage?: string
+  // 新分类字段：品牌 + 顶层 Code/Work + 形式子集
+  brand?: string       // 'Kimi' | 'Claude' | 'Codex' | 'Trae' | 'Qoder' | 'JetBrains' | ...
+  category?: string    // 'code' | 'work'
+  forms?: string[]     // ['cli', 'app', 'vscode', 'jetbrains']
+  // 兼容旧字段
+  categories?: string[]
+}
+
+// 品牌元数据（厂商、品牌色、Logo 字符）
+export const BRAND_META: Record<string, { vendor: string; color: string; logo: string }> = {
+  Kimi:      { vendor: 'Moonshot AI · 月之暗面',  color: '#1a1a2e', logo: 'K' },
+  Claude:    { vendor: 'Anthropic',                color: '#c75d3a', logo: 'Cl' },
+  Codex:     { vendor: 'OpenAI',                   color: '#0a8a6a', logo: 'Co' },
+  Trae:      { vendor: '字节跳动 · ByteDance',     color: '#e6492d', logo: 'Tr' },
+  'Trae CN': { vendor: '字节跳动 · ByteDance (国内版)', color: '#3d4fd6', logo: 'Tr' },
+  Qoder:     { vendor: '阿里云 · 通义灵码',        color: '#0a93b3', logo: 'Qo' },
+  'Qoder CN': { vendor: '阿里云 · 通义灵码 (国内版)', color: '#0a6b8d', logo: 'QC' },
+  ZCode:     { vendor: '智谱 ADE',                 color: '#047857', logo: 'ZC' },
+  JetBrains: { vendor: 'JetBrains s.r.o.',         color: '#0a5fc7', logo: 'JB' },
+  OpenCode:  { vendor: 'anomalyco',               color: '#4f5cd9', logo: 'OO' },
+  OpenClaw:  { vendor: '开源社区',                 color: '#7c5cf0', logo: 'OC' },
+  Hermes:    { vendor: '内部 Agent 平台',          color: '#6b7280', logo: 'He' },
+  WorkBuddy: { vendor: '腾讯 CodeBuddy · AI 工作台', color: '#dc2626', logo: 'WB' },
+  Pi:        { vendor: 'earendil-works',           color: '#7c3aed', logo: 'Pi' },
+  'Trae Work': { vendor: '字节跳动 · ByteDance',   color: '#f59e0b', logo: 'TW' },
+  'Command Code': { vendor: 'Command Code',       color: '#0891b2', logo: 'CC' },
+}
+
+// 形式徽章配色
+export const FORM_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  cli:       { label: 'CLI',            color: '#c4b5fd', bg: 'rgba(124,92,240,0.15)',  border: 'rgba(124,92,240,0.3)' },
+  app:       { label: 'App',            color: '#93c5fd', bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.3)' },
+  vscode:    { label: 'VSCode 插件',    color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
+  jetbrains: { label: 'JetBrains 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
+  acp:       { label: 'ACP',            color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
+}
+
+// 顶层分类配色
+export const CATEGORY_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  code: { label: 'Code', color: '#c4b5fd', bg: 'linear-gradient(135deg, rgba(124,92,240,0.2), rgba(79,92,217,0.2))', border: 'rgba(124,92,240,0.4)' },
+  work: { label: 'Work', color: '#fbbf24', bg: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(217,119,6,0.2))', border: 'rgba(251,191,36,0.4)' },
 }
 
 export const useIdeStore = defineStore('ide', () => {
@@ -101,6 +142,124 @@ export const useIdeStore = defineStore('ide', () => {
   const shareTargetIdes = computed(() => {
     const source = shareModalSession.value?._source_ide
     return ideDetects.value.filter((i) => i.installed && i.sessions_dir && i.key !== source)
+  })
+
+  // ===== 品牌 × Code/Work 形式分组（用于 AIDE 管理页卡片化展示）=====
+  /** 单个 IDE 项的品牌+分类信息（合并 detect + installInfo） */
+  type IdeWithBrand = IdeDetect & {
+    brand: string
+    category: string
+    forms: string[]
+    vendor: string
+    brandColor: string
+    brandLogo: string
+  }
+
+  /** 按 brand 分组，组内按 category(code/work) → forms(cli/app/vscode/jetbrains) 二级嵌套 */
+  type BrandGroup = {
+    brand: string
+    vendor: string
+    brandColor: string
+    brandLogo: string
+    total: number
+    installedCount: number
+    // 按 category 分组：code / work
+    categories: Array<{
+      category: string  // 'code' | 'work'
+      // 按 form 分组：cli / app / vscode / jetbrains
+      forms: Array<{
+        form: string  // 'cli' | 'app' | 'vscode' | 'jetbrains'
+        items: IdeWithBrand[]
+      }>
+    }>
+  }
+
+  /** 品牌分组 computed —— 用于 AIDE 管理页按品牌卡片化展示 */
+  const brandGroups = computed<BrandGroup[]>(() => {
+    // 1. 合并 detect + installInfo，得到每个 IDE 的 brand/category/forms
+    const items: IdeWithBrand[] = ideDetects.value.map((d) => {
+      const info = ideInstallInfo[d.key] || {}
+      const brand = (info.brand as string) || ''
+      const category = (info.category as string) || ''
+      const forms = (info.forms as string[]) || (info.categories as string[]) || []
+      const bm = BRAND_META[brand] || { vendor: '', color: '#6b7280', logo: d.key.slice(0, 2) }
+      return {
+        ...d,
+        brand,
+        category,
+        forms,
+        vendor: bm.vendor,
+        brandColor: bm.color,
+        brandLogo: bm.logo,
+      }
+    })
+
+    // 2. 过滤掉没有 brand 的（如 Agents 占位符）
+    const branded = items.filter((i) => i.brand)
+
+    // 3. 按 brand 分组
+    const brandMap = new Map<string, IdeWithBrand[]>()
+    for (const item of branded) {
+      if (!brandMap.has(item.brand)) brandMap.set(item.brand, [])
+      brandMap.get(item.brand)!.push(item)
+    }
+
+    // 4. 构造 BrandGroup 列表
+    const FORM_ORDER = ['cli', 'app', 'vscode', 'jetbrains', 'acp']
+    const CAT_ORDER = ['code', 'work']
+
+    const groups: BrandGroup[] = []
+    for (const [brand, brandItems] of brandMap) {
+      const bm = BRAND_META[brand] || { vendor: '', color: '#6b7280', logo: brand.slice(0, 2) }
+      const total = brandItems.length
+      const installedCount = brandItems.filter((i) => i.installed).length
+
+      // 按 category 分组
+      const catMap = new Map<string, IdeWithBrand[]>()
+      for (const item of brandItems) {
+        const cat = item.category || 'code'
+        if (!catMap.has(cat)) catMap.set(cat, [])
+        catMap.get(cat)!.push(item)
+      }
+
+      const catList: BrandGroup['categories'] = []
+      for (const cat of CAT_ORDER) {
+        const catItems = catMap.get(cat)
+        if (!catItems || catItems.length === 0) continue
+
+        // 按 form 分组
+        const formMap = new Map<string, IdeWithBrand[]>()
+        for (const item of catItems) {
+          for (const f of item.forms) {
+            if (!formMap.has(f)) formMap.set(f, [])
+            formMap.get(f)!.push(item)
+          }
+        }
+
+        const formList: BrandGroup['categories'][0]['forms'] = []
+        for (const f of FORM_ORDER) {
+          const fItems = formMap.get(f)
+          if (!fItems || fItems.length === 0) continue
+          // 同 form 内去重（一个 IDE 可能出现在多个 form 中？不，每个 IDE 只出现在自己的 forms 列表中）
+          // 但多个 IDE 可能映射到同 form（如 KimiCLI + KimiCode 都在 Kimi/code/cli）
+          // 直接列出即可
+          formList.push({ form: f, items: fItems })
+        }
+        catList.push({ category: cat, forms: formList })
+      }
+
+      groups.push({
+        brand,
+        vendor: bm.vendor,
+        brandColor: bm.color,
+        brandLogo: bm.logo,
+        total,
+        installedCount,
+        categories: catList,
+      })
+    }
+
+    return groups
   })
 
   // ===== 函数 =====
@@ -472,6 +631,7 @@ export const useIdeStore = defineStore('ide', () => {
     notInstalledIdes,
     sessionableIdes,
     shareTargetIdes,
+    brandGroups,
     // 函数
     loadIdeDetect,
     sinkNotInstalledIdes,

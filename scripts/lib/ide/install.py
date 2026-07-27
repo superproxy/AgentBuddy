@@ -93,10 +93,12 @@ IDE_INSTALL_META = {
         "docs_url": "https://code.claude.com/docs/en/setup",
         "release_url": "https://github.com/anthropics/claude-code/releases",
         "cli_install": {
-            "method": "script",
+            # npm 安装更可靠（script 方式依赖 claude.ai，国内可能不可达）
+            "method": "npm",
+            "package": "@anthropic-ai/claude-code",
+            "url": "https://claude.ai/download",
             "script_url": "https://claude.ai/install.sh",
             "script_url_win": "https://claude.ai/install.ps1",
-            "url": "https://claude.ai/download",
             # 卸载：覆盖 native（~/.local/bin+share）+ npm + legacy（~/.claude/local）+ 配置（~/.claude+~/.claude.json）
             "uninstall_cmd_mac": "rm -f ~/.local/bin/claude; rm -rf ~/.local/share/claude ~/.claude/local ~/.claude; rm -f ~/.claude.json; npm uninstall -g @anthropic-ai/claude-code 2>/dev/null; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\claude.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\claude\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\\local\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.claude\" 2>nul & del /q \"%USERPROFILE%\\.claude.json\" 2>nul & npm uninstall -g @anthropic-ai/claude-code 2>nul & exit /b 0",
@@ -113,7 +115,22 @@ IDE_INSTALL_META = {
             "windows_x64": "https://claude.ai/download",
             "windows_arm64": "https://claude.ai/download",
         },
-        "install_methods": ["script", "npm", "brew", "winget"],
+        # Claude Code ACP：通过 ACP 协议接入 JetBrains IDE
+        # 来源：https://www.jetbrains.com/acp/（ACP Registry）
+        # 安装适配器：npm install -g @anthropic-ai/claude-code，运行 claude acp
+        "acp_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/acp/",
+            "cmd": "claude acp",
+            "note": "在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 claude acp 后连接",
+        },
+        "install_methods": ["script", "npm", "brew", "winget", "acp"],
+        # 品牌：Anthropic 旗下 Claude 品牌
+        "brand": "Claude",
+        # 顶层分类：code（编程）/ work（办公）
+        "category": "code",
+        # forms：Code 下的形式子集（cli/app/vscode/jetbrains/acp），Work 类一般仅 app
+        "forms": ["cli", "app", "acp"],
     },
     "Codex": {
         # OpenAI Codex CLI + Desktop App
@@ -126,12 +143,12 @@ IDE_INSTALL_META = {
         "docs_url": "https://developers.openai.com/codex/cli",
         "release_url": "https://github.com/openai/codex/releases",
         "cli_install": {
-            # 官方推荐 standalone installer（最新）；npm/homebrew 作为备选
-            "method": "script",
+            # npm 安装更可靠（script 方式依赖 chatgpt.com，国内可能不可达）
+            "method": "npm",
+            "package": "@openai/codex",
+            "url": "https://developers.openai.com/codex/cli",
             "script_url": "https://chatgpt.com/codex/install.sh",
             "script_url_win": "https://chatgpt.com/codex/install.ps1",
-            "url": "https://developers.openai.com/codex/cli",
-            "package": "@openai/codex",  # npm 备选
             "uninstall_cmd_mac": "rm -f ~/.local/bin/codex; rm -rf ~/.local/share/codex ~/.codex; npm uninstall -g @openai/codex 2>/dev/null; rm -rf /opt/homebrew/lib/node_modules/@openai/codex ~/.nvm/versions/node/*/lib/node_modules/@openai/codex; true",
             "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\@openai\\codex\" 2>nul & del /q \"%APPDATA%\\npm\\codex\" \"%APPDATA%\\npm\\codex.cmd\" \"%APPDATA%\\npm\\codex.ps1\" 2>nul & del /q \"%USERPROFILE%\\.local\\bin\\codex.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\codex\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codex\" 2>nul & exit /b 0",
         },
@@ -147,7 +164,32 @@ IDE_INSTALL_META = {
             "macos_x64": "https://persistent.oaistatic.com/codex-app-prod/Codex-latest-x64.dmg",
             "windows_x64": "https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi",
         },
-        "install_methods": ["script", "npm", "brew", "app"],
+        # Codex VSCode 扩展：openai.chatgpt（发布者 openai）
+        # 来源：https://marketplace.visualstudio.com/items?itemName=openai.chatgpt
+        "vscode_install": {
+            "method": "manual",
+            "url": "https://marketplace.visualstudio.com/items?itemName=openai.chatgpt",
+            "note": "在 VS Code 扩展市场搜索 ChatGPT（扩展 ID: openai.chatgpt）安装",
+        },
+        # Codex JetBrains：2025.3+ 原生集成（无需插件）
+        # 来源：https://developers.openai.com/codex/app
+        "jetbrains_install": {
+            "method": "manual",
+            "url": "https://developers.openai.com/codex/app",
+            "note": "JetBrains 2025.3+ 原生集成 Codex（IntelliJ IDEA/PyCharm/WebStorm 等），无需安装插件",
+        },
+        # Codex ACP：通过 ACP 协议接入 JetBrains IDE
+        # 来源：https://www.jetbrains.com/acp/（ACP Registry）
+        "acp_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/acp/",
+            "cmd": "codex acp",
+            "note": "在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 codex acp 后连接",
+        },
+        "install_methods": ["script", "npm", "brew", "app", "vscode", "jetbrains", "acp"],
+        "categories": ["cli", "app", "vscode", "jetbrains", "acp"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Codex", "category": "code", "forms": ['cli', 'app', 'vscode', 'jetbrains', 'acp'],
     },
     "Cursor": {
         # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -175,6 +217,19 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/Cursor.app' ~/.cursor 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\cursor\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0",
         },
+        # Cursor 基于 VS Code 内核（App 即 VSCode 体验），无需单独 VSCode 扩展
+        "vscode_install": {
+            "method": "manual",
+            "url": "https://marketplace.visualstudio.com/search?term=cursor",
+            "note": "Cursor 桌面版基于 VS Code 内核，安装 App 即可获得 VSCode 体验。如需在 VS Code 中使用 Cursor，可在扩展市场搜索",
+        },
+        # Cursor JetBrains：通过 ACP（Agent Client Protocol）协议支持
+        # 文档：https://cursor.com/cn/docs/cli/installation
+        "jetbrains_install": {
+            "method": "manual",
+            "url": "https://plugins.jetbrains.com/search?search=cursor+acp",
+            "note": "在 JetBrains IDE 插件市场搜索 Cursor ACP 安装（支持 IntelliJ IDEA/PyCharm/WebStorm 等）",
+        },
         "download_urls": {
             # Cursor 官方下载页提供按平台/架构的稳定直链（universal 包同时支持 arm64/x64）
             "macos_arm64": "https://download.todesktop.com/230313mzl4w4u92/Cursor-darwin-arm64.dmg",
@@ -183,7 +238,19 @@ IDE_INSTALL_META = {
             "windows_arm64": "https://download.todesktop.com/230313mzl4w4u92/win32-arm64/CursorSetup.exe",
             "linux_x64": "https://download.todesktop.com/230313mzl4w4u92/linux-x64/Cursor.AppImage",
         },
-        "install_methods": ["script", "app"],
+        "install_methods": ["script", "app", "jetbrains"],
+        "categories": ["app", "cli", "vscode", "jetbrains"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        # Cursor ACP：通过 ACP 协议接入 JetBrains IDE
+        # 来源：https://www.jetbrains.com/acp/（ACP Registry）
+        # 运行 cursor agent acp，在 JetBrains AI chat 中连接
+        "acp_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/acp/",
+            "cmd": "cursor agent acp",
+            "note": "在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 cursor agent acp 后连接",
+        },
+        "brand": "Cursor", "category": "code", "forms": ['app', 'cli', 'vscode', 'jetbrains', 'acp'],
     },
     "Trae": {
         # 字节跳动 Trae 国际版（无独立 CLI，仅 App）
@@ -210,6 +277,9 @@ IDE_INSTALL_META = {
             "linux_x64": "https://www.trae.ai/download",
         },
         "install_methods": ["app"],
+        "categories": ["app"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Trae", "category": "code", "forms": ['app'],
     },
     "TraeCN": {
         # 字节跳动 Trae 国内版（含 trae-cli TUI + App）
@@ -240,6 +310,23 @@ IDE_INSTALL_META = {
             "uninstall_cmd_mac": "rm -rf '/Applications/Trae CN.app' ~/.trae-cn ~/.traecn 2>/dev/null; true",
             "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.traecn\" 2>nul & exit /b 0",
         },
+        # Trae CN 本身基于 VS Code（App 形式即 VSCode 体验），另有 JetBrains 插件
+        # TRAE AI 插件支持 VSCode 1.93+ 和 JetBrains 2022.1+
+        # 来源：https://www.trae.cn/plugin
+        # VSCode 扩展 ID: MarsCode.marscode-extension
+        # 安装方式：vscode:extension/ 协议直接打开 VSCode 扩展安装页
+        "vscode_install": {
+            "method": "extension",
+            "url": "vscode:extension/MarsCode.marscode-extension",
+            "extension_id": "MarsCode.marscode-extension",
+            "note": "点击安装将在 VS Code 中打开扩展页面（需 VS Code 1.93+）",
+        },
+        "jetbrains_install": {
+            "method": "extension",
+            "url": "jetbrains://plugin/24326",
+            "extension_id": "24326",
+            "note": "点击安装将在 JetBrains IDE 中打开插件安装页面（需 JetBrains 2022.1+）",
+        },
         "download_urls": {
             # 国内版提供按平台/架构的下载入口（动态签名链接，故用下载页）
             "macos_arm64": "https://www.trae.cn/download",
@@ -248,7 +335,10 @@ IDE_INSTALL_META = {
             "linux_x64": "https://www.trae.cn/download",
             "linux_arm64": "https://www.trae.cn/download",
         },
-        "install_methods": ["script", "app"],
+        "install_methods": ["script", "app", "jetbrains"],
+        "categories": ["app", "cli", "vscode", "jetbrains"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Trae CN", "category": "code", "forms": ['app', 'cli', 'vscode', 'jetbrains'],
     },
     "TraeSoloCN": {
         # 字节跳动 Trae Solo CN（独立 Solo 模式国内版）
@@ -278,6 +368,9 @@ IDE_INSTALL_META = {
             "windows_x64": "https://www.trae.cn/download",
         },
         "install_methods": ["app"],
+        "categories": ["app"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Trae Work", "category": "work", "forms": ['app'],
     },
     "OpenCode": {
         # OpenCode（开源 AI 编码代理，anomalyco 维护）
@@ -293,11 +386,11 @@ IDE_INSTALL_META = {
         "docs_url": "https://opencode.ai/docs/",
         "release_url": "https://github.com/anomalyco/opencode/releases",
         "cli_install": {
-            # 官方推荐 install script（仅 macOS/Linux，Windows 会自动降级 manual）
-            "method": "script",
-            "script_url": "https://opencode.ai/install",
+            # npm 安装更可靠（script 方式仅 macOS/Linux，Windows 无 PowerShell 脚本）
+            "method": "npm",
+            "package": "opencode-ai",
             "url": "https://opencode.ai/docs/",
-            "package": "opencode-ai",  # npm 备选：npm install -g opencode-ai
+            "script_url": "https://opencode.ai/install",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/opencode; rm -rf ~/.config/opencode ~/.local/share/opencode; npm uninstall -g opencode-ai 2>/dev/null; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\opencode.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.config\\opencode\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.local\\share\\opencode\" 2>nul & npm uninstall -g opencode-ai 2>nul & exit /b 0",
         },
@@ -321,6 +414,17 @@ IDE_INSTALL_META = {
         #  - Windows: choco / scoop / npm / mise / docker
         #  - 跨平台: bun / pnpm / yarn（基于 npm 包 opencode-ai）
         "install_methods": ["script", "npm", "brew", "choco", "scoop", "mise", "docker", "arch", "bun", "pnpm", "yarn"],
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        # OpenCode ACP：通过 ACP 协议接入 JetBrains IDE
+        # 来源：https://www.jetbrains.com/acp/（ACP Registry）
+        "acp_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/acp/",
+            "cmd": "opencode acp",
+            "note": "在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 opencode acp 后连接",
+        },
+        "brand": "OpenCode", "category": "code", "forms": ['cli', 'acp'],
     },
     "Qoder": {
         # Qoder 国际版（阿里云通义灵码升级版）
@@ -353,6 +457,9 @@ IDE_INSTALL_META = {
             "linux_x64": "https://qoder.com/zh/download",
         },
         "install_methods": ["script", "app"],
+        "categories": ["app", "cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Qoder", "category": "code", "forms": ['app', 'cli'],
     },
     "QoderCN": {
         # Qoder 国内版（阿里云通义灵码升级版，国内合规）
@@ -385,36 +492,51 @@ IDE_INSTALL_META = {
             "linux_x64": "https://qoder.com.cn/download",
         },
         "install_methods": ["script", "app"],
+        "categories": ["app", "cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Qoder CN", "category": "code", "forms": ['app', 'cli'],
     },
     "OpenClaw": {
-        # OpenClaw（开源 Agent 平台）
-        # 来源：https://github.com/openclaw/openclaw
+        # OpenClaw（开源个人 AI 助手平台 / Agent 调度框架）
+        # 官网：https://openclaw.ai
+        # 文档：https://docs.openclaw.ai
+        # GitHub：https://github.com/openclaw/openclaw
+        # 安装方式（按优先级）：
+        #   1. npm: npm install -g openclaw@latest（跨平台，需 Node.js >= 22.14.0）
+        #   2. 脚本: macOS/Linux: curl -fsSL https://openclaw.ai/install.sh | bash
+        #            Windows:     iwr -useb https://openclaw.ai/install.ps1 | iex
+        # 配置目录：~/.openclaw/（openclaw.json 主配置）
+        # CLI 命令：openclaw（TUI 交互式 + gateway 服务管理）
         "label": "OpenClaw",
         "version": "latest",
         "release_date": "2026-07-01",
-        "homepage": "https://github.com/openclaw/openclaw",
-        "docs_url": "https://github.com/openclaw/openclaw#readme",
+        "homepage": "https://openclaw.ai",
+        "docs_url": "https://docs.openclaw.ai",
         "release_url": "https://github.com/openclaw/openclaw/releases",
         "cli_install": {
+            # npm 安装（跨平台首选），失败时可回退到 script 方式
             "method": "npm",
             "package": "openclaw",
-            "url": "https://github.com/openclaw/openclaw",
-            "uninstall_cmd_mac": "npm uninstall -g openclaw 2>/dev/null; rm -f $(which openclaw) 2>/dev/null; rm -rf ~/.local/share/openclaw; true",
-            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\openclaw\" 2>nul & del /q \"%APPDATA%\\npm\\openclaw\" \"%APPDATA%\\npm\\openclaw.cmd\" \"%APPDATA%\\npm\\openclaw.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
+            "url": "https://openclaw.ai",
+            "script_url": "https://openclaw.ai/install.sh",
+            "script_url_win": "https://openclaw.ai/install.ps1",
+            "uninstall_cmd_mac": "npm uninstall -g openclaw 2>/dev/null; rm -f $(which openclaw) 2>/dev/null; rm -rf ~/.openclaw ~/.local/share/openclaw; true",
+            "uninstall_cmd_win": "npm uninstall -g openclaw 2>nul & rmdir /s /q \"%APPDATA%\\npm\\node_modules\\openclaw\" 2>nul & del /q \"%APPDATA%\\npm\\openclaw\" \"%APPDATA%\\npm\\openclaw.cmd\" \"%APPDATA%\\npm\\openclaw.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
         },
         "app_install": {
-            "method": "system_uninstall",
-            "url": "https://github.com/openclaw/openclaw/releases",
-            "uninstall_cmd_mac": "rm -rf '/Applications/OpenClaw.app' ~/.openclaw 2>/dev/null; true",
-            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\openclaw\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openclaw\" 2>nul & exit /b 0",
+            "method": "manual",
+            "url": "https://openclaw.ai",
         },
         "download_urls": {
-            "macos_arm64": "https://github.com/openclaw/openclaw/releases/latest",
-            "macos_x64": "https://github.com/openclaw/openclaw/releases/latest",
-            "windows_x64": "https://github.com/openclaw/openclaw/releases/latest",
-            "linux_x64": "https://github.com/openclaw/openclaw/releases/latest",
+            "macos_arm64": "https://openclaw.ai",
+            "macos_x64": "https://openclaw.ai",
+            "windows_x64": "https://openclaw.ai",
+            "linux_x64": "https://openclaw.ai",
         },
-        "install_methods": ["npm"],
+        "install_methods": ["npm", "script"],
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "OpenClaw", "category": "code", "forms": ['cli'],
     },
     "Hermes": {
         # Hermes Agent（内部 Agent 平台，暂无公开下载）
@@ -428,35 +550,42 @@ IDE_INSTALL_META = {
         "app_install": {"method": "manual", "url": ""},
         "download_urls": {},
         "install_methods": [],
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Hermes", "category": "code", "forms": ['cli'],
     },
     "WorkBuddy": {
-        # WorkBuddy（团队协作 Agent 工具）
-        # 来源：https://github.com/workbuddy/workbuddy
+        # WorkBuddy（腾讯 CodeBuddy 团队 AI 智能体桌面工作台）
+        # 官网：https://www.workbuddy.cn
+        # 安装文档：https://cloud.tencent.com/document/product/1831/134387
         "label": "WorkBuddy",
         "version": "latest",
         "release_date": "2026-06-01",
-        "homepage": "https://github.com/workbuddy/workbuddy",
-        "docs_url": "https://github.com/workbuddy/workbuddy#readme",
-        "release_url": "https://github.com/workbuddy/workbuddy/releases",
+        "homepage": "https://www.workbuddy.cn",
+        "docs_url": "https://cloud.tencent.com/document/product/1831/134387",
+        "release_url": "https://www.workbuddy.cn",
         "cli_install": {
             "method": "manual",
-            "url": "https://github.com/workbuddy/workbuddy/releases",
+            "url": "https://www.workbuddy.cn",
             "uninstall_cmd_mac": "rm -f ~/.local/bin/workbuddy; rm -rf ~/.workbuddy; true",
             "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\workbuddy.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
         },
         "app_install": {
             "method": "system_uninstall",
-            "url": "https://github.com/workbuddy/workbuddy/releases",
+            "url": "https://www.workbuddy.cn",
             "uninstall_cmd_mac": "rm -rf /Applications/WorkBuddy.app ~/.workbuddy 2>/dev/null; true",
-            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\WorkBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\WorkBuddy\" 2>nul & rmdir /s /q \"%LOCALAPPDATA%\\WorkBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.workbuddy\" 2>nul & exit /b 0",
         },
         "download_urls": {
-            "macos_arm64": "https://github.com/workbuddy/workbuddy/releases/latest",
-            "macos_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
-            "windows_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
-            "linux_x64": "https://github.com/workbuddy/workbuddy/releases/latest",
+            "macos_arm64": "https://www.workbuddy.cn",
+            "macos_x64": "https://www.workbuddy.cn",
+            "windows_x64": "https://www.workbuddy.cn",
+            "linux_x64": "https://www.workbuddy.cn",
         },
         "install_methods": ["app"],
+        "categories": ["app"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "WorkBuddy", "category": "work", "forms": ['app'],
     },
     "ZCode": {
         # 智谱 ADE ZCode（AgentBuddy/ZCode 智能体编程平台）
@@ -487,6 +616,9 @@ IDE_INSTALL_META = {
             "linux_x64": "https://zcode.z.ai/cn/download",
         },
         "install_methods": ["app"],
+        "categories": ["app"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "ZCode", "category": "code", "forms": ['app'],
     },
     "IDEA": {
         # JetBrains IntelliJ IDEA（Community / Ultimate）
@@ -516,6 +648,9 @@ IDE_INSTALL_META = {
             "linux_x64": "https://www.jetbrains.com/idea/download/",
         },
         "install_methods": ["app", "toolbox"],
+        "categories": ["app", "jetbrains"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "JetBrains", "category": "code", "forms": ['app', 'jetbrains'],
     },
     "Agents": {
         # 通用 Agents（占位符，无独立下载源）
@@ -530,36 +665,240 @@ IDE_INSTALL_META = {
         "download_urls": {},
         "install_methods": [],
         "hidden": True,  # 占位符，不在 UI 显示
+        "categories": [],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "", "category": "", "forms": [],
     },
-    "KimiCode": {
-        # Kimi Code（月之暗面 Kimi CLI，扩展检测，非 IDE_REGISTRY 成员）
-        # 最新版本：v3.2.5（2026-06）
-        # 来源：https://kimi.com/download + https://github.com/MoonshotAI/kimi-cli
-        "label": "Kimi Code",
-        "version": "3.2.5",
+    "KimiCLI": {
+        # Kimi CLI（旧版 Python/uv CLI，Moonshot AI）
+        # 仓库：https://github.com/MoonshotAI/kimi-cli
+        # 文档：https://platform.moonshot.cn/docs/guide/kimi-cli-support
+        # 状态：技术预览版，正逐步迁移到新版 Kimi Code CLI
+        "label": "Kimi CLI",
+        "version": "0.3.0",
         "release_date": "2026-06-15",
-        "homepage": "https://kimi.com/download",
-        "docs_url": "https://kimi.com/docs/cli",
+        "homepage": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+        "docs_url": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
         "release_url": "https://github.com/MoonshotAI/kimi-cli/releases",
         "cli_install": {
-            "method": "npm",
-            "package": "@moonshot-ai/kimi-cli",
-            "url": "https://kimi.com/download",
-            "uninstall_cmd_mac": "npm uninstall -g @moonshot-ai/kimi-cli 2>/dev/null; rm -f $(which kimi) $(which kimi-code) 2>/dev/null; rm -rf ~/.kimi-code ~/.kimi; true",
-            "uninstall_cmd_win": "rmdir /s /q \"%APPDATA%\\npm\\node_modules\\@moonshot-ai\\kimi-cli\" 2>nul & del /q \"%APPDATA%\\npm\\kimi\" \"%APPDATA%\\npm\\kimi.cmd\" \"%APPDATA%\\npm\\kimi.ps1\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi-code\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi\" 2>nul & exit /b 0",
+            "method": "manual",
+            "url": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+            # uv 安装命令：uv tool install --python 3.13 kimi-cli
+            # 卸载：移除 uv tool + 配置目录
+            "uninstall_cmd_mac": "uv tool uninstall kimi-cli 2>/dev/null; rm -rf ~/.kimi; true",
+            "uninstall_cmd_win": "uv tool uninstall kimi-cli 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi\" 2>nul & exit /b 0",
         },
         "app_install": {
             "method": "manual",
-            "url": "https://kimi.com/download",
+            "url": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
         },
         "download_urls": {
-            "macos_arm64": "https://kimi.com/download",
-            "macos_x64": "https://kimi.com/download",
-            "windows_x64": "https://kimi.com/download",
-            "linux_x64": "https://kimi.com/download",
+            "macos_arm64": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+            "macos_x64": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+            "windows_x64": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+            "linux_x64": "https://platform.moonshot.cn/docs/guide/kimi-cli-support",
+        },
+        "install_methods": ["manual"],
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Kimi", "category": "code", "forms": ['cli'],
+    },
+    "KimiCode": {
+        # Kimi Code（新版 Node.js 二进制 CLI，Moonshot AI）
+        # 仓库：https://github.com/MoonshotAI/kimi-code
+        # 文档：https://moonshotai.github.io/kimi-code/zh/
+        # 安装：官方脚本，二进制发行，零环境依赖（不需要预装 Node.js）
+        # 支持 ACP 编辑器集成（VSCode/JetBrains 等）
+        "label": "Kimi Code",
+        "version": "0.4.0",
+        "release_date": "2026-07-22",
+        "homepage": "https://code.kimi.com",
+        "docs_url": "https://moonshotai.github.io/kimi-code/zh/",
+        "release_url": "https://github.com/MoonshotAI/kimi-code/releases",
+        "cli_install": {
+            "method": "script",
+            "script_url": "https://code.kimi.com/kimi-code/install.sh",
+            "script_url_win": "https://code.kimi.com/kimi-code/install.ps1",
+            "url": "https://code.kimi.com",
+            # 卸载：删除二进制 + 配置目录
+            "uninstall_cmd_mac": "rm -f $(which kimi) 2>/dev/null; rm -rf ~/.kimi-code; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\.local\\bin\\kimi.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.kimi-code\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "manual",
+            "url": "https://code.kimi.com",
+        },
+        # Kimi Code VSCode 扩展
+        # 来源：https://code.kimi.com（Kimi Code 支持 VSCode 编辑器集成）
+        "vscode_install": {
+            "method": "manual",
+            "url": "https://code.kimi.com",
+            "note": "在 VS Code 扩展市场搜索 Kimi Code 安装",
+        },
+        # Kimi Code JetBrains 插件
+        # 来源：https://code.kimi.com（Kimi Code 支持 JetBrains 编辑器集成）
+        "jetbrains_install": {
+            "method": "manual",
+            "url": "https://plugins.jetbrains.com/search?search=kimi+code",
+            "note": "在 JetBrains IDE 插件市场搜索 Kimi Code 安装",
+        },
+        "download_urls": {
+            "macos_arm64": "https://code.kimi.com/kimi-code/install.sh",
+            "macos_x64": "https://code.kimi.com/kimi-code/install.sh",
+            "windows_x64": "https://code.kimi.com/kimi-code/install.ps1",
+            "linux_x64": "https://code.kimi.com/kimi-code/install.sh",
+        },
+        "install_methods": ["script"],
+        "categories": ["vscode", "jetbrains"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        # Kimi Code ACP：通过 ACP 协议接入 JetBrains IDE
+        # 来源：https://www.jetbrains.com/acp/（ACP Registry）
+        # Kimi CLI 实现了 ACP，运行 kimi acp 后在 JetBrains AI Assistant 中连接
+        "acp_install": {
+            "method": "manual",
+            "url": "https://www.jetbrains.com/acp/",
+            "cmd": "kimi acp",
+            "note": "在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 kimi acp 后连接",
+        },
+        "brand": "Kimi", "category": "code", "forms": ['vscode', 'jetbrains', 'acp'],
+    },
+    "KimiWork": {
+        # Kimi Work（桌面 AI Agent，Moonshot AI 桌面应用）
+        # 产品页：https://kimi.com/products/kimi-work
+        # 定位：面向知识工作者的桌面 Agent（Local Agent）
+        # 平台：macOS Apple silicon、Windows 10+
+        # 内置 Skill 系统、Cron 定时、WebBridge 浏览器自动化、Agent Swarm
+        "label": "Kimi Work",
+        "version": "1.0.0",
+        "release_date": "2026-06-08",
+        "homepage": "https://kimi.com/products/kimi-work",
+        "docs_url": "https://kimi.com/products/kimi-work",
+        "release_url": "https://kimi.com/products/kimi-work",
+        "cli_install": {
+            "method": "manual",
+            "url": "https://kimi.com/products/kimi-work",
+        },
+        "app_install": {
+            "method": "manual",
+            "url": "https://kimi.com/products/kimi-work",
+        },
+        "download_urls": {
+            "macos_arm64": "https://kimi.com/products/kimi-work",
+            "macos_x64": "https://kimi.com/products/kimi-work",
+            "windows_x64": "https://kimi.com/products/kimi-work",
+        },
+        "install_methods": ["app"],
+        "categories": ["app"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Kimi", "category": "work", "forms": ['app'],
+    },
+    "Pi": {
+        # Pi（极简 agent harness，CLI 工具）
+        # 官网：https://pi.dev/
+        # GitHub：https://github.com/earendil-works/pi
+        # 配置目录：~/.pi/
+        # 支持 15+ 提供商，扩展/技能/提示模板/主题
+        "label": "Pi",
+        "version": "latest",
+        "release_date": "2026-07-01",
+        "homepage": "https://pi.dev/",
+        "docs_url": "https://pi.dev/docs/latest",
+        "release_url": "https://github.com/earendil-works/pi/releases",
+        "cli_install": {
+            # 官方安装方式：npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+            # 来源：https://pi.dev/docs/latest
+            # --ignore-scripts 禁用依赖生命周期脚本（Pi 不需要 install scripts）
+            "method": "npm",
+            "package": "@earendil-works/pi-coding-agent",
+            "npm_flags": "--ignore-scripts",
+            "url": "https://pi.dev/",
+            "script_url": "https://pi.dev/install.sh",
+            "script_url_win": "https://pi.dev/install.ps1",
+            "uninstall_cmd_mac": "npm uninstall -g @earendil-works/pi-coding-agent; rm -rf ~/.pi; true",
+            "uninstall_cmd_win": "npm uninstall -g @earendil-works/pi-coding-agent & rmdir /s /q \"%USERPROFILE%\\.pi\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "manual",
+            "url": "https://pi.dev/",
+        },
+        "download_urls": {
+            "macos_arm64": "https://pi.dev/",
+            "macos_x64": "https://pi.dev/",
+            "windows_x64": "https://pi.dev/",
+            "linux_x64": "https://pi.dev/",
         },
         "install_methods": ["npm"],
-        "hidden": True,  # 扩展检测，不在 AIDE 管理页显示
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Pi", "category": "code", "forms": ['cli'],
+    },
+    "CommandCode": {
+        # Command Code（面向命令行场景的 AI 编程智能体）
+        # 官网：https://commandcode.ai/
+        # npm 包：command-code
+        # CLI 命令：cmd / command-code / cmnd
+        # 配置目录：~/.commandcode/
+        # 核心能力：Taste 编码风格持续学习系统
+        "label": "Command Code",
+        "version": "0.0.3",
+        "release_date": "2026-07-01",
+        "homepage": "https://commandcode.ai/",
+        "docs_url": "https://commandcode.ai/",
+        "release_url": "https://www.npmjs.com/package/command-code",
+        "cli_install": {
+            "method": "npm",
+            "package": "command-code",
+            "url": "https://commandcode.ai/",
+            "uninstall_cmd_mac": "npm uninstall -g command-code; rm -rf ~/.commandcode; true",
+            "uninstall_cmd_win": "npm uninstall -g command-code & rmdir /s /q \"%USERPROFILE%\\.commandcode\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "manual",
+            "url": "https://commandcode.ai/",
+        },
+        "download_urls": {
+            "macos_arm64": "https://commandcode.ai/",
+            "macos_x64": "https://commandcode.ai/",
+            "windows_x64": "https://commandcode.ai/",
+            "linux_x64": "https://commandcode.ai/",
+        },
+        "install_methods": ["npm"],
+        "categories": ["cli"],
+        # 新分类字段（品牌 brand + 顶层 category + 形式 forms）
+        "brand": "Command Code", "category": "code", "forms": ['cli'],
+    },
+    "VSCode": {
+        # Visual Studio Code（Microsoft 代码编辑器）
+        # 来源：https://code.visualstudio.com/
+        "label": "VSCode",
+        "version": "1.103",
+        "release_date": "2026-07-01",
+        "homepage": "https://code.visualstudio.com",
+        "docs_url": "https://code.visualstudio.com/docs",
+        "release_url": "https://code.visualstudio.com/updates",
+        "cli_install": {
+            # VSCode CLI 随 App 一起安装（code 命令）
+            "method": "manual",
+            "url": "https://code.visualstudio.com/download",
+            "note": "安装 VSCode 后，在命令面板执行 'Shell Command: Install code in PATH' 启用 code CLI",
+            "uninstall_cmd_mac": "rm -f /usr/local/bin/code; true",
+            "uninstall_cmd_win": "del /q \"%USERPROFILE%\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd\" 2>nul & exit /b 0",
+        },
+        "app_install": {
+            "method": "system_uninstall",
+            "url": "https://code.visualstudio.com/download",
+            "uninstall_cmd_mac": "rm -rf '/Applications/Visual Studio Code.app' ~/.vscode 2>/dev/null; true",
+            "uninstall_cmd_win": "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Microsoft VS Code\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.vscode\" 2>nul & exit /b 0",
+        },
+        "download_urls": {
+            "macos_arm64": "https://code.visualstudio.com/download",
+            "macos_x64": "https://code.visualstudio.com/download",
+            "windows_x64": "https://code.visualstudio.com/download",
+            "linux_x64": "https://code.visualstudio.com/download",
+        },
+        "install_methods": ["app"],
+        "categories": ["app", "cli"],
+        "brand": "Microsoft", "category": "code", "forms": ['app', 'cli'],
     },
 }
 
@@ -942,14 +1281,73 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
 
     if method == "npm":
         if not shutil.which("npm"):
-            return {"ok": False, "ide": ide_key, "mode": mode, "method": "npm",
-                    "message": "未安装 npm，请先安装 Node.js",
-                    "cmd": "", "stdout": "", "stderr": ""}
-        cmd = ["npm", "install", "-g", package]
-        r = _run_cmd(cmd, timeout=600)
+            # npm 不可用，尝试 script 回退（若配置了 script_url）
+            script_url_fallback = install_meta.get("script_url", "")
+            script_url_win_fallback = install_meta.get("script_url_win", "")
+            if script_url_fallback or script_url_win_fallback:
+                fallback_msg = "npm 不可用，回退到脚本安装"
+            else:
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": "npm",
+                        "message": "未安装 npm，请先安装 Node.js",
+                        "cmd": "", "stdout": "", "stderr": ""}
+        else:
+            npm_flags = install_meta.get("npm_flags", "")
+            if npm_flags:
+                cmd = ["npm", "install", "-g", package] + npm_flags.split()
+            else:
+                cmd = ["npm", "install", "-g", package]
+            r = _run_cmd(cmd, timeout=600)
+            if r["ok"]:
+                return {
+                    "ok": True, "ide": ide_key, "mode": mode, "method": "npm",
+                    "message": "安装成功",
+                    "cmd": r["cmd"], "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+                }
+            # npm 安装失败，尝试 --ignore-scripts（解决 sharp 等原生模块编译失败）
+            r2 = None
+            if "--ignore-scripts" not in npm_flags:
+                r2 = _run_cmd(["npm", "install", "-g", package, "--ignore-scripts"], timeout=600)
+            if r2 and r2["ok"]:
+                return {
+                    "ok": True, "ide": ide_key, "mode": mode, "method": "npm",
+                    "message": "安装成功（使用 --ignore-scripts 跳过原生模块编译）",
+                    "cmd": r2["cmd"], "stdout": r2["stdout"][-2000:], "stderr": r2["stderr"][-2000:],
+                }
+            # npm 仍失败，尝试 script 回退（若配置了 script_url）
+            script_url_fallback = install_meta.get("script_url", "")
+            script_url_win_fallback = install_meta.get("script_url_win", "")
+            fallback_msg = f"npm 安装失败 (exit={r['returncode']}), 回退到脚本安装"
+
+        # script 回退：npm 失败或 npm 不可用时，使用官方安装脚本
+        if script_url_fallback or script_url_win_fallback:
+            if sys.platform == "win32" and script_url_win_fallback:
+                shell_cmd = f"irm {script_url_win_fallback} | iex"
+                r = _run_cmd(
+                    ["powershell", "-NoProfile", "-ExecutionPolicy", "ByPass", "-Command", shell_cmd],
+                    timeout=600,
+                )
+                return {
+                    "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "script",
+                    "message": (f"{fallback_msg}成功" if r["ok"] else f"{fallback_msg}失败 (exit={r['returncode']})"),
+                    "cmd": shell_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+                }
+            elif script_url_fallback:
+                if sys.platform == "win32":
+                    # Windows 无 bash，用 PowerShell 执行 curl 管道
+                    shell_cmd = f"curl -fsSL {script_url_fallback} | bash"
+                    r = _run_cmd(["bash", "-c", shell_cmd], timeout=600)
+                else:
+                    shell_cmd = f"curl -fsSL {script_url_fallback} | bash"
+                    r = _run_cmd(["bash", "-c", shell_cmd], timeout=600)
+                return {
+                    "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "script",
+                    "message": (f"{fallback_msg}成功" if r["ok"] else f"{fallback_msg}失败 (exit={r['returncode']})"),
+                    "cmd": shell_cmd, "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
+                }
+
         return {
-            "ok": r["ok"], "ide": ide_key, "mode": mode, "method": "npm",
-            "message": "安装成功" if r["ok"] else f"安装失败 (exit={r['returncode']})",
+            "ok": False, "ide": ide_key, "mode": mode, "method": "npm",
+            "message": f"安装失败 (exit={r['returncode']})",
             "cmd": r["cmd"], "stdout": r["stdout"][-2000:], "stderr": r["stderr"][-2000:],
         }
 
@@ -1296,6 +1694,9 @@ def get_install_info(ide_key: str) -> dict:
         return {"ide": ide_key, "available": False}
     cli_install = dict(meta.get("cli_install", {}))
     app_install = dict(meta.get("app_install", {}))
+    vscode_install = dict(meta.get("vscode_install", {}))
+    jetbrains_install = dict(meta.get("jetbrains_install", {}))
+    acp_install = dict(meta.get("acp_install", {}))
     homepage = meta.get("homepage", "")
 
     # 非 macOS 平台：cask/brew/app_cli 降级为 manual + homepage，保留 uninstall_cmd
@@ -1320,9 +1721,45 @@ def get_install_info(ide_key: str) -> dict:
         "release_url": meta.get("release_url", ""),
         "download_urls": meta.get("download_urls", {}),
         "install_methods": meta.get("install_methods", []),
+        # 新分类字段：品牌 + 顶层 Code/Work + 形式子集
+        # 用于 AIDE 管理页按品牌分组卡片化展示（每个品牌一张大卡片，
+        # 卡片内按 Code/Work 顶层分组，再按 cli/app/vscode/jetbrains 子形式分行）
+        "brand": meta.get("brand") or "",
+        "category": meta.get("category") or "",
+        "forms": meta.get("forms") or [],
+        # 兼容字段：旧 categories（app/cli/vscode/jetbrains 平铺列表）
+        # 从新 forms 字段派生，保证旧前端代码不破坏
+        "categories": meta.get("categories") or meta.get("forms") or _infer_categories(meta),
         "cli": cli_install,
         "app": app_install,
+        "vscode": vscode_install,
+        "jetbrains": jetbrains_install,
+        "acp": acp_install,
     }
+
+
+def _infer_categories(meta: dict) -> list[str]:
+    """根据 cli_install/app_install 推断 categories（向后兼容旧 IDE 配置）。
+
+    缺省规则：
+    - 有 app_install 且 method != manual-only → 'app'
+    - 有 cli_install 且 method != manual-only → 'cli'
+    都没有则返回空列表（如 Agents 占位符）。
+    """
+    cats: list[str] = []
+    cli_install = meta.get("cli_install", {})
+    app_install = meta.get("app_install", {})
+    # app：必须有 method 且不是纯 manual（manual 仅给下载页，不算 App 安装能力）
+    if app_install.get("method") and app_install.get("method") != "manual":
+        cats.append("app")
+    elif app_install.get("method") == "manual" and meta.get("download_urls"):
+        # manual + 有下载地址也算 App（如 KimiWork 桌面应用）
+        cats.append("app")
+    if cli_install.get("method") and cli_install.get("method") != "manual":
+        cats.append("cli")
+    elif cli_install.get("method") == "manual" and meta.get("download_urls"):
+        cats.append("cli")
+    return cats
 
 
 __all__ = ["IDE_INSTALL_META", "install_ide", "uninstall_ide", "reinstall_ide",

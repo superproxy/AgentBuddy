@@ -1,7 +1,7 @@
 """IDE 分发器注册表。
 
 通过 get_ide(name, **kw) 获取一个或所有 IDE 分发器实例。
-支持 "All" 返回全部 12 个分发器。
+支持 "All" 返回全部 18 个分发器。
 """
 from pathlib import Path
 
@@ -19,6 +19,10 @@ from .idea import IdeATarget
 from .agents import AgentsTarget
 from .zcode import ZCodeTarget
 from .hermes import HermesTarget
+from .kimi import KimiCLITarget, KimiCodeTarget, KimiWorkTarget
+from .pi import PiTarget
+from .commandcode import CommandCodeTarget
+from .vscode import VSCodeTarget
 
 
 # IDE 注册表：名称 → 类（按字母顺序排列）
@@ -26,10 +30,15 @@ IDE_REGISTRY = {
     "Agents": AgentsTarget,
     "Claude": ClaudeTarget,
     "Codex": CodexTarget,
+    "CommandCode": CommandCodeTarget,
     "Cursor": CursorTarget,
     "IDEA": IdeATarget,
+    "KimiCLI": KimiCLITarget,
+    "KimiCode": KimiCodeTarget,
+    "KimiWork": KimiWorkTarget,
     "OpenClaw": OpenClawTarget,
     "OpenCode": OpenCodeTarget,
+    "Pi": PiTarget,
     "Qoder": QoderTarget,
     "QoderCN": QoderCNTarget,
     "Trae": TraeTarget,
@@ -38,6 +47,7 @@ IDE_REGISTRY = {
     "WorkBuddy": WorkBuddyTarget,
     "ZCode": ZCodeTarget,
     "Hermes": HermesTarget,
+    "VSCode": VSCodeTarget,
 }
 
 
@@ -70,5 +80,6 @@ __all__ = [
     "CursorTarget", "CodexTarget", "OpenCodeTarget",
     "TraeTarget", "TraeCNTarget", "TraeSoloCNTarget",
     "ClaudeTarget", "WorkBuddyTarget", "QoderTarget", "QoderCNTarget",
-    "OpenClawTarget", "IdeATarget", "AgentsTarget", "ZCodeTarget",
+    "OpenClawTarget", "IdeATarget", "AgentsTarget", "ZCodeTarget", "PiTarget", "CommandCodeTarget",
+    "VSCodeTarget",
 ]

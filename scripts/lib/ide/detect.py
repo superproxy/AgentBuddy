@@ -15,7 +15,10 @@
 - ZCode（智谱 ADE，zcode CLI + macOS .app）
 - IDEA（idea 命令 + Toolbox + Windows exe）
 - Agents（通用，无独立 CLI，按配置目录存在判断）
-- Kimi Code（kimi CLI，非 IDE_REGISTRY 成员但作为扩展检测）
+- Kimi 三件套（Moonshot AI）：
+  - Kimi CLI（旧版 Python/uv，kimi 命令，~/.kimi/）
+  - Kimi Code（新版 Node.js 二进制，kimi 命令，~/.kimi-code/）
+  - Kimi Work（桌面应用，macOS .app + Windows exe，~/.kimi-work/）
 
 Windows 探测说明：
 - CLI：shutil.which 返回的可能是 .CMD/.BAT 包装脚本（npm 全局安装的典型情况），
@@ -56,7 +59,10 @@ IDE_DETECT_META = {
         "label": "Codex",
         "cli_names": ["codex"],
         "macos_apps": ["/Applications/Codex.app"],
-        "windows_apps": [],
+        "windows_apps": [
+            "{LOCALAPPDATA}/Programs/codex/Codex.exe",
+            "{LOCALAPPDATA}/Programs/Codex/Codex.exe",
+        ],
         "config_dirs": [".codex"],
         "sessions_subdir": "sessions",
         "is_tui": True,
@@ -179,7 +185,10 @@ IDE_DETECT_META = {
         "label": "WorkBuddy",
         "cli_names": [],
         "macos_apps": ["/Applications/WorkBuddy.app"],
-        "windows_apps": [],
+        "windows_apps": [
+            "{LOCALAPPDATA}/Programs/WorkBuddy/WorkBuddy.exe",
+            "{LOCALAPPDATA}/WorkBuddy/WorkBuddy.exe",
+        ],
         "config_dirs": [".workbuddy"],
         "sessions_subdir": "sessions",
         "is_tui": True,
@@ -215,16 +224,46 @@ IDE_DETECT_META = {
         "is_tui": False,
         "type": "non-ide",  # 非 IDE（仅配置目录，无 CLI/App）
     },
-    # 扩展：Kimi Code（非 IDE_REGISTRY 成员，作为 CLI 伙伴工具检测）
+    # Kimi CLI（旧版 Python/uv CLI，仓库 MoonshotAI/kimi-cli）
+    # 配置：~/.kimi/config.toml；会话：~/.kimi/sessions/<workDirHash>/<sessionId>/
+    "KimiCLI": {
+        "label": "Kimi CLI",
+        "cli_names": ["kimi"],
+        "macos_apps": [],
+        "windows_apps": [],
+        "config_dirs": [".kimi"],
+        "sessions_subdir": "sessions",
+        "is_tui": True,
+    },
+    # Kimi Code（新版 Node.js 二进制 CLI，仓库 MoonshotAI/kimi-code）
+    # 配置：~/.kimi-code/config.toml；会话：~/.kimi-code/sessions/<workDirKey>/<sessionId>/
     "KimiCode": {
         "label": "Kimi Code",
-        "cli_names": ["kimi", "kimi-code"],
+        "cli_names": ["kimi"],
         "macos_apps": [],
         "windows_apps": [],
         "config_dirs": [".kimi-code"],
         "sessions_subdir": "sessions",
         "is_tui": True,
-        "hidden": True,  # 扩展检测，不在 AIDE 管理页显示（非 IDE_REGISTRY 成员）
+    },
+    # Kimi Work（桌面应用，Moonshot 桌面 AI Agent）
+    # macOS：/Applications/Kimi Work.app 或 /Applications/Kimi.app
+    # Windows：%LOCALAPPDATA%/Programs/Kimi Work/Kimi Work.exe
+    "KimiWork": {
+        "label": "Kimi Work",
+        "cli_names": [],
+        "macos_apps": [
+            "/Applications/Kimi Work.app",
+            "/Applications/Kimi.app",
+        ],
+        "windows_apps": [
+            "{LOCALAPPDATA}/Programs/Kimi Work/Kimi Work.exe",
+            "{LOCALAPPDATA}/Programs/Kimi/Kimi.exe",
+            "{ProgramFiles}/Kimi Work/Kimi Work.exe",
+        ],
+        "config_dirs": [".kimi-work"],
+        "sessions_subdir": "sessions",
+        "is_tui": False,
     },
     # 智谱 ZCode ADE（Agent Development Environment）
     "ZCode": {
@@ -238,6 +277,43 @@ IDE_DETECT_META = {
         "config_dirs": [".zcode"],
         "sessions_subdir": "cli/rollout",
         "is_tui": True,
+    },
+    # Pi（极简 agent harness，CLI 工具）
+    # 官网：https://pi.dev/
+    # 配置目录：~/.pi/
+    "Pi": {
+        "label": "Pi",
+        "cli_names": ["pi"],
+        "macos_apps": [],
+        "windows_apps": [],
+        "config_dirs": [".pi"],
+        "sessions_subdir": "sessions",
+        "is_tui": True,
+    },
+    # Command Code（面向命令行场景的 AI 编程智能体）
+    # 官网：https://commandcode.ai/
+    # npm 包：command-code，安装后生成 commandcode 二进制
+    # CLI 命令：commandcode（来自 commandcode-mcp 文档，不用 cmd 避免匹配 Windows cmd.exe）
+    "CommandCode": {
+        "label": "Command Code",
+        "cli_names": ["commandcode", "command-code"],
+        "macos_apps": [],
+        "windows_apps": [],
+        "config_dirs": [".commandcode"],
+        "sessions_subdir": "sessions",
+        "is_tui": True,
+    },
+    "VSCode": {
+        "label": "VSCode",
+        # code 命令随 VSCode App 安装
+        "cli_names": ["code"],
+        "macos_apps": ["/Applications/Visual Studio Code.app"],
+        "windows_apps": [
+            "{LOCALAPPDATA}/Programs/Microsoft VS Code/Code.exe",
+            "{ProgramFiles}/Microsoft VS Code/Code.exe",
+        ],
+        "config_dirs": [".vscode"],
+        "is_tui": False,
     },
 }
 

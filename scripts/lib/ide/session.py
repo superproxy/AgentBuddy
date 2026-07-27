@@ -248,6 +248,8 @@ def scan_kimi_sessions(sessions_dir: Path, ide_key: str = "KimiCode") -> list[di
     结构：<workDirKey>/<session-id>/state.json + agents/*/wire.jsonl
     state.json: {createdAt, updatedAt, title, ...}
     workDirKey 格式：wd_<user>_<hash>，无法反推 cwd，需查 session_index.jsonl
+
+    Kimi CLI（旧版，~/.kimi/sessions）结构相同，通过 ide_key 区分。
     """
     results = []
     if not sessions_dir.exists():
@@ -576,6 +578,7 @@ IDE_SESSION_SCANNERS = {
     "Claude": scan_claude_sessions,
     "Codex": scan_codex_sessions,
     "Cursor": scan_cursor_sessions,
+    "KimiCLI": lambda d, k="KimiCLI": scan_kimi_sessions(d, k),
     "KimiCode": scan_kimi_sessions,
     "WorkBuddy": lambda d, k="WorkBuddy": scan_generic_sessions(d, k),
     "OpenClaw": lambda d, k="OpenClaw": scan_generic_sessions(d, k),
@@ -619,6 +622,7 @@ def list_sessions(ide_key: str, sessions_dir: str | Path) -> list[dict]:
 IDE_RESUME_COMMANDS = {
     "Claude": "{exe} --resume {session_id}",                  # claude --resume <id>
     "Codex": "{exe} --resume {session_id}",                   # codex --resume <id>
+    "KimiCLI": "{exe} --session {session_id}",                # kimi --session <id>
     "KimiCode": "{exe} --session {session_id}",               # kimi --session <id>
     "Cursor": "{exe} --continue",                             # Cursor 无 CLI resume，只能 --continue 最近会话
     "OpenCode": "{exe} --resume {session_id}",

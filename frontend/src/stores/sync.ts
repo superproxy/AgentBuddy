@@ -32,6 +32,9 @@ const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'Codex', label: 'Codex', desc: '.codex/config.toml + rules' },
   { key: 'Cursor', label: 'Cursor', desc: '.cursor/rules + .cursor/mcp.json' },
   { key: 'IDEA', label: 'IDEA', desc: 'IDEA 配置' },
+  { key: 'KimiCLI', label: 'Kimi CLI', desc: '~/.kimi/mcp.json + rules' },
+  { key: 'KimiCode', label: 'Kimi Code', desc: '~/.kimi-code/mcp.json + rules' },
+  { key: 'KimiWork', label: 'Kimi Work', desc: '~/.kimi-work/mcp.json + rules' },
   { key: 'OpenClaw', label: 'OpenClaw', desc: '.openclaw/rules' },
   { key: 'OpenCode', label: 'OpenCode', desc: 'opencode.json' },
   { key: 'Qoder', label: 'Qoder', desc: '.qoder/rules' },
@@ -42,6 +45,8 @@ const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'WorkBuddy', label: 'WorkBuddy', desc: '.workbuddy/rules + models.json' },
   { key: 'ZCode', label: 'ZCode', desc: '.zcode/zcode.json' },
   { key: 'Hermes', label: 'Hermes', desc: '.ade-hermes/rules + mcp' },
+  { key: 'Pi', label: 'Pi', desc: '~/.pi/agent + mcp.json' },
+  { key: 'CommandCode', label: 'Command Code', desc: '~/.commandcode/rules + mcp' },
 ]
 
 /** 从旧 localStorage 读一次（用于首次迁移到后端） */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { onMounted, computed, ref, reactive } from 'vue'
+import { onMounted, computed, ref, reactive, watch } from 'vue'
 import { useIdeStore } from '../stores/ide'
 import { useSyncStore } from '../stores/sync'
 import { useUiStore } from '../stores/ui'
@@ -17,7 +17,115 @@ const {
   ideSessionsMap, ideSessionsStatsMap, ideLoadingSessions,
   exportingSession, shareModalOpen, shareModalSession, shareTargetIde, shareImporting,
   shareTargetIdes,
+  brandGroups,
 } = storeToRefs(ide)
+
+// 品牌视图下的全局筛选状态
+// 一级 chip：品牌（默认 'all' 显示全部）
+const activeBrandChip = ref<string>('all')
+
+// 常用品牌（默认 5 个，可追加/移除，类似工具栏菜单的常用区）
+const DEFAULT_BRAND_COUNT = 5
+const favoriteBrands = ref<string[]>([])
+const showMoreBrands = ref(false)
+
+// 品牌 chip 选项（列出所有品牌）
+const brandChipOptions = computed(() => {
+  const chips: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部品牌' }]
+  for (const bg of brandGroups.value) {
+    chips.push({ key: bg.brand, label: bg.brand })
+  }
+  return chips
+})
+
+// 初始化常用品牌（默认取已安装的前 3 个，不足则补未安装的品牌）
+const initFavoriteBrands = () => {
+  if (favoriteBrands.value.length === 0 && brandGroups.value.length > 0) {
+    // 优先选已安装的品牌（installedCount > 0）
+    const installed = brandGroups.value.filter((b) => b.installedCount > 0)
+    const notInstalled = brandGroups.value.filter((b) => b.installedCount === 0)
+    const picked = [...installed, ...notInstalled].slice(0, DEFAULT_BRAND_COUNT)
+    favoriteBrands.value = picked.map((b) => b.brand)
+  }
+}
+
+// 更多品牌（非常用区的品牌）
+const moreBrands = computed(() => {
+  return brandGroups.value
+    .filter((bg) => !favoriteBrands.value.includes(bg.brand))
+    .map((bg) => bg.brand)
+})
+
+// 当前显示的品牌 chip（"全部品牌" + 常用品牌）
+const visibleBrandChips = computed(() => {
+  return brandChipOptions.value.filter(
+    (chip) => chip.key === 'all' || favoriteBrands.value.includes(chip.key)
+  )
+})
+
+// 加入常用区
+const addToFavorite = (brand: string) => {
+  if (!favoriteBrands.value.includes(brand)) {
+    favoriteBrands.value.push(brand)
+  }
+}
+
+// 移出常用区
+const removeFromFavorite = (brand: string) => {
+  favoriteBrands.value = favoriteBrands.value.filter((b) => b !== brand)
+  // 如果当前选中的品牌被移出，切回"全部品牌"
+  if (activeBrandChip.value === brand) {
+    activeBrandChip.value = 'all'
+  }
+}
+
+// 点击更多品牌项：临时选中该品牌（不加入常用）
+const selectMoreBrand = (brand: string) => {
+  activeBrandChip.value = brand
+  showMoreBrands.value = false
+}
+
+// 过滤后的品牌分组（按 activeBrandChip 筛选，Code 和 Work 并列展示）
+const filteredBrandGroups = computed(() => {
+  return brandGroups.value
+    .filter((bg) => activeBrandChip.value === 'all' || bg.brand === activeBrandChip.value)
+    .filter((g): g is NonNullable<typeof g> => g !== null)
+})
+
+// 品牌元数据（前端本地常量，与 stores/ide.ts 同步）
+const BRAND_META_LOCAL: Record<string, { vendor: string; color: string; logo: string }> = {
+  Kimi:      { vendor: 'Moonshot AI · 月之暗面',  color: '#1a1a2e', logo: 'K' },
+  Claude:    { vendor: 'Anthropic',                color: '#c75d3a', logo: 'Cl' },
+  Codex:     { vendor: 'OpenAI',                   color: '#0a8a6a', logo: 'Co' },
+  Trae:      { vendor: '字节跳动 · ByteDance',     color: '#e6492d', logo: 'Tr' },
+  'Trae CN': { vendor: '字节跳动 · ByteDance (国内版)', color: '#3d4fd6', logo: 'Tr' },
+  Qoder:     { vendor: '阿里云 · 通义灵码',        color: '#0a93b3', logo: 'Qo' },
+  'Qoder CN': { vendor: '阿里云 · 通义灵码 (国内版)', color: '#0a6b8d', logo: 'QC' },
+  ZCode:     { vendor: '智谱 ADE',                 color: '#047857', logo: 'ZC' },
+  JetBrains: { vendor: 'JetBrains s.r.o.',         color: '#0a5fc7', logo: 'JB' },
+  OpenCode:  { vendor: 'anomalyco',               color: '#4f5cd9', logo: 'OO' },
+  OpenClaw:  { vendor: '开源社区',                 color: '#7c5cf0', logo: 'OC' },
+  Hermes:    { vendor: '内部 Agent 平台',          color: '#6b7280', logo: 'He' },
+  WorkBuddy: { vendor: '腾讯 CodeBuddy · AI 工作台', color: '#dc2626', logo: 'WB' },
+  Pi:        { vendor: 'earendil-works',           color: '#7c3aed', logo: 'Pi' },
+  'Trae Work': { vendor: '字节跳动 · ByteDance',   color: '#f59e0b', logo: 'TW' },
+  'Command Code': { vendor: 'Command Code',       color: '#0891b2', logo: 'CC' },
+}
+
+// 形式徽章配色
+const FORM_META_LOCAL: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  cli:       { label: 'CLI',           color: '#c4b5fd', bg: 'rgba(124,92,240,0.15)',  border: 'rgba(124,92,240,0.3)' },
+  app:       { label: 'App',           color: '#93c5fd', bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.3)' },
+  vscode:    { label: 'VSCode 插件',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
+  jetbrains: { label: 'JetBrains 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
+  acp:       { label: 'ACP',           color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
+}
+
+// 顶层分类配色
+const CATEGORY_META_LOCAL: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  code: { label: 'Code', color: '#c4b5fd', bg: 'linear-gradient(135deg, rgba(124,92,240,0.2), rgba(79,92,217,0.2))', border: 'rgba(124,92,240,0.4)' },
+  work: { label: 'Work', color: '#fbbf24', bg: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(217,119,6,0.2))', border: 'rgba(251,191,36,0.4)' },
+}
 const { dragIdeKey, dragOverIdeKey } = storeToRefs(sync)
 const {
   loadIdeDetect, launchIde, installIde, uninstallIde, reinstallIde, openIdeConfig,
@@ -61,12 +169,17 @@ function currentInfo(it: any): any {
   const tab = currentTab(it)
   const info = ideInstallInfo.value[it.key]
   if (!info) return null
-  return tab === 'cli' ? info.cli : info.app
+  if (tab === 'cli') return info.cli
+  if (tab === 'app') return info.app
+  if (tab === 'vscode') return info.vscode
+  if (tab === 'jetbrains') return info.jetbrains
+  if (tab === 'acp') return info.acp
+  return info.cli || info.app
 }
 
 function currentPath(it: any): string {
   const tab = currentTab(it)
-  if (tab === 'cli') return it.exe_path || ''
+  if (tab === 'cli' || tab === 'acp') return it.exe_path || ''
   return it.app_path || ''
 }
 
@@ -76,7 +189,8 @@ function currentMethod(it: any): string {
 
 function currentInstalled(it: any): boolean {
   const tab = currentTab(it)
-  return tab === 'cli' ? !!it.exe_path : !!it.app_path
+  if (tab === 'cli' || tab === 'acp') return !!it.exe_path
+  return !!it.app_path
 }
 
 function busyKey(it: any): string {
@@ -124,40 +238,57 @@ function onIconError(key: string) {
 }
 
 /** IDE 是否支持某安装维度（基于 install info 静态配置） */
-function supportsTab(it: any, tab: 'cli' | 'app'): boolean {
+function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'): boolean {
   const info = ideInstallInfo.value[it.key]
   if (!info) return false
   if (tab === 'cli') return !!(info.cli && it.cli_names?.length)
-  return !!info.app
+  if (tab === 'app') return !!info.app
+  if (tab === 'vscode') return !!info.vscode
+  if (tab === 'jetbrains') return !!info.jetbrains
+  if (tab === 'acp') return !!info.acp
+  return false
 }
 
 /** 条目类型：展开条目用 _tab，未展开条目按唯一支持维度推断 */
-function ideType(it: any): 'cli' | 'app' | '' {
-  if (it._tab) return it._tab as 'cli' | 'app'
-  const cli = supportsTab(it, 'cli')
-  const app = supportsTab(it, 'app')
-  if (cli && !app) return 'cli'
-  if (app && !cli) return 'app'
+function ideType(it: any): 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp' | '' {
+  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'
+  const tabs: Array<'cli' | 'app' | 'vscode' | 'jetbrains' | 'acp'> = ['cli', 'app', 'vscode', 'jetbrains', 'acp']
+  const supported = tabs.filter(t => supportsTab(it, t))
+  if (supported.length === 1) return supported[0]
   return ''
 }
 
-/** 按 CLI / App 维度独立展开条目。
- * CLI 和 App 各自独立判断，不捆绑为 both：
+/** 按维度独立展开条目（cli / app / vscode / jetbrains）。
+ * 每个维度各自独立判断：
  *   - 支持 CLI → 生成 cli 条目（app_path 清空）
  *   - 支持 App → 生成 app 条目（exe_path 清空）
+ *   - 支持 VSCode → 生成 vscode 条目
+ *   - 支持 JetBrains → 生成 jetbrains 条目
  *   - 都不支持 → 单条目（如 Agents，仅配置目录）
  * 每个条目的 installed 由 currentInstalled 按 exe_path/app_path 独立判定。
  */
 function expandIde(it: any): any[] {
   const cli = supportsTab(it, 'cli')
   const app = supportsTab(it, 'app')
-  if (!cli && !app) return [it]
+  const vscode = supportsTab(it, 'vscode')
+  const jetbrains = supportsTab(it, 'jetbrains')
+  const acp = supportsTab(it, 'acp')
+  if (!cli && !app && !vscode && !jetbrains && !acp) return [it]
   const entries: any[] = []
   if (cli) {
     entries.push({ ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' })
   }
   if (app) {
     entries.push({ ...it, _tab: 'app', _uid: it.key + ':app', label: it.label + ' App', _expanded: true, exe_path: '' })
+  }
+  if (vscode) {
+    entries.push({ ...it, _tab: 'vscode', _uid: it.key + ':vscode', label: it.label + ' VSCode', _expanded: true, exe_path: '', app_path: '' })
+  }
+  if (jetbrains) {
+    entries.push({ ...it, _tab: 'jetbrains', _uid: it.key + ':jetbrains', label: it.label + ' JetBrains', _expanded: true, exe_path: '', app_path: '' })
+  }
+  if (acp) {
+    entries.push({ ...it, _tab: 'acp', _uid: it.key + ':acp', label: it.label + ' ACP', _expanded: true, exe_path: '', app_path: '' })
   }
   return entries
 }
@@ -171,6 +302,9 @@ function typeLabel(it: any): string {
   const t = ideType(it)
   if (t === 'cli') return 'CLI'
   if (t === 'app') return 'App'
+  if (t === 'vscode') return 'VSCode'
+  if (t === 'jetbrains') return 'JetBrains'
+  if (t === 'acp') return 'ACP'
   return '—'
 }
 
@@ -190,35 +324,47 @@ const expandedNotInstalled = computed(() =>
   expandedAll.value.filter(it => !currentInstalled(it))
 )
 
-// 按维度分组（cli / app）
-const installedCli = computed(() =>
-  expandedInstalled.value.filter(it => ideType(it) === 'cli')
-)
-const installedApp = computed(() =>
-  expandedInstalled.value.filter(it => ideType(it) === 'app')
-)
-const notInstalledCli = computed(() =>
-  expandedNotInstalled.value.filter(it => ideType(it) === 'cli')
-)
-const notInstalledApp = computed(() =>
-  expandedNotInstalled.value.filter(it => ideType(it) === 'app')
-)
-// 既无 CLI 也无 App 的兜底分组（极少见，归类到"其他"）
-const notInstalledOther = computed(() =>
-  expandedNotInstalled.value.filter(it => ideType(it) === '')
-)
-
 /** 当前选中的 IDE 对象（用于 Dock） */
 const currentSelectedIde = computed(() => {
   if (!expandedIde.value) return null
-  // 优先在展开后的列表里按 _uid 查找（both 拆分条目）
-  return expandedAll.value.find(i => ideUid(i) === expandedIde.value) || null
+  // 优先在展开后的列表里按 _uid 精确查找（both 拆分条目 key:tab）
+  const byUid = expandedAll.value.find(i => ideUid(i) === expandedIde.value)
+  if (byUid) return byUid
+  // 回退：品牌视图点击传入 key:form，展开条目 _uid 也带 :tab 后缀。
+  // 拆分出 rawKey 和 form，按 key 匹配并优先选对应 tab 的条目
+  const sepIdx = expandedIde.value.indexOf(':')
+  const rawKey = sepIdx > -1 ? expandedIde.value.slice(0, sepIdx) : expandedIde.value
+  const form = sepIdx > -1 ? expandedIde.value.slice(sepIdx + 1) : ''
+  const byKey = expandedAll.value.filter(i => i.key === rawKey)
+  if (byKey.length > 0) {
+    // 优先选对应 form 的展开条目，其次选已安装的，否则取第一个
+    if (form) {
+      const byTab = byKey.find(i => i._tab === form)
+      if (byTab) return byTab
+    }
+    return byKey.find(i => currentInstalled(i)) || byKey[0]
+  }
+  // 最终回退：在原始 detect 列表中按 key 查找
+  const raw = [...installedIdes.value, ...notInstalledIdes.value].find(i => i.key === rawKey)
+  return raw || null
 })
 
 // 进入 AIDE 管理页时自动检测（首次无数据才检测，避免重复请求）
 onMounted(() => {
   if (!ide.ideDetects.length) loadIdeDetect()
+  // 初始化常用品牌（默认前 3 个）
+  initFavoriteBrands()
 })
+
+// brandGroups 异步加载完成后，如果常用品牌为空，自动初始化
+watch(
+  () => brandGroups.value.length,
+  (len) => {
+    if (len > 0 && favoriteBrands.value.length === 0) {
+      initFavoriteBrands()
+    }
+  }
+)
 </script>
 
 <template>
@@ -243,216 +389,177 @@ onMounted(() => {
     </div>
 
     <div v-else>
-      <!-- 已安装 · CLI 工具 -->
-      <section v-if="installedCli.length" class="section">
-        <div class="section-head">
-          <h2>
-            <span class="type-icon cli">
-              <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-            </span>
-            已安装 · CLI 工具
-          </h2>
-          <span class="count">{{ installedCli.length }} 个</span>
-          <div class="line"></div>
-        </div>
-        <div class="grid">
-          <div
-            v-for="it in installedCli" :key="ideUid(it)"
-            :class="['item', { 'selected': expandedIde === ideUid(it), 'dragging': dragIdeKey === ideUid(it), 'drag-over': dragOverIdeKey === ideUid(it) && dragIdeKey !== ideUid(it) }]"
-            draggable="true"
-            @click="toggleIdeCard(ideUid(it))"
-            @dragstart="onIdeDragStart($event, it.key)"
-            @dragover="onIdeDragOver($event, it.key)"
-            @drop="onIdeDrop($event, it.key)"
-            @dragend="onIdeDragEnd"
+      <!-- ==================== 品牌分组视图 ==================== -->
+      <div class="brand-view">
+        <!-- 品牌 chip（常用区 + 更多收起，类似工具栏菜单） -->
+        <div class="brand-chips">
+          <!-- 常用品牌（默认 3 个） -->
+          <button
+            v-for="chip in visibleBrandChips"
+            :key="chip.key"
+            :class="['brand-chip', { active: activeBrandChip === chip.key }]"
+            @click="activeBrandChip = chip.key"
+            type="button"
           >
-            <div class="icon-wrap">
-              <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                <span v-else class="icon-text">{{ markText(it.label) }}</span>
-              </div>
-              <div v-if="ideType(it)" :class="['type-badge', ideType(it)]" :title="typeLabel(it)">
-                <svg v-if="ideType(it) === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-                <svg v-else-if="ideType(it) === 'app'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-                <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-              </div>
-              <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
-            </div>
-            <div class="label" :title="it.label">{{ it.label }}</div>
-            <div class="sublabel">
-              <span>{{ typeLabel(it) }}</span>
-              <span class="dot"></span>
-              <span>{{ it.version || (currentMethod(it) || '—') }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
+            <span class="brand-chip-label">{{ chip.label }}</span>
+            <span
+              v-if="chip.key !== 'all' && favoriteBrands.length > 1"
+              class="brand-chip-remove"
+              title="移出常用区"
+              @click.stop="removeFromFavorite(chip.key)"
+            >×</span>
+          </button>
 
-      <!-- 已安装 · 桌面 App -->
-      <section v-if="installedApp.length" class="section">
-        <div class="section-head">
-          <h2>
-            <span class="type-icon app">
-              <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-            </span>
-            已安装 · 桌面 App
-          </h2>
-          <span class="count">{{ installedApp.length }} 个</span>
-          <div class="line"></div>
-        </div>
-        <div class="grid">
-          <div
-            v-for="it in installedApp" :key="ideUid(it)"
-            :class="['item', { 'selected': expandedIde === ideUid(it), 'dragging': dragIdeKey === ideUid(it), 'drag-over': dragOverIdeKey === ideUid(it) && dragIdeKey !== ideUid(it) }]"
-            draggable="true"
-            @click="toggleIdeCard(ideUid(it))"
-            @dragstart="onIdeDragStart($event, it.key)"
-            @dragover="onIdeDragOver($event, it.key)"
-            @drop="onIdeDrop($event, it.key)"
-            @dragend="onIdeDragEnd"
-          >
-            <div class="icon-wrap">
-              <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                <span v-else class="icon-text">{{ markText(it.label) }}</span>
-              </div>
-              <div v-if="ideType(it)" :class="['type-badge', ideType(it)]" :title="typeLabel(it)">
-                <svg v-if="ideType(it) === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-                <svg v-else-if="ideType(it) === 'app'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-                <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-              </div>
-              <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
-            </div>
-            <div class="label" :title="it.label">{{ it.label }}</div>
-            <div class="sublabel">
-              <span>{{ typeLabel(it) }}</span>
-              <span class="dot"></span>
-              <span>{{ it.version || (currentMethod(it) || '—') }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
+          <!-- 更多收起区 -->
+          <div v-if="moreBrands.length > 0" class="brand-more-wrap">
+            <button
+              type="button"
+              :class="['brand-chip brand-more-trigger', { 'brand-more-open': showMoreBrands, 'is-active': moreBrands.includes(activeBrandChip) }]"
+              @click="showMoreBrands = !showMoreBrands"
+              :aria-expanded="showMoreBrands"
+              title="更多品牌"
+            >
+              <span>更多 {{ moreBrands.length }}</span>
+              <svg
+                class="brand-more-chev"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
 
-      <!-- 未安装 · CLI 工具 -->
-      <section v-if="notInstalledCli.length" class="section">
-        <div class="section-head">
-          <h2>
-            <span class="type-icon cli">
-              <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-            </span>
-            未安装 · CLI 工具
-          </h2>
-          <span class="count">{{ notInstalledCli.length }} 个</span>
-          <div class="line"></div>
-        </div>
-        <div class="grid">
-          <div
-            v-for="it in notInstalledCli" :key="ideUid(it)"
-            :class="['item', 'offline', { 'selected': expandedIde === ideUid(it), 'dragging': dragIdeKey === ideUid(it), 'drag-over': dragOverIdeKey === ideUid(it) && dragIdeKey !== ideUid(it) }]"
-            draggable="true"
-            @click="toggleIdeCard(ideUid(it))"
-            @dragstart="onIdeDragStart($event, it.key)"
-            @dragover="onIdeDragOver($event, it.key)"
-            @drop="onIdeDrop($event, it.key)"
-            @dragend="onIdeDragEnd"
-          >
-            <div class="icon-wrap">
-              <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                <span v-else class="icon-text">{{ markText(it.label) }}</span>
+            <!-- 更多下拉面板 -->
+            <div v-if="showMoreBrands" class="brand-more-panel" role="menu">
+              <div class="brand-more-head">
+                <span>更多品牌（点击 + 加入常用区）</span>
               </div>
-              <div :class="['type-badge', 'cli']" title="CLI 工具">
-                <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
+              <div
+                v-for="brand in moreBrands"
+                :key="brand"
+                role="menuitem"
+                :class="['brand-more-item', { 'is-active': activeBrandChip === brand }]"
+                @click="selectMoreBrand(brand)"
+              >
+                <span class="brand-more-label">{{ brand }}</span>
+                <button
+                  type="button"
+                  class="brand-more-add"
+                  title="加入常用区"
+                  aria-label="加入常用区"
+                  @click.stop="addToFavorite(brand)"
+                >+</button>
               </div>
-            </div>
-            <div class="label" :title="it.label">{{ it.label }}</div>
-            <div class="sublabel">
-              <span>CLI</span>
-              <span class="dot"></span>
-              <span>未安装</span>
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- 未安装 · 桌面 App -->
-      <section v-if="notInstalledApp.length" class="section">
-        <div class="section-head">
-          <h2>
-            <span class="type-icon app">
-              <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-            </span>
-            未安装 · 桌面 App
-          </h2>
-          <span class="count">{{ notInstalledApp.length }} 个</span>
-          <div class="line"></div>
-        </div>
-        <div class="grid">
-          <div
-            v-for="it in notInstalledApp" :key="ideUid(it)"
-            :class="['item', 'offline', { 'selected': expandedIde === ideUid(it), 'dragging': dragIdeKey === ideUid(it), 'drag-over': dragOverIdeKey === ideUid(it) && dragIdeKey !== ideUid(it) }]"
-            draggable="true"
-            @click="toggleIdeCard(ideUid(it))"
-            @dragstart="onIdeDragStart($event, it.key)"
-            @dragover="onIdeDragOver($event, it.key)"
-            @drop="onIdeDrop($event, it.key)"
-            @dragend="onIdeDragEnd"
-          >
-            <div class="icon-wrap">
-              <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                <span v-else class="icon-text">{{ markText(it.label) }}</span>
-              </div>
-              <div :class="['type-badge', 'app']" title="桌面 App">
-                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-              </div>
+        <!-- 品牌卡片列表（Code 和 Work 并列展示） -->
+        <div
+          v-for="bg in filteredBrandGroups"
+          :key="bg.brand"
+          class="brand-card"
+        >
+          <!-- 品牌卡片头 -->
+          <div class="brand-head">
+            <div class="brand-logo">
+              <span class="brand-logo-text">{{ bg.brandLogo }}</span>
             </div>
-            <div class="label" :title="it.label">{{ it.label }}</div>
-            <div class="sublabel">
-              <span>App</span>
-              <span class="dot"></span>
-              <span>未安装</span>
+            <div class="brand-title">
+              <div class="brand-name">{{ bg.brand }}</div>
+              <div class="brand-vendor">{{ bg.vendor }}</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">
+                <span class="num">{{ bg.installedCount }}</span>已安装
+              </span>
+              <span class="stat">
+                <span class="num">{{ bg.total }}</span>共
+              </span>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- 兜底：其他未分类 -->
-      <section v-if="notInstalledOther.length" class="section">
-        <div class="section-head">
-          <h2>
-            <span class="type-icon other">
-              <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
-            </span>
-            未安装 · 其他
-          </h2>
-          <span class="count">{{ notInstalledOther.length }} 个</span>
-          <div class="line"></div>
-        </div>
-        <div class="grid">
-          <div
-            v-for="it in notInstalledOther" :key="ideUid(it)"
-            :class="['item', 'offline', { 'selected': expandedIde === ideUid(it), 'dragging': dragIdeKey === ideUid(it), 'drag-over': dragOverIdeKey === ideUid(it) && dragIdeKey !== ideUid(it) }]"
-            draggable="true"
-            @click="toggleIdeCard(ideUid(it))"
-            @dragstart="onIdeDragStart($event, it.key)"
-            @dragover="onIdeDragOver($event, it.key)"
-            @drop="onIdeDrop($event, it.key)"
-            @dragend="onIdeDragEnd"
-          >
-            <div class="icon-wrap">
-              <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                <span v-else class="icon-text">{{ markText(it.label) }}</span>
+          <!-- 品牌卡片内：Code 和 Work 两个分类并列展示 -->
+          <div class="cat-row">
+            <div
+              v-for="cat in bg.categories"
+              :key="cat.category"
+              class="cat-col"
+            >
+              <!-- 分类标题 -->
+              <div class="cat-head">
+                <span
+                  class="cat-badge"
+                  :style="{
+                    background: CATEGORY_META_LOCAL[cat.category]?.bg,
+                    color: CATEGORY_META_LOCAL[cat.category]?.color,
+                    borderColor: CATEGORY_META_LOCAL[cat.category]?.border
+                  }"
+                >{{ CATEGORY_META_LOCAL[cat.category]?.label || cat.category }}</span>
+                <div class="line"></div>
               </div>
-            </div>
-            <div class="label" :title="it.label">{{ it.label }}</div>
-            <div class="sublabel">
-              <span>配置目录</span>
+
+              <!-- 形式分组 -->
+              <div
+                v-for="fg in cat.forms"
+                :key="fg.form"
+                class="sub-form"
+              >
+                <div class="sub-form-head">
+                  <span :class="['type-icon', fg.form]">
+                    <svg v-if="fg.form === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
+                    <svg v-else-if="fg.form === 'app'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
+                    <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
+                  </span>
+                  <span class="sub-form-name">
+                    {{ fg.form === 'cli' ? '命令行工具' : fg.form === 'app' ? '桌面应用' : fg.form === 'vscode' ? 'VSCode 扩展' : fg.form === 'acp' ? 'ACP 协议' : 'IDEA 插件' }}
+                  </span>
+                  <span class="count">{{ fg.items.length }}</span>
+                  <div class="line"></div>
+                </div>
+                <div class="grid">
+                  <div
+                    v-for="it in fg.items"
+                    :key="it.key + ':' + fg.form"
+                    :class="['item', { 'selected': expandedIde === it.key + ':' + fg.form, 'offline': !it.installed, 'dragging': dragIdeKey === it.key, 'drag-over': dragOverIdeKey === it.key && dragIdeKey !== it.key }]"
+                    draggable="true"
+                    @click="toggleIdeCard(it.key + ':' + fg.form)"
+                    @dragstart="onIdeDragStart($event, it.key)"
+                    @dragover="onIdeDragOver($event, it.key)"
+                    @drop="onIdeDrop($event, it.key)"
+                    @dragend="onIdeDragEnd"
+                  >
+                    <div class="icon-wrap">
+                      <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
+                        <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
+                        <span v-else class="icon-text">{{ markText(it.label) }}</span>
+                      </div>
+                      <div
+                        v-if="fg.form === 'cli' || fg.form === 'app' || fg.form === 'vscode' || fg.form === 'jetbrains' || fg.form === 'acp'"
+                        :class="['type-badge', fg.form === 'vscode' ? 'app' : fg.form === 'jetbrains' ? 'both' : fg.form]"
+                        :title="FORM_META_LOCAL[fg.form]?.label || fg.form"
+                      >
+                        <svg v-if="fg.form === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
+                        <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
+                      </div>
+                      <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
+                    </div>
+                    <div class="label" :title="it.label">{{ it.label }}</div>
+                    <div class="sublabel">
+                      <span>{{ it.version || (it.installed ? '已安装' : '未安装') }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </section>
+
+        <!-- 空状态：当前筛选条件下无 IDE -->
+        <div v-if="filteredBrandGroups.length === 0" class="empty-state">
+          当前筛选条件下无 IDE
+        </div>
+      </div>
     </div>
 
     <!-- 底部 Dock 操作栏：选中 IDE 后浮动显示 -->
@@ -469,7 +576,19 @@ onMounted(() => {
         </div>
 
         <div class="dock-actions">
-          <template v-if="currentInstalled(currentSelectedIde)">
+          <!-- ACP 专属按钮：启动 ACP 命令 + 同步到 JetBrains -->
+          <template v-if="currentTab(currentSelectedIde) === 'acp'">
+            <button @click="launchIde(currentSelectedIde.key, null, 'acp')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 ACP' }}
+            </button>
+            <button @click="syncIdeConfig(currentSelectedIde.key)" :disabled="ideSyncing === currentSelectedIde.key" class="dock-item" type="button">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              {{ ideSyncing === currentSelectedIde.key ? '...' : '同步到 JetBrains' }}
+            </button>
+            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
+          </template>
+          <template v-else-if="currentInstalled(currentSelectedIde)">
             <button @click="launchIde(currentSelectedIde.key, null, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '打开' }}
@@ -488,7 +607,11 @@ onMounted(() => {
             <button v-if="currentMethod(currentSelectedIde) && currentMethod(currentSelectedIde) !== 'manual'" @click="uninstallIde(currentSelectedIde.key, currentTab(currentSelectedIde), true)" :disabled="ideUninstalling === busyKey(currentSelectedIde) + ':force'" class="dock-item danger" type="button" title="跳过系统卸载程序，直接强删目录">{{ ideUninstalling === busyKey(currentSelectedIde) + ':force' ? '...' : '强删' }}</button>
           </template>
           <template v-else>
-            <button v-if="currentMethod(currentSelectedIde) && currentMethod(currentSelectedIde) !== 'manual'" @click="installIde(currentSelectedIde.key, currentTab(currentSelectedIde))" :disabled="ideInstalling === busyKey(currentSelectedIde)" class="dock-item primary" type="button">
+            <button v-if="currentMethod(currentSelectedIde) === 'extension'" @click.prevent="openExternal(currentInfo(currentSelectedIde).url)" class="dock-item primary" type="button">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              安装
+            </button>
+            <button v-else-if="currentMethod(currentSelectedIde) && currentMethod(currentSelectedIde) !== 'manual'" @click="installIde(currentSelectedIde.key, currentTab(currentSelectedIde))" :disabled="ideInstalling === busyKey(currentSelectedIde)" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
               {{ ideInstalling === busyKey(currentSelectedIde) ? '...' : '安装' }}
             </button>
@@ -496,7 +619,7 @@ onMounted(() => {
             <button v-if="currentSelectedIde.config_paths?.length" @click="openIdeConfig(currentSelectedIde.key)" :disabled="ideOpeningConfig === currentSelectedIde.key" class="dock-item" type="button">{{ ideOpeningConfig === currentSelectedIde.key ? '...' : '配置' }}</button>
           </template>
           <a v-if="ideInstallInfo[currentSelectedIde.key]?.homepage" href="javascript:void(0)" @click.prevent="openExternal(ideInstallInfo[currentSelectedIde.key].homepage)" class="dock-item">官网</a>
-          <button @click="toggleIdeCard(currentSelectedIde.key)" class="dock-item close" type="button" title="关闭">
+          <button @click="toggleIdeCard(expandedIde)" class="dock-item close" type="button" title="关闭">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -832,6 +955,10 @@ onMounted(() => {
   background: linear-gradient(145deg, #8b5cf6, #7c3aed);
   color: #fff;
 }
+.type-badge.acp {
+  background: linear-gradient(145deg, #f59e0b, #d97706);
+  color: #fff;
+}
 
 /* —— 会话数徽章 —— */
 .badge {
@@ -933,6 +1060,7 @@ onMounted(() => {
 .dock-title .type-tag.cli { background: rgba(16, 185, 129, 0.12); color: #059669; }
 .dock-title .type-tag.app { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
 .dock-title .type-tag.both { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+.dock-title .type-tag.acp { background: rgba(245, 158, 11, 0.12); color: #d97706; }
 
 .dock-tabs {
   display: inline-flex;
@@ -1344,5 +1472,335 @@ onMounted(() => {
   }
   .item:hover { transform: none; }
   .item:hover .icon { transform: none; }
+}
+
+/* ==================== 品牌分组视图样式 ==================== */
+
+/* 品牌视图容器 */
+.brand-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 品牌 chip（常用区 + 更多收起） */
+.brand-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-base);
+}
+.brand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-base);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.brand-chip:hover { color: var(--text-secondary); border-color: var(--border-strong); }
+.brand-chip.active {
+  background: var(--text-primary);
+  color: var(--bg-base);
+  border-color: var(--text-primary);
+}
+.brand-chip-label { line-height: 1; }
+
+/* 移出按钮（×） */
+.brand-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 2px;
+  margin-right: -4px;
+  transition: background 0.15s;
+}
+.brand-chip-remove:hover {
+  background: rgba(255, 80, 80, 0.4);
+}
+.brand-chip:not(.active) .brand-chip-remove {
+  background: var(--border-base);
+  color: var(--text-tertiary);
+}
+.brand-chip:not(.active) .brand-chip-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* 更多收起区 */
+.brand-more-wrap {
+  position: relative;
+}
+.brand-more-trigger {
+  background: transparent !important;
+  color: var(--text-tertiary) !important;
+  border: 1px dashed var(--border-strong) !important;
+}
+.brand-more-trigger:hover {
+  color: var(--text-secondary) !important;
+  border-color: var(--text-tertiary) !important;
+}
+.brand-more-trigger.is-active {
+  color: var(--text-primary) !important;
+  border-color: var(--text-primary) !important;
+  border-style: solid !important;
+}
+.brand-more-trigger.brand-more-open .brand-more-chev {
+  transform: rotate(180deg);
+}
+.brand-more-chev {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s;
+}
+
+/* 更多下拉面板 */
+.brand-more-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  max-width: 320px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  padding: 6px;
+  z-index: 50;
+}
+.brand-more-head {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  padding: 4px 8px 6px;
+  border-bottom: 1px dashed var(--border-base);
+  margin-bottom: 4px;
+}
+.brand-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.12s;
+}
+.brand-more-item:hover {
+  background: var(--bg-soft);
+}
+.brand-more-item.is-active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+.brand-more-label { line-height: 1; }
+.brand-more-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--border-base);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.brand-more-add:hover {
+  background: #10b981;
+  color: #fff;
+}
+
+/* 品牌卡片内 Code/Work 并列布局 */
+.cat-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .cat-row { grid-template-columns: 1fr; }
+}
+.cat-col {
+  min-width: 0;
+}
+.cat-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--border-base);
+}
+.cat-head .line { flex: 1; height: 1px; background: var(--border-base); }
+.cat-badge {
+  padding: 3px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid;
+}
+
+/* 空状态 */
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+/* 品牌大卡片 —— 透明背景，继承 .ide-launchpad 的 --bg-base */
+.brand-card {
+  background: transparent;
+  border: 1px solid var(--border-base);
+  border-radius: 14px;
+  padding: 16px;
+}
+.brand-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-base);
+  margin-bottom: 10px;
+}
+.brand-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-base);
+}
+.brand-logo-text {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  letter-spacing: -0.02em;
+}
+.brand-title { flex: 1; min-width: 0; }
+.brand-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.brand-vendor {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.brand-stats {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.brand-stats .stat {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--border-base);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.brand-stats .stat .num {
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.brand-stats .stat.installed {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #059669;
+}
+.brand-stats .stat.installed .num { color: #059669; }
+
+/* 顶层分类（Code/Work）—— 不再使用，保留兼容 */
+.top-form { margin: 10px 0 8px; }
+.top-form-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+/* 子形式分组（cli/app/vscode/jetbrains） */
+.sub-form {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--border-base);
+}
+.sub-form-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.sub-form-head .line { flex: 1; height: 1px; background: var(--border-base); }
+.sub-form-head .count { color: var(--text-quaternary); font-size: 11px; }
+.sub-form-name { color: var(--text-tertiary); }
+
+/* 品牌视图下复用 .type-icon 的原配色（与经典视图一致） */
+.brand-view .type-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.brand-view .type-icon svg { width: 11px; height: 11px; }
+.brand-view .type-icon.cli { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.brand-view .type-icon.app { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
+.brand-view .type-icon.vscode { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.brand-view .type-icon.jetbrains { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
+.brand-view .type-icon.other { background: var(--border-base); color: var(--text-tertiary); }
+
+/* 品牌视图下的 type-badge 复用原 .type-badge 配色 */
+.brand-view .type-badge.vscode { background: linear-gradient(145deg, #3b82f6, #2563eb); color: #fff; }
+.brand-view .type-badge.jetbrains { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
+.brand-view .type-badge.acp { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
+
+/* 品牌视图下的 grid 保持与经典视图一致（不压缩） */
+.brand-view .grid {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+}
+.brand-view .item {
+  padding: 12px 8px;
+}
+.brand-view .item .icon-wrap .icon {
+  width: 72px;
+  height: 72px;
+  font-size: 22px;
+}
+.brand-view .item .label {
+  font-size: 12px;
+}
+.brand-view .item .sublabel {
+  font-size: 10px;
 }
 </style>
