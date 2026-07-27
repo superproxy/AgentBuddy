@@ -745,6 +745,7 @@ install_meta:
   VSCode:
     # Visual Studio Code（Microsoft 代码编辑器）
     # 来源：https://code.visualstudio.com/
+    # 仅提供 App 形式（code CLI 随 App 安装，不单独提供 CLI 安装）
     label: VSCode
     version: "1.103"
     release_date: "2026-07-01"
@@ -754,9 +755,6 @@ install_meta:
     cli_install:
       method: manual
       url: https://code.visualstudio.com/download
-      note: "安装 VSCode 后，在命令面板执行 'Shell Command: Install code in PATH' 启用 code CLI"
-      uninstall_cmd_mac: "rm -f /usr/local/bin/code; true"
-      uninstall_cmd_win: "del /q \"%USERPROFILE%\\AppData\\Local\\Programs\\Microsoft VS Code\\bin\\code.cmd\" 2>nul & exit /b 0"
     app_install:
       method: system_uninstall
       url: https://code.visualstudio.com/download
@@ -768,9 +766,9 @@ install_meta:
       windows_x64: https://code.visualstudio.com/download
       linux_x64: https://code.visualstudio.com/download
     install_methods: [app]
-    brand: Microsoft
+    brand: VSCode
     category: code
-    forms: [app, cli]
+    forms: [app]
 
 
 # ============================================================
