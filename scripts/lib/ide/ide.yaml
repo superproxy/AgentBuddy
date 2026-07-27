@@ -819,6 +819,55 @@ install_meta:
     category: code
     forms: [cli, app, vscode]
 
+  CodeBuddy:
+    # 腾讯云 CodeBuddy（腾讯官方 AI 编程助手）
+    # 官网：https://www.codebuddy.cn/
+    # 四种形态：CLI（codebuddy-code）、IDE 桌面应用、VS Code 扩展、JetBrains 插件
+    # 来源：
+    #   - CLI: https://www.codebuddy.cn/cli/
+    #   - IDE: https://www.codebuddy.cn/ide/
+    #   - 插件: https://www.codebuddy.cn/setup/
+    label: CodeBuddy
+    version: latest
+    release_date: "2026-07-01"
+    homepage: https://www.codebuddy.cn
+    docs_url: https://www.codebuddy.cn/cli/
+    release_url: https://www.codebuddy.cn
+    cli_install:
+      # npm 安装：npm install -g @tencent-ai/codebuddy-code
+      method: npm
+      package: "@tencent-ai/codebuddy-code"
+      url: https://www.codebuddy.cn/cli/
+      uninstall_cmd_mac: "npm uninstall -g @tencent-ai/codebuddy-code 2>/dev/null; rm -f ~/.local/bin/codebuddy; true"
+      uninstall_cmd_win: "npm uninstall -g @tencent-ai/codebuddy-code 2>nul & del /q \"%APPDATA%\\npm\\codebuddy\" \"%APPDATA%\\npm\\codebuddy.cmd\" \"%APPDATA%\\npm\\codebuddy.ps1\" 2>nul & exit /b 0"
+    app_install:
+      # CodeBuddy IDE（独立桌面应用，产品+设计+研发一体化）
+      method: system_uninstall
+      url: https://www.codebuddy.cn/ide/
+      uninstall_cmd_mac: "rm -rf '/Applications/CodeBuddy.app' ~/.codebuddy 2>/dev/null; true"
+      uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\CodeBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codebuddy\" 2>nul & exit /b 0"
+    vscode_install:
+      # VS Code 扩展：Tencent Cloud CodeBuddy
+      method: extension
+      url: vscode:extension/TencentCloudCodeBuddy.codebuddy-vscode
+      extension_id: TencentCloudCodeBuddy.codebuddy-vscode
+      note: 点击安装将在 VS Code 中打开扩展页面（腾讯云代码助手）
+    idea_install:
+      # JetBrains 插件：腾讯云代码助手
+      method: extension
+      url: jetbrains://plugin/24778
+      extension_id: "24778"
+      note: 点击安装将在 JetBrains IDE 中打开插件安装页面（腾讯云代码助手）
+    download_urls:
+      macos_arm64: https://www.codebuddy.cn/ide/
+      macos_x64: https://www.codebuddy.cn/ide/
+      windows_x64: https://www.codebuddy.cn/ide/
+      linux_x64: https://www.codebuddy.cn/ide/
+    install_methods: [npm, app, vscode, jetbrains]
+    brand: CodeBuddy
+    category: code
+    forms: [cli, app, vscode, idea]
+
 
 # ============================================================
 # detect_meta: IDE 检测元数据
@@ -1094,4 +1143,16 @@ detect_meta:
       - "{LOCALAPPDATA}/Programs/GitHub Copilot/GitHub Copilot.exe"
       - "{ProgramFiles}/GitHub Copilot/GitHub Copilot.exe"
     config_dirs: [.copilot, .config/gh]
+    is_tui: false
+
+  CodeBuddy:
+    label: CodeBuddy
+    # CLI: codebuddy 命令（npm @tencent-ai/codebuddy-code）
+    cli_names: [codebuddy]
+    # App: CodeBuddy IDE（独立桌面应用）
+    macos_apps: ["/Applications/CodeBuddy.app"]
+    windows_apps:
+      - "{LOCALAPPDATA}/Programs/CodeBuddy/CodeBuddy.exe"
+      - "{ProgramFiles}/CodeBuddy/CodeBuddy.exe"
+    config_dirs: [.codebuddy, .codebuddy-code]
     is_tui: false
