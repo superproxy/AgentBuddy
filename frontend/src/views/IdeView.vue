@@ -25,9 +25,69 @@ const {
 const activeBrandChip = ref<string>('all')
 
 // 常用品牌（默认 5 个，可追加/移除，类似工具栏菜单的常用区）
+// 持久化到 localStorage，记忆用户排序
 const DEFAULT_BRAND_COUNT = 5
-const favoriteBrands = ref<string[]>([])
+const BRAND_ORDER_KEY = 'ide:brand-order'
+const favoriteBrands = ref<string[]>(loadBrandOrder())
 const showMoreBrands = ref(false)
+
+// 从 localStorage 加载品牌顺序
+function loadBrandOrder(): string[] {
+  try {
+    const saved = localStorage.getItem(BRAND_ORDER_KEY)
+    if (saved) {
+      const arr = JSON.parse(saved)
+      if (Array.isArray(arr)) return arr
+    }
+  } catch { /* ignore */ }
+  return []
+}
+
+// 持久化品牌顺序
+function saveBrandOrder() {
+  try {
+    localStorage.setItem(BRAND_ORDER_KEY, JSON.stringify(favoriteBrands.value))
+  } catch { /* ignore */ }
+}
+
+// 品牌拖拽状态
+const draggingBrand = ref<string | null>(null)
+
+// 拖拽开始
+function onBrandDragStart(e: DragEvent, brand: string) {
+  draggingBrand.value = brand
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', brand)
+  }
+}
+
+// 拖拽经过目标
+function onBrandDragOver(e: DragEvent, brand: string) {
+  if (draggingBrand.value === null || draggingBrand.value === brand) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+}
+
+// 拖拽放置
+function onBrandDrop(e: DragEvent, targetBrand: string) {
+  e.preventDefault()
+  const src = draggingBrand.value
+  if (!src || src === targetBrand) return
+  const arr = [...favoriteBrands.value]
+  const srcIdx = arr.indexOf(src)
+  const tgtIdx = arr.indexOf(targetBrand)
+  if (srcIdx < 0 || tgtIdx < 0) return
+  arr.splice(srcIdx, 1)
+  arr.splice(tgtIdx, 0, src)
+  favoriteBrands.value = arr
+  saveBrandOrder()
+}
+
+// 拖拽结束
+function onBrandDragEnd() {
+  draggingBrand.value = null
+}
 
 // 品牌 chip 选项（列出所有品牌）
 const brandChipOptions = computed(() => {
@@ -56,23 +116,27 @@ const moreBrands = computed(() => {
     .map((bg) => bg.brand)
 })
 
-// 当前显示的品牌 chip（"全部品牌" + 常用品牌）
+// 当前显示的品牌 chip（"全部品牌" + 常用品牌，按用户排序）
 const visibleBrandChips = computed(() => {
-  return brandChipOptions.value.filter(
-    (chip) => chip.key === 'all' || favoriteBrands.value.includes(chip.key)
-  )
+  const allChip = brandChipOptions.value.filter((c) => c.key === 'all')
+  const favChips = favoriteBrands.value
+    .map((brand) => brandChipOptions.value.find((c) => c.key === brand))
+    .filter((c): c is NonNullable<typeof c> => !!c)
+  return [...allChip, ...favChips]
 })
 
 // 加入常用区
 const addToFavorite = (brand: string) => {
   if (!favoriteBrands.value.includes(brand)) {
     favoriteBrands.value.push(brand)
+    saveBrandOrder()
   }
 }
 
 // 移出常用区
 const removeFromFavorite = (brand: string) => {
   favoriteBrands.value = favoriteBrands.value.filter((b) => b !== brand)
+  saveBrandOrder()
   // 如果当前选中的品牌被移出，切回"全部品牌"
   if (activeBrandChip.value === brand) {
     activeBrandChip.value = 'all'
@@ -87,9 +151,22 @@ const selectMoreBrand = (brand: string) => {
 
 // 过滤后的品牌分组（按 activeBrandChip 筛选，Code 和 Work 并列展示）
 const filteredBrandGroups = computed(() => {
-  return brandGroups.value
+  const groups = brandGroups.value
     .filter((bg) => activeBrandChip.value === 'all' || bg.brand === activeBrandChip.value)
     .filter((g): g is NonNullable<typeof g> => g !== null)
+  // 当显示全部品牌时，按用户自定义顺序排序
+  if (activeBrandChip.value === 'all' && favoriteBrands.value.length > 0) {
+    return [...groups].sort((a, b) => {
+      const ia = favoriteBrands.value.indexOf(a.brand)
+      const ib = favoriteBrands.value.indexOf(b.brand)
+      // 常用品牌按自定义顺序排前，非常用品牌保持原序
+      if (ia >= 0 && ib >= 0) return ia - ib
+      if (ia >= 0) return -1
+      if (ib >= 0) return 1
+      return 0
+    })
+  }
+  return groups
 })
 
 // 品牌元数据（前端本地常量，与 stores/ide.ts 同步）
@@ -393,12 +470,17 @@ watch(
       <div class="brand-view">
         <!-- 品牌 chip（常用区 + 更多收起，类似工具栏菜单） -->
         <div class="brand-chips">
-          <!-- 常用品牌（默认 3 个） -->
+          <!-- 常用品牌（可拖拽排序，顺序持久化到 localStorage） -->
           <button
             v-for="chip in visibleBrandChips"
             :key="chip.key"
-            :class="['brand-chip', { active: activeBrandChip === chip.key }]"
+            :class="['brand-chip', { active: activeBrandChip === chip.key, dragging: draggingBrand === chip.key }]"
+            :draggable="chip.key !== 'all'"
             @click="activeBrandChip = chip.key"
+            @dragstart="chip.key !== 'all' && onBrandDragStart($event, chip.key)"
+            @dragover="chip.key !== 'all' && onBrandDragOver($event, chip.key)"
+            @drop="chip.key !== 'all' && onBrandDrop($event, chip.key)"
+            @dragend="onBrandDragEnd"
             type="button"
           >
             <span class="brand-chip-label">{{ chip.label }}</span>
@@ -1511,6 +1593,13 @@ watch(
   background: var(--text-primary);
   color: var(--bg-base);
   border-color: var(--text-primary);
+}
+.brand-chip.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+.brand-chip[draggable="true"]:not(.dragging) {
+  cursor: grab;
 }
 .brand-chip-label { line-height: 1; }
 
