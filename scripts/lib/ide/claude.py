@@ -1,4 +1,4 @@
-﻿"""Claude IDE 分发器。
+"""Claude IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_claude() 和 _generate_claude_settings()。
 生成 .claude/settings.json（从模板 + llm.yaml 占位符替换）。
@@ -116,9 +116,11 @@ class ClaudeTarget(IdeTarget):
         copy_file_safe(source_mcp_file, claude_dir / "mcp.json",
                        ".claude/mcp.json", self.force)
 
-    def init_llm(self, source_rules_dir: Path):
-        # source_rules_dir 是 agents/rules，其 parent.parent 是项目根
-        source_dir = source_rules_dir.parent.parent
+    def init_llm(self, source_rules_dirs):
+        # source_rules_dirs 是 list[Path]（config/rules, template/rules, ...）
+        # 取第一个的 parent.parent 作为项目根
+        first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
+        source_dir = first.parent.parent
         # 优先从 config/ide/claude/settings.json 复制（由 generate 生成）
         generated = source_dir / "config" / "ide" / "claude" / "settings.json"
         target = self.root / ".claude" / "settings.json"

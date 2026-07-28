@@ -153,34 +153,56 @@ def read_env_config(env_file: Path, silent: bool = False) -> dict:
 
 
 def build_proxy_model_list(env_config: dict) -> str:
-    """根据 Codex 当前唯一路由生成一条 LiteLLM 模型映射。"""
+    """根据网关路由列表生成 LiteLLM model_list（多条映射）。"""
     llm = env_config.get("llm", {})
-    codex = env_config.get("ide", {}).get("codex", {})
-    route = codex.get("route", {}) if isinstance(codex, dict) else {}
-    if not isinstance(llm, dict) or not isinstance(route, dict):
+    gateway = env_config.get("proxy", {}).get("gateway", {})
+    routes = gateway.get("routes", []) if isinstance(gateway, dict) else []
+    if not isinstance(llm, dict) or not isinstance(routes, list):
         return "  []"
 
-    provider_name = route.get("provider", "")
-    protocol_name = route.get("protocol", "")
-    upstream_model = route.get("upstream_model", "")
-    codex_model = codex.get("model", "")
-    provider = llm.get(provider_name, {})
-    if not all((provider_name, protocol_name, upstream_model, codex_model)) or not isinstance(provider, dict):
-        return "  []"
+    entries: list[str] = []
+    for route in routes:
+        if not isinstance(route, dict):
+            continue
+        if not route.get("enabled", True):
+            continue
 
-    protocol = provider if _is_flat_provider(provider) else provider.get(protocol_name, {})
-    if not isinstance(protocol, dict):
-        return "  []"
+        provider_name = route.get("provider", "")
+        protocol_name = route.get("protocol", "")
+        upstream_model = route.get("upstream_model", "")
+        gateway_model = route.get("gateway_model", "")
+        if not all((provider_name, protocol_name, upstream_model, gateway_model)):
+            continue
 
-    custom_provider = "anthropic" if protocol_name == "anthropic" else "openai"
-    return (
-        f'  - model_name: "{codex_model}"\n'
-        f"    litellm_params:\n"
-        f'      model: "{upstream_model}"\n'
-        f"      custom_llm_provider: {custom_provider}\n"
-        f'      api_base: "{protocol.get("base_url", "")}"\n'
-        f'      api_key: "{protocol.get("api_key", "")}"'
-    )
+        # 自定义路由直接用 route 内的 base_url/api_key
+        base_url = route.get("base_url", "")
+        api_key = route.get("api_key", "")
+
+        # 从 llm Provider 拉取
+        if not base_url:
+            provider = llm.get(provider_name, {})
+            if isinstance(provider, dict):
+                protocol = provider if _is_flat_provider(provider) else provider.get(protocol_name, {})
+                if isinstance(protocol, dict):
+                    base_url = protocol.get("base_url", "")
+                    api_key = protocol.get("api_key", "")
+
+        if not base_url:
+            continue
+
+        custom_provider = "anthropic" if protocol_name == "anthropic" else "openai"
+        entries.append(
+            f'  - model_name: "{gateway_model}"\n'
+            f"    litellm_params:\n"
+            f'      model: "{upstream_model}"\n'
+            f"      custom_llm_provider: {custom_provider}\n"
+            f'      api_base: "{base_url}"\n'
+            f'      api_key: "{api_key}"'
+        )
+
+    if not entries:
+        return "  []"
+    return "\n".join(entries)
 
 
 def _is_flat_provider(provider_value: dict) -> bool:
@@ -240,6 +262,10 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
 
                 models_dict = protocol_value.get("models", {})
                 default_model = next(iter(models_dict.keys()), "") if isinstance(models_dict, dict) else ""
+                # 优先使用用户在 UI 中选择的 _active_model
+                active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
+                if is_active and active_model_override and isinstance(models_dict, dict) and active_model_override in models_dict:
+                    default_model = active_model_override
 
                 if is_active:
                     env_mapping = PROTOCOL_ENV_MAP.get(protocol_name, {})
@@ -279,25 +305,28 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                     flat["LLM_ACTIVE_PROVIDER"] = provider_name
                     flat.setdefault("LLM_ACTIVE_PROTOCOL", protocol_name)
 
-    # --- Codex / Proxy 逻辑 ---
-    codex_config = env_config.get("ide", {}).get("codex", {})
-    proxy_config = env_config.get("proxy", {}).get("codex", {})
-    enable_proxy = proxy_config.get("enabled", False) if isinstance(proxy_config, dict) else False
+    # --- LLM 网关逻辑 ---
+    gateway_config = env_config.get("proxy", {}).get("gateway", {})
+    enable_gateway = gateway_config.get("enabled", False) if isinstance(gateway_config, dict) else False
     active_provider_name = llm.get("_active_provider", "") if isinstance(llm, dict) else ""
 
-    if enable_proxy:
-        route = codex_config.get("route", {}) if isinstance(codex_config, dict) else {}
-        route_provider = llm.get(route.get("provider", ""), {}) if isinstance(route, dict) else {}
-        route_protocol = route_provider.get(route.get("protocol", ""), {}) if isinstance(route_provider, dict) else {}
-        listener_url = proxy_config.get("base_url", "http://127.0.0.1:4000/v1")
+    if enable_gateway:
+        listener_url = gateway_config.get("base_url", "http://127.0.0.1:4000/v1")
         flat["LLM_ACTIVE_BASE_URL"] = listener_url
-        flat["LLM_ACTIVE_API_KEY"] = proxy_config.get("api_key", "")
+        flat["LLM_ACTIVE_API_KEY"] = gateway_config.get("api_key", "")
         flat["LLM_CODEX_BASE_URL"] = listener_url
-        flat["LLM_CODEX_API_KEY"] = proxy_config.get("api_key", "")
-        flat["OPENAI_MODEL"] = codex_config.get("model", "")
-        flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-proxy"
-        if isinstance(route_protocol, dict):
-            flat["LLM_PROXY_UPSTREAM_BASE_URL"] = route_protocol.get("base_url", "")
+        flat["LLM_CODEX_API_KEY"] = gateway_config.get("api_key", "")
+        flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
+        # 默认模型：优先使用 _active_model，否则取第一条启用路由的 gateway_model
+        routes = gateway_config.get("routes", [])
+        active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
+        if active_model_override:
+            flat["OPENAI_MODEL"] = active_model_override
+        elif isinstance(routes, list) and routes:
+            for r in routes:
+                if isinstance(r, dict) and r.get("enabled", True) and r.get("gateway_model"):
+                    flat["OPENAI_MODEL"] = r["gateway_model"]
+                    break
     elif active_provider_name and active_provider_name in llm:
         active_provider_data = llm[active_provider_name]
         if isinstance(active_provider_data, dict):
@@ -336,7 +365,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         flat["LLM_CODEX_BASE_URL"] = ""
         flat["LLM_CODEX_API_KEY"] = ""
 
-    if enable_proxy:
+    if enable_gateway:
         flat["PROXY_MODEL_LIST"] = build_proxy_model_list(env_config)
     else:
         flat["PROXY_MODEL_LIST"] = "  []"

@@ -6,7 +6,7 @@ import Modal from './components/Modal.vue'
 import AppDialog from './components/AppDialog.vue'
 import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
-import EnvView from './views/EnvView.vue'
+import LlmView from './views/LlmView.vue'
 import McpView from './views/McpView.vue'
 import KeysView from './views/KeysView.vue'
 import SkillView from './views/SkillView.vue'
@@ -64,7 +64,7 @@ onBeforeUnmount(() => {})
 
     <main class="max-w-[1600px] w-full mx-auto px-6 py-5">
       <IdeView v-if="tab === 'ide'" />
-      <EnvView v-else-if="tab === 'env'" />
+      <LlmView v-else-if="tab === 'env'" />
       <McpView v-else-if="tab === 'mcp'" @go-tab="tab = $event" />
       <KeysView v-else-if="tab === 'keys'" />
       <SkillView v-else-if="tab === 'skill'" />

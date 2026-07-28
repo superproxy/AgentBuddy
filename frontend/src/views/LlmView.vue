@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEnvStore } from '../stores/env'
 import { useUiStore } from '../stores/ui'
@@ -17,38 +17,61 @@ const {
 } = env
 
 const providerFilter = ref('')
-const proxyDetailOpen = ref(false)
-
-const codexRoute = computed(() => envData.value.ide?.codex?.route || { provider: '', protocol: 'responses', upstream_model: '' })
-const codexModel = computed(() => envData.value.ide?.codex?.model || '')
-const proxyCodex = computed(() => envData.value.proxy?.codex || {})
 const proxyRunning = ref(false)
 
-const routeSummary = computed(() => {
-  const r = codexRoute.value
-  const m = codexModel.value || '未设置'
-  const p = r.provider || '未选择'
-  const proto = r.protocol || '未选择'
-  const um = r.upstream_model || '未选择'
-  return `${m} → ${p} / ${proto} / ${um}`
+/* ============ 协议排序：openai 最靠前，anthropic 靠后 ============ */
+const PROTOCOL_ORDER = ['openai', 'responses', 'anthropic']
+function protocolSortKey(proto: string): number {
+  const idx = PROTOCOL_ORDER.indexOf(proto)
+  return idx >= 0 ? idx : PROTOCOL_ORDER.length
+}
+
+/* ============ 协议折叠状态 ============ */
+const collapsedProtocols = ref<Record<string, boolean>>({})
+function isProtocolCollapsed(proto: string): boolean {
+  return !!collapsedProtocols.value[proto]
+}
+function toggleProtocolCollapse(proto: string) {
+  collapsedProtocols.value[proto] = !collapsedProtocols.value[proto]
+}
+
+/* ============ LLM 网关 ============ */
+const gateway = computed(() => envData.value.proxy?.gateway || {})
+const gatewayRoutes = computed(() => envData.value.proxy?.gateway?.routes || [])
+const gatewaySummary = computed(() => {
+  const routes = gatewayRoutes.value
+  if (!routes.length) return '无路由'
+  const enabled = routes.filter((r: any) => r.enabled !== false)
+  return `${enabled.length}/${routes.length} 路由`
 })
 
-const proxyMode = computed(() => {
-  const proto = codexRoute.value.protocol
-  return proto === 'responses' ? 'Responses 原生直通' : `Responses → ${proto} 协议转换`
-})
-
-const upstreamBaseUrl = computed(() => {
-  const r = codexRoute.value
-  if (!r.provider || !r.protocol) return ''
-  const provider = envData.value.llm?.[r.provider]
-  if (!provider) return ''
-  const proto = provider[r.protocol]
-  return proto?.base_url || ''
-})
-
-function toggleProxyDetail() {
-  proxyDetailOpen.value = !proxyDetailOpen.value
+function addGatewayRoute() {
+  if (!envData.value.proxy?.gateway?.routes) {
+    envData.value.proxy.gateway.routes = []
+  }
+  envData.value.proxy.gateway.routes.push({
+    enabled: true,
+    provider: '',
+    protocol: 'openai',
+    upstream_model: '',
+    gateway_model: '',
+  })
+}
+function removeGatewayRoute(index: number) {
+  if (!envData.value.proxy?.gateway?.routes) return
+  envData.value.proxy.gateway.routes.splice(index, 1)
+}
+function availableProtocolsFor(pn: string): string[] {
+  const provider = envData.value.llm?.[pn]
+  if (!provider || typeof provider !== 'object') return []
+  return Object.keys(provider)
+    .filter((k) => !k.startsWith('_') && typeof provider[k] === 'object' && provider[k] !== null)
+    .sort((a, b) => protocolSortKey(a) - protocolSortKey(b))
+}
+function availableModelsFor(pn: string, proto: string): string[] {
+  const models = envData.value.llm?.[pn]?.[proto]?.models
+  if (!models || typeof models !== 'object') return []
+  return Object.keys(models)
 }
 
 async function toggleProxyRun() {
@@ -56,14 +79,13 @@ async function toggleProxyRun() {
     proxyRunning.value = false
     return
   }
-  // 启用代理并保存配置 + 生成 + 启动
-  envData.value.proxy.codex.enabled = true
+  envData.value.proxy.gateway.enabled = true
   const sr = await saveEnv(true)
   if (!sr) { ui.toast('保存失败', 'err'); return }
   const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/init-env', { method: 'POST' })
   if (!r.ok) { ui.toast('生成配置失败', 'err'); return }
   proxyRunning.value = true
-  ui.toast('Codex 代理已启动，配置已生成')
+  ui.toast('LLM 网关已启动，配置已生成')
   await startProxyServer()
 }
 
@@ -76,9 +98,9 @@ const filteredProviders = computed(() => {
 const selectedProtocols = computed(() => {
   const pn = selectedProvider.value
   if (!pn || !envData.value.llm?.[pn]) return [] as string[]
-  return Object.keys(envData.value.llm[pn]).filter(
-    (k) => typeof envData.value.llm[pn][k] === 'object' && envData.value.llm[pn][k] !== null,
-  )
+  return Object.keys(envData.value.llm[pn])
+    .filter((k) => typeof envData.value.llm[pn][k] === 'object' && envData.value.llm[pn][k] !== null)
+    .sort((a, b) => protocolSortKey(a) - protocolSortKey(b))
 })
 
 function providerInitials(name: string) {
@@ -97,11 +119,77 @@ function protocolSummary(pn: string) {
   return `${primary} · ${models} models`
 }
 
-const defaultProvider = computed<string>({
-  get: () => envData.value.llm?._active_provider || '',
-  set: (v: string) => { if (envData.value.llm) envData.value.llm._active_provider = v },
+/* ============ 默认 LLM 源（Provider 或 网关）+ 默认模型 ============ */
+const GATEWAY_SOURCE = '__gateway__'
+
+const activeSource = computed<string>({
+  get: () => proxyEnabled.value ? GATEWAY_SOURCE : (envData.value.llm?._active_provider || ''),
+  set: (v: string) => {
+    if (v === GATEWAY_SOURCE) {
+      envData.value.proxy.gateway.enabled = true
+      envData.value.llm._active_provider = ''
+    } else {
+      envData.value.proxy.gateway.enabled = false
+      envData.value.llm._active_provider = v
+    }
+  },
 })
+
+const activeModel = computed<string>({
+  get: () => {
+    if (proxyEnabled.value) {
+      const routes = gatewayRoutes.value
+      for (const r of routes) {
+        if (r.enabled !== false && r.gateway_model) return r.gateway_model
+      }
+      return ''
+    }
+    return envData.value.llm?._active_model || ''
+  },
+  set: (v: string) => {
+    if (proxyEnabled.value) {
+      // 网关模式：标记选中的 gateway_model（通过 _active_model 存储）
+      envData.value.llm._active_model = v
+    } else {
+      envData.value.llm._active_model = v
+    }
+  },
+})
+
+const availableModels = computed<string[]>(() => {
+  if (proxyEnabled.value) {
+    return gatewayRoutes.value
+      .filter((r: any) => r.enabled !== false && r.gateway_model)
+      .map((r: any) => r.gateway_model)
+  }
+  const pn = envData.value.llm?._active_provider
+  if (!pn) return []
+  const provider = envData.value.llm?.[pn]
+  if (!provider) return []
+  // 取所有协议下的模型并集
+  const models: string[] = []
+  for (const proto of Object.keys(provider)) {
+    if (proto.startsWith('_')) continue
+    const protoCfg = provider[proto]
+    if (protoCfg?.models && typeof protoCfg.models === 'object') {
+      models.push(...Object.keys(protoCfg.models))
+    }
+  }
+  return [...new Set(models)]
+})
+
 const hasProviders = computed(() => providerNames.value.length > 0)
+
+/* ============ 自动保存 ============ */
+let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
+function autoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer)
+  autoSaveTimer = setTimeout(async () => {
+    await saveEnv(true)
+  }, 500)
+}
+watch(activeSource, () => autoSave())
+watch(activeModel, () => autoSave())
 
 function avatarStyle(name: string) {
   const hues: Record<string, string> = {
@@ -210,36 +298,42 @@ function clearEnvRef() {
       </div>
     </div>
 
-    <!-- 默认启用的 LLM Provider -->
+    <!-- 默认 LLM 源（Provider 或 网关） -->
     <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card p-[18px]">
       <div class="flex items-center gap-2.5 mb-2">
         <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-brand-50 text-brand-600">
           <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
         </span>
-        <h3 class="m-0 text-[13px] font-semibold text-ink-900">默认启用的 LLM Provider</h3>
-        <span v-if="defaultProvider" class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-50 text-brand-600">{{ defaultProvider }}</span>
+        <h3 class="m-0 text-[13px] font-semibold text-ink-900">默认 LLM 源</h3>
+        <span v-if="activeSource" class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-50 text-brand-600">{{ activeSource === GATEWAY_SOURCE ? '网关' : activeSource }}</span>
       </div>
       <p class="m-0 mb-3 text-xs text-ink-500 leading-relaxed">
-        选择的 Provider 将作为同步到 IDE 时的默认 LLM。可随时切换，保存后生效。
+        选择 Provider 或 LLM 网关作为默认 LLM 源，同步到 IDE 时生效。切换后自动保存。
       </p>
       <div class="flex items-center gap-2.5 flex-wrap">
-        <select
-          v-model="defaultProvider"
-          :disabled="!hasProviders"
-          class="px-3 py-2 text-xs border border-ink-300 rounded-lg bg-white min-w-[220px] disabled:bg-ink-100 disabled:text-ink-500"
-        >
-          <option value="" disabled>{{ hasProviders ? '请选择…' : '暂无 Provider' }}</option>
-          <option v-for="p in providerNames" :key="p" :value="p">{{ p }}</option>
-        </select>
-        <button
-          v-if="selectedProvider && selectedProvider !== defaultProvider"
-          type="button"
-          @click="defaultProvider = selectedProvider"
-          class="inline-flex items-center gap-1.5 h-9 px-3 text-[12px] font-semibold rounded-lg bg-brand-50 text-brand-600 border border-brand-100 hover:bg-brand-100 transition"
-        >
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
-          设当前为默认
-        </button>
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] font-medium text-ink-700">来源</label>
+          <select
+            v-model="activeSource"
+            :disabled="!hasProviders && !proxyEnabled"
+            class="px-3 py-2 text-xs border border-ink-300 rounded-lg bg-white min-w-[220px] disabled:bg-ink-100 disabled:text-ink-500"
+          >
+            <option value="" disabled>{{ hasProviders ? '请选择…' : '暂无 Provider' }}</option>
+            <option v-for="p in providerNames" :key="p" :value="p">{{ p }}</option>
+            <option :value="GATEWAY_SOURCE">LLM 网关</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-[10px] font-medium text-ink-700">默认模型</label>
+          <select
+            v-model="activeModel"
+            :disabled="!availableModels.length"
+            class="px-3 py-2 text-xs border border-ink-300 rounded-lg bg-white min-w-[200px] disabled:bg-ink-100 disabled:text-ink-500"
+          >
+            <option value="" disabled>{{ availableModels.length ? '请选择…' : '无可用模型' }}</option>
+            <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </div>
       </div>
     </section>
 
@@ -281,7 +375,7 @@ function clearEnvRef() {
               <div class="text-[13px] font-semibold truncate">
                 {{ pn }}
                 <span
-                  v-if="envData.llm._active_provider === pn"
+                  v-if="activeSource === pn"
                   class="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-50 text-brand-600 align-middle"
                 >默认</span>
               </div>
@@ -301,17 +395,17 @@ function clearEnvRef() {
             <div>
               <h2 class="m-0 text-base font-semibold">{{ selectedProvider }}</h2>
               <div class="text-xs text-ink-500 mt-0.5">
-                <template v-if="envData.llm._active_provider === selectedProvider">
-                  当前默认 Provider
+                <template v-if="activeSource === selectedProvider">
+                  当前默认 LLM 源
                 </template>
                 <template v-else>非默认 · 点击右侧按钮设为默认</template>
               </div>
             </div>
             <div class="flex gap-2 flex-wrap">
               <button
-                v-if="envData.llm._active_provider !== selectedProvider"
+                v-if="activeSource !== selectedProvider"
                 type="button"
-                @click="setActiveProvider(selectedProvider)"
+                @click="activeSource = selectedProvider"
                 class="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11.5px] font-semibold rounded-lg bg-brand-50 text-brand-600 border border-brand-100 hover:bg-brand-100 transition"
               >
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
@@ -329,16 +423,23 @@ function clearEnvRef() {
             <div
               v-for="proto in selectedProtocols"
               :key="proto"
-              class="border border-ink-300/80 rounded-xl p-3.5 bg-gradient-to-b from-white to-ink-100/80"
+              class="border border-ink-300/80 rounded-xl bg-gradient-to-b from-white to-ink-100/80 overflow-hidden"
             >
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="m-0 text-[12px] font-semibold tracking-wider uppercase text-ink-700">{{ proto }}</h3>
+              <div
+                class="flex items-center justify-between px-3.5 py-2.5 cursor-pointer select-none"
+                @click="toggleProtocolCollapse(proto)"
+              >
+                <div class="flex items-center gap-2">
+                  <svg class="w-3 h-3 transition-transform text-ink-500" :class="{ 'rotate-90': !isProtocolCollapsed(proto) }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                  <h3 class="m-0 text-[12px] font-semibold tracking-wider uppercase text-ink-700">{{ proto }}</h3>
+                </div>
                 <button
                   type="button"
-                  @click="deleteProtocol(selectedProvider, proto)"
+                  @click.stop="deleteProtocol(selectedProvider, proto)"
                   class="inline-flex items-center h-7 px-2.5 text-[11.5px] font-semibold rounded-lg text-ink-500 hover:bg-red-50 hover:text-red-600 border border-transparent transition"
                 >删除协议</button>
               </div>
+              <div v-show="!isProtocolCollapsed(proto)" class="px-3.5 pb-3.5">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
                 <div class="flex flex-col gap-1">
                   <label class="text-[11px] font-medium text-ink-700">base_url</label>
@@ -439,6 +540,7 @@ function clearEnvRef() {
                   获取模型
                 </button>
               </div>
+              </div>
             </div>
 
             <button
@@ -458,21 +560,15 @@ function clearEnvRef() {
       </section>
     </div>
 
-    <!-- Codex 协议代理（样式1：摘要 + 原位展开） -->
+    <!-- LLM 网关（多协议路由） -->
     <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card overflow-hidden">
       <div class="flex items-center justify-between gap-3.5 px-[18px] py-3.5 flex-wrap">
         <div class="flex items-center gap-2.5 min-w-0">
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" v-model="envData.proxy.codex.enabled" class="sr-only peer">
-            <div class="w-9 h-5 bg-ink-300 rounded-full peer-checked:bg-emerald-500 transition relative">
-              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition" :class="{ 'translate-x-4': envData.proxy.codex.enabled }" />
-            </div>
-          </label>
           <div class="min-w-0">
             <h3 class="m-0 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
-              Codex 协议代理
+              LLM 网关
             </h3>
-            <p class="m-0 mt-0.5 text-[11px] text-ink-500 font-mono truncate">{{ proxyEnabled ? '已启用' : '未启用' }} · {{ routeSummary }}</p>
+            <p class="m-0 mt-0.5 text-[11px] text-ink-500 font-mono truncate">{{ gatewaySummary }}</p>
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
@@ -484,10 +580,12 @@ function clearEnvRef() {
           </span>
           <button
             type="button"
-            @click="toggleProxyDetail"
-            :aria-expanded="proxyDetailOpen"
-            class="inline-flex items-center h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
-          >{{ proxyDetailOpen ? '收起' : '配置路由' }}</button>
+            @click="addGatewayRoute"
+            class="inline-flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            添加路由
+          </button>
           <button
             type="button"
             @click="toggleProxyRun"
@@ -500,69 +598,94 @@ function clearEnvRef() {
         </div>
       </div>
 
-      <div v-if="proxyDetailOpen" class="border-t border-ink-100 px-[18px] py-4 bg-ink-100/30">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">Codex 内置模型</label>
-            <input
-              v-model="envData.ide.codex.model"
-              placeholder="gpt-5.4"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">购买渠道</label>
-            <select
-              v-model="envData.ide.codex.route.provider"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg bg-white"
-            >
-              <option value="">未选择</option>
-              <option v-for="pn in providerNames" :key="pn" :value="pn">{{ pn }}</option>
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">上游协议</label>
-            <select
-              v-model="envData.ide.codex.route.protocol"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg bg-white"
-            >
-              <option value="responses">Responses</option>
-              <option value="openai">OpenAI (Chat Completions)</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
+      <div class="border-t border-ink-100 px-[18px] py-4 bg-ink-100/30">
+        <!-- 路由列表 -->
+        <div v-if="gatewayRoutes.length" class="space-y-2.5 mb-3">
+          <div
+            v-for="(route, idx) in gatewayRoutes"
+            :key="idx"
+            class="border border-ink-300/80 rounded-[10px] bg-white p-3"
+          >
+            <div class="flex items-center justify-between mb-2.5">
+              <label class="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" v-model="route.enabled" class="sr-only peer" />
+                <div class="w-7 h-4 bg-ink-300 rounded-full peer-checked:bg-emerald-500 transition relative">
+                  <div class="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition" :class="{ 'translate-x-3': route.enabled }" />
+                </div>
+                <span class="text-[11px] font-semibold" :class="route.enabled ? 'text-emerald-600' : 'text-ink-500'">{{ route.enabled ? '启用' : '禁用' }}</span>
+              </label>
+              <button
+                type="button"
+                @click="removeGatewayRoute(idx)"
+                class="inline-flex items-center h-6 px-2 text-[11px] font-semibold rounded-lg text-ink-500 hover:bg-red-50 hover:text-red-600 border border-transparent transition"
+              >删除</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium text-ink-700">Provider</label>
+                <select v-model="route.provider" class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg bg-white">
+                  <option value="">未选择</option>
+                  <option v-for="pn in providerNames" :key="pn" :value="pn">{{ pn }}</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium text-ink-700">协议</label>
+                <select v-model="route.protocol" class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg bg-white">
+                  <option value="openai">openai</option>
+                  <option value="responses">responses</option>
+                  <option value="anthropic">anthropic</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium text-ink-700">上游模型</label>
+                <input
+                  v-model="route.upstream_model"
+                  list="upstream-models-list"
+                  placeholder="gpt-5.5"
+                  class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg font-mono"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] font-medium text-ink-700">网关模型名</label>
+                <input
+                  v-model="route.gateway_model"
+                  placeholder="gpt-5.4"
+                  class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg font-mono"
+                />
+              </div>
+            </div>
+            <!-- 自定义 base_url（可选，留空则从 Provider 配置自动获取） -->
+            <details class="mt-2">
+              <summary class="cursor-pointer text-[10px] text-ink-500 font-semibold">自定义地址（留空则从 Provider 自动获取）</summary>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2">
+                <div class="flex flex-col gap-1">
+                  <label class="text-[10px] font-medium text-ink-700">base_url</label>
+                  <input v-model="route.base_url" placeholder="https://..." class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg font-mono" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-[10px] font-medium text-ink-700">api_key</label>
+                  <input v-model="route.api_key" placeholder="sk-..." class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg font-mono" />
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3 mb-3 p-3 border border-ink-300/80 rounded-[10px] bg-white">
-          <div>
-            <strong class="block text-xs mb-0.5">Codex</strong>
-            <span class="text-[11px] text-ink-500 font-mono">{{ codexModel || '—' }} · Responses</span>
-          </div>
-          <div class="text-brand-500 font-bold text-lg">→</div>
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">上游实际模型</label>
-            <input
-              v-model="envData.ide.codex.route.upstream_model"
-              placeholder="gpt-5.5"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono"
-            />
-          </div>
-        </div>
-
-        <div v-if="proxyEnabled" class="mb-3 px-3 py-2 border-l-[3px] border-emerald-500 bg-emerald-50 text-[12px] text-emerald-700 rounded-r">
-          ACTIVE_BASE_URL 已覆盖：{{ upstreamBaseUrl || '未配置上游' }} → <strong>{{ proxyCodex.base_url || 'http://127.0.0.1:4000/v1' }}</strong>
-        </div>
-
+        <!-- 高级设置 -->
         <details>
-          <summary class="cursor-pointer text-ink-500 text-xs font-semibold">高级代理设置</summary>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2.5">
+          <summary class="cursor-pointer text-ink-500 text-xs font-semibold">高级网关设置</summary>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-2.5">
             <div class="flex flex-col gap-1">
               <label class="text-[11px] font-medium text-ink-700">监听地址</label>
-              <input v-model="envData.proxy.codex.listen_host" placeholder="127.0.0.1" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
+              <input v-model="envData.proxy.gateway.listen_host" placeholder="127.0.0.1" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[11px] font-medium text-ink-700">端口</label>
-              <input v-model.number="envData.proxy.codex.listen_port" type="number" placeholder="4000" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
+              <input v-model.number="envData.proxy.gateway.listen_port" type="number" placeholder="4000" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-[11px] font-medium text-ink-700">网关密钥</label>
+              <input v-model="envData.proxy.gateway.api_key" placeholder="sk-..." class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-[11px] font-medium text-ink-700">适配器</label>
@@ -570,30 +693,6 @@ function clearEnvRef() {
             </div>
           </div>
         </details>
-
-        <div class="flex items-center gap-2 mt-3 text-[11px] text-ink-500">
-          <strong class="text-ink-700">转换模式：</strong>
-          <span>{{ proxyMode }}</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Embedding / TTS / ASR / Vision / Misc -->
-    <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card p-[18px]">
-      <h3 class="m-0 mb-1.5 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
-        Embedding / TTS / ASR / Vision / Misc
-      </h3>
-      <p class="m-0 mb-3 text-xs text-ink-500 leading-relaxed">附属段以 JSON 编辑，保存时写回 llm.yaml。</p>
-      <div class="space-y-3">
-        <div v-for="sec in ['embedding','tts','asr','vision','misc']" :key="sec" class="flex flex-col gap-1">
-          <label class="text-[11px] font-medium text-ink-700">{{ sec }}</label>
-          <textarea
-            v-model="envDataText[sec]"
-            @input="updateEnvDataSection(sec)"
-            rows="4"
-            class="w-full px-2.5 py-2 text-[11px] border border-ink-300 rounded-lg font-mono bg-ink-100"
-          />
-        </div>
       </div>
     </section>
 

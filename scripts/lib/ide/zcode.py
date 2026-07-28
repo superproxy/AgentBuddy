@@ -1,4 +1,4 @@
-﻿"""ZCode（智谱 ADE）IDE 分发器。
+"""ZCode（智谱 ADE）IDE 分发器。
 
 同步 MCP 到 ~/.zcode/cli/config.json（mcp.servers 格式，ZCode 实际读取的文件），
 同步 LLM 模型到 ~/.zcode/v2/config.json（ZCode provider 格式），
@@ -106,7 +106,7 @@ class ZCodeTarget(IdeTarget):
             f.write("\n")
         print(f"{COLOR_GREEN}[OK] MCP synced to ~/.zcode/cli/config.json ({len(servers)} servers){COLOR_RESET}")
 
-    def init_llm(self, source_rules_dir: Path):
+    def init_llm(self, source_rules_dirs):
         """同步 LLM 模型到 ~/.zcode/v2/config.json（ZCode provider 格式）。
 
         从 llm.yaml 读 provider/protocol/model，转换为 ZCode provider：
@@ -114,7 +114,8 @@ class ZCodeTarget(IdeTarget):
         合并已有 v2/config.json，force 时覆盖同 key，否则新增。
         """
         from lib.config_io import load_env_config_file
-        project_root = source_rules_dir.parent.parent
+        first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
+        project_root = first.parent.parent
         llm_yaml = project_root / "config" / "llm" / "llm.yaml"
         if not llm_yaml.exists():
             return

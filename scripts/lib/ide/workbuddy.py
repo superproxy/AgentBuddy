@@ -1,4 +1,4 @@
-﻿"""WorkBuddy IDE 分发器。
+"""WorkBuddy IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_workbuddy() 和 generate_workbuddy_models()。
 生成 .workbuddy/models.json（从 llm.yaml 展开模型列表）。
@@ -99,9 +99,10 @@ class WorkBuddyTarget(IdeTarget):
         copy_file_safe(source_mcp_file, wb_dir / "mcp.json",
                        ".workbuddy/mcp.json", self.force)
 
-    def init_llm(self, source_rules_dir: Path):
+    def init_llm(self, source_rules_dirs):
         # 生成 WorkBuddy 特有的 LLM 模型列表
-        source_dir = source_rules_dir.parent.parent
+        first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
+        source_dir = first.parent.parent
         env_config = load_split_env_config(source_dir, silent=True)
         generate_workbuddy_models(env_config, self.root / ".workbuddy" / "models.json",
                                   self.force)

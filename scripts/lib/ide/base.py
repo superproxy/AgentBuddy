@@ -67,8 +67,12 @@ class IdeTarget:
         """默认不操作；子类可指定 mcp 文件并复制/转换。"""
         pass
 
-    def init_llm(self, source_rules_dir: Path):
-        """默认不操作；子类可生成 LLM 相关配置（如 Claude settings / WorkBuddy models）。"""
+    def init_llm(self, source_rules_dirs):
+        """默认不操作；子类可生成 LLM 相关配置（如 Claude settings / WorkBuddy models）。
+
+        Args:
+            source_rules_dirs: list[Path] 或 Path，取第一个的 parent.parent 作为项目根。
+        """
         pass
 
     def init_skills(self, source_skills_dir: Path):

@@ -69,7 +69,7 @@ def _launch_cli(exe_path: str, args: list[str], cwd: str = "", env: dict | None 
         )
         return {"ok": True, "pid": proc.pid, "cmd": " ".join(cmd), "error": ""}
     except Exception as e:
-        return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
+        return {"ok": False, "pid": 0, "cmd": cmd, "error": str(e)}
 
 
 def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = "",
@@ -108,7 +108,9 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
     if " - " in safe_title:
         safe_title = safe_title.split(" - ")[0]
     full_cmd = f'TITLE {safe_title} && {inner_cmd}'
-    cmd = ["cmd.exe", "/K", full_cmd]
+    # 用字符串而非 list 传递，避免 list2cmdline 将内层引号转义为 \"
+    # cmd.exe 不识别 \" 转义，会导致 "文件名、目录名或卷标语法不正确"
+    cmd = f'cmd.exe /K {full_cmd}'
 
     _log(f"win32_console: full_cmd={full_cmd!r}")
     _log(f"win32_console: popen_cmd={cmd!r}")
