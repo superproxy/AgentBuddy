@@ -14,7 +14,8 @@ from .base import IdeTarget
 
 
 def _generate_claude_settings(template_file: Path, target_file: Path,
-                              env_config: dict | None, force: bool) -> None:
+                              env_config: dict | None, force: bool,
+                              ide_protocols: list[str] | None = None) -> None:
     """从模板生成 Claude settings.json，用 llm.yaml 解析占位符。"""
     if not template_file.exists():
         print(f"{COLOR_YELLOW}[!] Claude settings template not found: {template_file}{COLOR_RESET}")
@@ -38,6 +39,11 @@ def _generate_claude_settings(template_file: Path, target_file: Path,
             active_provider = llm_section.get("_active_provider", "")
             raw = llm_section.get("_active_protocol", "openai")
             active_protocols = [p.strip() for p in str(raw).split("|") if p.strip()]
+        # IDE 协议过滤：如果指定了 ide_protocols，只同步这些协议
+        if ide_protocols is not None:
+            active_protocols = [p for p in active_protocols if p in ide_protocols]
+            if not active_protocols:
+                active_protocols = list(ide_protocols)
         protocol_env_map = {
             "openai": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
             "anthropic": {"base_url": "ANTHROPIC_BASE_URL", "api_key": "ANTHROPIC_AUTH_TOKEN", "model": "ANTHROPIC_MODEL"},
@@ -132,7 +138,8 @@ class ClaudeTarget(IdeTarget):
             claude_settings_template = source_dir / "template" / "ide" / "claude" / "settings.template.json"
             env_config = load_split_env_config(source_dir, silent=True)
             _generate_claude_settings(claude_settings_template, target,
-                                      env_config, self.force)
+                                      env_config, self.force,
+                                      ide_protocols=self.ide_protocols)
 
     def init_skills(self, source_skills_dir: Path):
         # 同步到全局目录（~/.claude/skills/）

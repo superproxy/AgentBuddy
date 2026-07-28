@@ -228,9 +228,20 @@ def _is_flat_provider(provider_value: dict) -> bool:
     return any(k in DIRECT_FIELD_KEYS for k in provider_value)
 
 
-def flatten_env_config(env_config: dict, active_provider: str, active_protocols: list[str]) -> dict:
+def flatten_env_config(env_config: dict, active_provider: str, active_protocols: list[str],
+                       ide_protocols: list[str] | None = None) -> dict:
+    """将嵌套的 llm.yaml 配置展平为 flat env vars。
+
+    ide_protocols 指定时，只展开这些协议的配置（用于特定 IDE 的 generate）。
+    """
     flat = {}
     llm = env_config.get("llm", {})
+
+    # IDE 协议过滤
+    if ide_protocols is not None:
+        active_protocols = [p for p in active_protocols if p in ide_protocols]
+        if not active_protocols:
+            active_protocols = list(ide_protocols)
 
     if isinstance(llm, dict):
         for provider_name, provider_value in llm.items():
@@ -296,7 +307,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                 if is_active and active_model_override and isinstance(models_dict, dict) and active_model_override in models_dict:
                     default_model = active_model_override
 
-                if is_active:
+                if is_active_protocol:
                     env_mapping = PROTOCOL_ENV_MAP.get(protocol_name, {})
                     std_model_key = env_mapping.get("model")
                     if std_model_key and default_model:
@@ -518,6 +529,42 @@ def get_active_protocols(env_config: dict) -> list[str]:
         raw = llm.get("_active_protocol", "openai")
         return [p.strip() for p in str(raw).split("|") if p.strip()]
     return ["openai"]
+
+
+def get_ide_protocols(env_config: dict, ide_name: str) -> list[str] | None:
+    """获取某个 IDE 需要同步的协议列表。
+
+    从 llm.yaml 的 llm._ide_protocols 读取，格式：
+        _ide_protocols:
+          Claude: [openai, anthropic]   # Claude 支持多协议
+          Codex: [openai]               # Codex 只支持 openai
+          WorkBuddy: [openai, anthropic]
+        _ide_protocols_default: [openai]  # 未配置的 IDE 默认值
+
+    返回 None 表示使用 active_protocols（向后兼容）。
+    返回 list 表示该 IDE 只同步这些协议。
+    """
+    llm = env_config.get("llm", {})
+    if not isinstance(llm, dict):
+        return None
+    ide_map = llm.get("_ide_protocols", {})
+    if not isinstance(ide_map, dict):
+        return None
+    if ide_name in ide_map:
+        protocols = ide_map[ide_name]
+        if isinstance(protocols, list):
+            return [str(p).strip() for p in protocols if str(p).strip()]
+        if isinstance(protocols, str):
+            return [p.strip() for p in protocols.split("|") if p.strip()]
+        return None
+    # 未配置的 IDE：使用默认值
+    default = llm.get("_ide_protocols_default")
+    if isinstance(default, list):
+        return [str(p).strip() for p in default if str(p).strip()]
+    if isinstance(default, str):
+        return [p.strip() for p in default.split("|") if p.strip()]
+    # 没有默认值：返回 None 表示用 active_protocols
+    return None
 
 
 def list_providers(env_config: dict) -> list[str]:

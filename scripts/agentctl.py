@@ -175,8 +175,15 @@ def cmd_sync(args):
         hint(f"Skills filter: {len(include)} skill(s) selected")
 
     ide_name = args.ide
+    # 加载 env_config 用于 IDE 协议过滤配置
+    _env_config_for_ide = None
+    try:
+        _env_config_for_ide = llm.load_split_env_config(PROJECT_ROOT, silent=True)
+    except Exception:
+        pass
     targets = get_ide(ide_name, project_root=PROJECT_ROOT, force=args.force,
-                      include_skills=include, scope=scope)
+                      include_skills=include, scope=scope,
+                      env_config=_env_config_for_ide)
 
     # 始终包含 Agents（.agents/ 公共 IDE 规范目录），即使不在用户选择的 IDE 列表中
     if ide_name != "All" and ide_name != "Agents":

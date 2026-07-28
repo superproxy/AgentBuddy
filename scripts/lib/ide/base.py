@@ -49,13 +49,16 @@ class IdeTarget:
     link_skills: bool = True
 
     def __init__(self, project_root: Path, force: bool = False,
-                 include_skills=None, scope=None, link_skills=None):
+                 include_skills=None, scope=None, link_skills=None,
+                 ide_protocols=None):
         self.root = project_root
         self.force = force
         self.include_skills = include_skills
         self.scope = scope if scope is not None else set(DEFAULT_SCOPE)
         if link_skills is not None:
             self.link_skills = link_skills
+        # 该 IDE 需要同步的协议列表（None 表示用 active_protocols，向后兼容）
+        self.ide_protocols = ide_protocols
 
     # ---------- 各阶段钩子（子类按需覆写） ----------
 

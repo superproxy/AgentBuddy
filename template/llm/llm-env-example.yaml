@@ -2,6 +2,15 @@ _description: LLM Provider 配置模板 - 复制为 llm.yaml 并填入真实密�
 llm:
   _active_provider: bigmodelCoding
   _active_protocol: openai|anthropic
+  # IDE 协议过滤：指定每个 IDE 同步哪些协议（未配置的 IDE 使用 _ide_protocols_default）
+  # 不配置则所有 IDE 都同步 _active_protocol 中的全部协议（向后兼容）
+  _ide_protocols:
+    Claude: [openai, anthropic]      # Claude 原生支持 anthropic 协议
+    Codex: [openai]                  # Codex 只支持 openai 协议
+    OpenCode: [openai, anthropic]    # OpenCode 支持多协议
+    WorkBuddy: [openai, anthropic]    # WorkBuddy 支持多协议
+    ZCode: [openai, anthropic]       # ZCode 支持多协议
+  _ide_protocols_default: [openai]   # 未列出的 IDE 默认只同步 openai 协议
   proxy:
     enable: false
     base_url: http://127.0.0.1:4000/v1

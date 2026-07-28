@@ -1,4 +1,4 @@
-﻿"""OpenCode IDE 分发器。
+"""OpenCode IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_opencode()。
 生成 ~/.config/opencode/opencode.json（从模板 + llm.yaml/mcp.yaml 注入模型）。
@@ -44,7 +44,8 @@ class OpenCodeTarget(IdeTarget):
             # 回退：直接从模板生成
             env_config = load_split_env_config(source_dir, silent=True)
             convert_to_opencode_mcp(source_mcp_file, opencode_dir / "opencode.json",
-                                    self.force, opencode_template, env_config)
+                                    self.force, opencode_template, env_config,
+                                    ide_protocols=self.ide_protocols)
 
     def init_llm(self, source_rules_dir: Path):
         # OpenCode 的 LLM 配置已在 init_mcp 中合并生成（opencode.json 含 models）

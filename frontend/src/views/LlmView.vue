@@ -38,6 +38,35 @@ function toggleProtocolCollapse(proto: string) {
   collapsedProtocols.value[proto] = !collapsedProtocols.value[proto]
 }
 
+/* ============ IDE 协议配置 ============ */
+const IDE_NAMES = ['Claude', 'Codex', 'OpenCode', 'WorkBuddy', 'ZCode', 'Cursor', 'Trae', 'TraeCN', 'Qoder', 'QoderCN', 'KimiCLI', 'KimiCode', 'OpenClaw', 'IDEA', 'Hermes', 'Pi', 'CommandCode', 'VSCode']
+const showIdeProtoConfig = ref(false)
+function getIdeProtocols(ide: string): string[] {
+  const map = envData.llm?._ide_protocols
+  if (map && typeof map === 'object' && Array.isArray(map[ide])) return map[ide]
+  return []
+}
+function toggleIdeProtocol(ide: string, proto: string) {
+  if (!envData.llm) envData.llm = {}
+  if (!envData.llm._ide_protocols || typeof envData.llm._ide_protocols !== 'object') envData.llm._ide_protocols = {}
+  const arr = getIdeProtocols(ide)
+  if (arr.includes(proto)) {
+    envData.llm._ide_protocols[ide] = arr.filter(p => p !== proto)
+  } else {
+    envData.llm._ide_protocols[ide] = [...arr, proto]
+  }
+}
+const ALL_PROTOCOLS = ['openai', 'anthropic']
+function toggleDefaultProtocol(proto: string) {
+  if (!envData.llm) envData.llm = {}
+  const arr = Array.isArray(envData.llm._ide_protocols_default) ? envData.llm._ide_protocols_default : []
+  if (arr.includes(proto)) {
+    envData.llm._ide_protocols_default = arr.filter((p: string) => p !== proto)
+  } else {
+    envData.llm._ide_protocols_default = [...arr, proto]
+  }
+}
+
 /* ============ LLM 网关 ============ */
 const gateway = computed(() => envData.value.proxy?.gateway || {})
 const gatewayRoutes = computed(() => envData.value.proxy?.gateway?.routes || [])
@@ -678,6 +707,61 @@ function clearEnvRef() {
         </div>
       </section>
     </div>
+
+    <!-- IDE 协议同步配置 -->
+    <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card overflow-hidden">
+      <div class="flex items-center justify-between gap-3.5 px-[18px] py-3.5 flex-wrap">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="min-w-0">
+            <h3 class="m-0 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
+              IDE 协议同步
+            </h3>
+            <p class="m-0 mt-0.5 text-[11px] text-ink-500 truncate">配置每个 IDE 同步哪些协议 · 未配置的 IDE 使用默认值</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          @click="showIdeProtoConfig = !showIdeProtoConfig"
+          class="inline-flex items-center gap-1.5 h-[28px] px-3 text-[12px] font-semibold rounded-[8px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+        >
+          {{ showIdeProtoConfig ? '收起' : '展开' }}
+        </button>
+      </div>
+      <div v-if="showIdeProtoConfig" class="px-[18px] pb-4 border-t border-ink-100">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-3">
+          <div
+            v-for="ide in IDE_NAMES"
+            :key="ide"
+            class="border border-ink-200 rounded-lg p-2.5"
+          >
+            <div class="text-[11px] font-semibold text-ink-700 mb-1.5">{{ ide }}</div>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="proto in ALL_PROTOCOLS"
+                :key="proto"
+                type="button"
+                @click="toggleIdeProtocol(ide, proto)"
+                :class="['px-2 py-0.5 text-[10px] font-medium rounded-md border transition', getIdeProtocols(ide).includes(proto) ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-white text-ink-400 border-ink-200']"
+              >
+                {{ proto }}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-3 text-[10px] text-ink-500">
+          <span>默认协议（未配置的 IDE）：</span>
+          <button
+            v-for="proto in ALL_PROTOCOLS"
+            :key="proto"
+            type="button"
+            @click="toggleDefaultProtocol(proto)"
+            :class="['px-2 py-0.5 text-[10px] font-medium rounded-md border transition', (envData.llm?._ide_protocols_default || []).includes(proto) ? 'bg-brand-50 text-brand-700 border-brand-200' : 'bg-white text-ink-400 border-ink-200']"
+          >
+            {{ proto }}
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- LLM 网关（多协议路由） -->
     <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card overflow-hidden">

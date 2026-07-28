@@ -52,7 +52,7 @@ IDE_REGISTRY = {
 
 
 def get_ide(name: str, project_root: Path, force: bool = False,
-            include_skills=None, scope=None) -> list:
+            include_skills=None, scope=None, env_config=None) -> list:
     """获取 IDE 分发器实例列表。
 
     Args:
@@ -61,17 +61,29 @@ def get_ide(name: str, project_root: Path, force: bool = False,
         force: 是否强制覆盖已存在文件
         include_skills: 技能白名单集合，None 表示全部
         scope: 同步范围集合，None 表示默认全部（llm/mcp/skill/rules）
+        env_config: llm.yaml 配置 dict，用于读取每个 IDE 的协议过滤配置
 
     Returns:
         分发器实例列表
     """
-    kw = dict(project_root=project_root, force=force,
-              include_skills=include_skills, scope=scope)
+    from lib.llm import get_ide_protocols
+    targets = []
     if name == "All":
-        return [cls(**kw) for cls in IDE_REGISTRY.values()]
-    if name not in IDE_REGISTRY:
-        raise ValueError(f"Unknown IDE: {name}. Available: {', '.join(IDE_REGISTRY.keys())}")
-    return [IDE_REGISTRY[name](**kw)]
+        for cls in IDE_REGISTRY.values():
+            ide_name = cls.name if hasattr(cls, 'name') else ""
+            proto = get_ide_protocols(env_config or {}, ide_name) if env_config else None
+            targets.append(cls(project_root=project_root, force=force,
+                              include_skills=include_skills, scope=scope,
+                              ide_protocols=proto))
+    else:
+        if name not in IDE_REGISTRY:
+            raise ValueError(f"Unknown IDE: {name}. Available: {', '.join(IDE_REGISTRY.keys())}")
+        cls = IDE_REGISTRY[name]
+        proto = get_ide_protocols(env_config or {}, name) if env_config else None
+        targets.append(cls(project_root=project_root, force=force,
+                          include_skills=include_skills, scope=scope,
+                          ide_protocols=proto))
+    return targets
 
 
 __all__ = [

@@ -274,8 +274,12 @@ def refresh_mcp_json(
     print(f"{COLOR_GREEN}[OK] mcp.json refreshed (mcp.yaml + {len(installed_names or [])} installed plugins){COLOR_RESET}")
 
 
-def _inject_opencode_models(opencode_file: Path, env_config: dict) -> None:
-    """向 opencode.json 注入 provider models（来自 llm.yaml）。"""
+def _inject_opencode_models(opencode_file: Path, env_config: dict,
+                            ide_protocols: list[str] | None = None) -> None:
+    """向 opencode.json 注入 provider models（来自 llm.yaml）。
+
+    ide_protocols 指定时只注入这些协议的模型。
+    """
     if not opencode_file.exists():
         return
     with open(opencode_file, "r", encoding="utf-8") as f:
@@ -297,6 +301,9 @@ def _inject_opencode_models(opencode_file: Path, env_config: dict) -> None:
             if protocol_name.startswith("_"):
                 continue
             if not isinstance(protocol_value, dict):
+                continue
+            # IDE 协议过滤
+            if ide_protocols is not None and protocol_name not in ide_protocols:
                 continue
             models_dict = protocol_value.get("models", {})
             if isinstance(models_dict, dict):
@@ -588,8 +595,12 @@ def _collect_placeholders(obj, result: list) -> None:
 
 def convert_to_opencode_mcp(source_file: Path, target_file: Path, force: bool,
                             template_file: Path | None = None,
-                            env_config: dict | None = None) -> None:
-    """生成 OpenCode 格式 opencode.json（含 provider models 注入）。"""
+                            env_config: dict | None = None,
+                            ide_protocols: list[str] | None = None) -> None:
+    """生成 OpenCode 格式 opencode.json（含 provider models 注入）。
+
+    ide_protocols 指定时只注入这些协议的模型。
+    """
     if not source_file.exists():
         print(f"{COLOR_YELLOW}[!] MCP source not found: {source_file}{COLOR_RESET}")
         return
@@ -644,6 +655,11 @@ def convert_to_opencode_mcp(source_file: Path, target_file: Path, force: bool,
             active_provider = llm_section.get("_active_provider", "")
             raw = llm_section.get("_active_protocol", "openai")
             active_protocols = [p.strip() for p in str(raw).split("|") if p.strip()]
+        # IDE 协议过滤
+        if ide_protocols is not None:
+            active_protocols = [p for p in active_protocols if p in ide_protocols]
+            if not active_protocols:
+                active_protocols = list(ide_protocols)
         protocol_env_map = {
             "openai": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
             "anthropic": {"base_url": "ANTHROPIC_BASE_URL", "api_key": "ANTHROPIC_AUTH_TOKEN", "model": "ANTHROPIC_MODEL"},
@@ -713,7 +729,7 @@ def convert_to_opencode_mcp(source_file: Path, target_file: Path, force: bool,
             print(f"{COLOR_GREEN}[OK] Resolved {replaced} placeholder(s) from llm.yaml/mcp.yaml{COLOR_RESET}")
 
     if env_config:
-        _inject_opencode_models_into_config(config, env_config)
+        _inject_opencode_models_into_config(config, env_config, ide_protocols=ide_protocols)
 
     remaining = []
     _collect_placeholders(config, remaining)
@@ -728,8 +744,12 @@ def convert_to_opencode_mcp(source_file: Path, target_file: Path, force: bool,
     print(f"{COLOR_GREEN}[OK] OpenCode config generated: {target_file}{COLOR_RESET}")
 
 
-def _inject_opencode_models_into_config(config: dict, env_config: dict) -> None:
-    """将 llm.yaml 的 provider models 注入到 opencode config 的 provider 段。"""
+def _inject_opencode_models_into_config(config: dict, env_config: dict,
+                                        ide_protocols: list[str] | None = None) -> None:
+    """将 llm.yaml 的 provider models 注入到 opencode config 的 provider 段。
+
+    ide_protocols 指定时只注入这些协议的模型。
+    """
     llm_section = env_config.get("llm", {})
     if not isinstance(llm_section, dict):
         return
@@ -746,6 +766,9 @@ def _inject_opencode_models_into_config(config: dict, env_config: dict) -> None:
             if protocol_name.startswith("_"):
                 continue
             if not isinstance(protocol_value, dict):
+                continue
+            # IDE 协议过滤
+            if ide_protocols is not None and protocol_name not in ide_protocols:
                 continue
             models_dict = protocol_value.get("models", {})
             if isinstance(models_dict, dict):

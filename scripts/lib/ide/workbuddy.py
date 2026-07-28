@@ -13,7 +13,8 @@ from lib.llm import load_split_env_config
 from .base import IdeTarget
 
 
-def generate_workbuddy_models(env_config: dict | None, target_file: Path, force: bool) -> None:
+def generate_workbuddy_models(env_config: dict | None, target_file: Path, force: bool,
+                              ide_protocols: list[str] | None = None) -> None:
     """从 llm.yaml 的 llm 配置生成 .workbuddy/models.json (WorkBuddy 模型列表)。
 
     遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 所需的模型数组。
@@ -21,6 +22,7 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
     - 跳过 ~ 前缀 model id（禁用标记）
     - api_key 为空的协议自动剪枝
     - 同 (model_id, url) 去重
+    - ide_protocols 指定时只同步这些协议的模型
     """
     if not env_config:
         print(f"{COLOR_YELLOW}[!] llm.yaml not found, skip models.json{COLOR_RESET}")
@@ -44,6 +46,9 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
             continue
         for protocol_name, protocol_value in provider_value.items():
             if protocol_name.startswith("_") or not isinstance(protocol_value, dict):
+                continue
+            # IDE 协议过滤
+            if ide_protocols is not None and protocol_name not in ide_protocols:
                 continue
             base_url = str(protocol_value.get("base_url", "")).strip()
             api_key = str(protocol_value.get("api_key", "")).strip()
@@ -105,7 +110,7 @@ class WorkBuddyTarget(IdeTarget):
         source_dir = first.parent.parent
         env_config = load_split_env_config(source_dir, silent=True)
         generate_workbuddy_models(env_config, self.root / ".workbuddy" / "models.json",
-                                  self.force)
+                                  self.force, ide_protocols=self.ide_protocols)
 
     def init_skills(self, source_skills_dir: Path):
         # 同步到全局目录（~/.workbuddy/skills/）

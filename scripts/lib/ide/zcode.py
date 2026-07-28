@@ -134,6 +134,9 @@ class ZCodeTarget(IdeTarget):
             for protocol, cfg in provider_value.items():
                 if not isinstance(cfg, dict) or protocol.startswith("_"):
                     continue
+                # IDE 协议过滤
+                if self.ide_protocols is not None and protocol not in self.ide_protocols:
+                    continue
                 key = f"custom:{provider_name}-{protocol}"
                 kind = "anthropic" if protocol == "anthropic" else "openai-compatible"
                 models = {}
