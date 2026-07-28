@@ -299,6 +299,21 @@ export const useEnvStore = defineStore('env', () => {
       models[mk]._enabled = enabled
     }
   }
+  /** 将当前协议的模型同步到同 provider 的所有其他协议 */
+  function syncModelsToAllProtocols(pn: string, sourceProto: string) {
+    const provider = envData.llm?.[pn]
+    if (!provider || typeof provider !== 'object') return
+    const sourceModels = provider[sourceProto]?.models
+    if (!sourceModels || typeof sourceModels !== 'object') return
+    // 深拷贝模型列表
+    const cloned = JSON.parse(JSON.stringify(sourceModels))
+    for (const proto of Object.keys(provider)) {
+      if (proto.startsWith('_') || proto === sourceProto) continue
+      if (typeof provider[proto] === 'object' && provider[proto] !== null) {
+        provider[proto].models = JSON.parse(JSON.stringify(cloned))
+      }
+    }
+  }
   async function saveEnv(silent = false) {
     const r = await api<{ ok: boolean; error?: string }>('/api/llm', {
       method: 'POST', body: JSON.stringify({ data: envData }),
@@ -622,7 +637,7 @@ export const useEnvStore = defineStore('env', () => {
     envVars, envVarsBusy, fetchEnvVars, setApiKeyFromEnv,
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
     addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
-    isModelEnabled, toggleModelEnabled, setAllModelsEnabled,
+    isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
     generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
     cancelSmartPicker, confirmSmartPicker, confirmSmartCustomUrl,
     runSmartDetect, smartFlowAgain, protocolOf, catalogUrlOf,

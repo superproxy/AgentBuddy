@@ -14,7 +14,7 @@ const { isProviderEnabled, toggleProviderEnabled } = env
 const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
   addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
-  isModelEnabled, toggleModelEnabled, setAllModelsEnabled,
+  isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
   generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
   fetchEnvVars, setApiKeyFromEnv,
 } = env
@@ -647,6 +647,16 @@ function clearEnvRef() {
                 >
                   <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   获取模型
+                </button>
+                <button
+                  v-if="selectedProtocols.length > 1"
+                  type="button"
+                  @click="syncModelsToAllProtocols(selectedProvider, proto); ui.toast('模型已同步到所有协议')"
+                  class="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11.5px] font-semibold rounded-lg bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 transition"
+                  title="将当前协议的模型列表复制到同 Provider 的所有其他协议"
+                >
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                  同步到所有协议
                 </button>
               </div>
               </div>
