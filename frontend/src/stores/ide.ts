@@ -119,6 +119,36 @@ export const useIdeStore = defineStore('ide', () => {
   const ideCardTab = reactive<Record<string, string>>({})
   const showNotInstalled = ref(false)
 
+  // ===== AIDE 选中状态持久化（expandedIde / expandedIdeCard / ideCardTab）=====
+  // 使用 localStorage 直接持久化，简单可靠
+  const IDE_UI_KEY = 'ide:ui-state'
+
+  function loadIdeUiState() {
+    try {
+      const saved = localStorage.getItem(IDE_UI_KEY)
+      if (!saved) return
+      const state = JSON.parse(saved)
+      if (typeof state.expandedIde === 'string') expandedIde.value = state.expandedIde
+      if (typeof state.expandedIdeCard === 'string') expandedIdeCard.value = state.expandedIdeCard
+      if (state.ideCardTab && typeof state.ideCardTab === 'object') {
+        Object.assign(ideCardTab, state.ideCardTab)
+      }
+    } catch { /* 静默失败 */ }
+  }
+
+  function saveIdeUiState() {
+    try {
+      localStorage.setItem(IDE_UI_KEY, JSON.stringify({
+        expandedIde: expandedIde.value,
+        expandedIdeCard: expandedIdeCard.value,
+        ideCardTab: { ...ideCardTab },
+      }))
+    } catch { /* 静默失败 */ }
+  }
+
+  // 同步加载（localStorage 是同步的，确保在渲染前恢复状态）
+  loadIdeUiState()
+
   // ===== computed =====
   /** 已安装 IDE，按 sync.ideList 的用户自定义顺序排序（支持拖拽排序） */
   const installedIdes = computed(() => {
@@ -506,10 +536,12 @@ export const useIdeStore = defineStore('ide', () => {
       expandedIdeCard.value = ideKey
       expandedIde.value = ideKey
     }
+    saveIdeUiState()
   }
 
   function setIdeCardTab(ideKey: string, tab: string) {
     ideCardTab[ideKey] = tab
+    saveIdeUiState()
   }
 
   async function syncIdeConfig(ideKey: string) {
@@ -674,5 +706,6 @@ export const useIdeStore = defineStore('ide', () => {
     importSession,
     openExternal,
     openIdeUrl,
+    loadIdeUiState,
   }
 })

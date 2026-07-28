@@ -91,7 +91,7 @@ function onBrandDragEnd() {
 
 // 品牌 chip 选项（列出所有品牌）
 const brandChipOptions = computed(() => {
-  const chips: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部品牌' }]
+  const chips: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部 AIDE' }]
   for (const bg of brandGroups.value) {
     chips.push({ key: bg.brand, label: bg.brand })
   }
@@ -427,8 +427,8 @@ const currentSelectedIde = computed(() => {
 })
 
 // 进入 AIDE 管理页时自动检测（首次无数据才检测，避免重复请求）
-onMounted(() => {
-  if (!ide.ideDetects.length) loadIdeDetect()
+onMounted(async () => {
+  if (!ide.ideDetects.length) await loadIdeDetect()
   // 初始化常用品牌（默认前 3 个）
   initFavoriteBrands()
 })

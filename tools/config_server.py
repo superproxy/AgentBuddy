@@ -529,7 +529,14 @@ def index():
     """根路由：返回 Vite 构建产物（Vue 3 + Vite）。"""
     dist_ui = PROJECT_ROOT / "tools" / "dist-ui" / "index.html"
     if dist_ui.exists():
-        return send_file(dist_ui)
+        with open(dist_ui, "r", encoding="utf-8") as f:
+            html = f.read()
+        from flask import Response
+        return Response(html, mimetype="text/html", headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
     return "Frontend not built. Run: cd frontend && npm run build-only", 503
 
 
