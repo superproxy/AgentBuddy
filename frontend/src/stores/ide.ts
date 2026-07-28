@@ -120,33 +120,42 @@ export const useIdeStore = defineStore('ide', () => {
   const showNotInstalled = ref(false)
 
   // ===== AIDE 选中状态持久化（expandedIde / expandedIdeCard / ideCardTab）=====
-  // 使用 localStorage 直接持久化，简单可靠
-  const IDE_UI_KEY = 'ide:ui-state'
+  // 通过后端 /api/ui-state 持久化到 config/ui/ui-state.json，与 sync store 一致
+  const ideUiLoaded = ref(false)
+  let ideUiSaveTimer: ReturnType<typeof setTimeout> | null = null
 
-  function loadIdeUiState() {
+  function persistIdeUi(patch: Record<string, unknown>) {
+    if (!ideUiLoaded.value) return
+    if (ideUiSaveTimer) clearTimeout(ideUiSaveTimer)
+    ideUiSaveTimer = setTimeout(() => {
+      api('/api/ui-state', {
+        method: 'POST',
+        body: JSON.stringify(patch),
+      }).catch(() => { /* 静默失败 */ })
+    }, 200)
+  }
+
+  function saveIdeUiState() {
+    persistIdeUi({
+      expandedIde: expandedIde.value,
+      expandedIdeCard: expandedIdeCard.value,
+      ideCardTab: { ...ideCardTab },
+    })
+  }
+
+  async function loadIdeUiState() {
     try {
-      const saved = localStorage.getItem(IDE_UI_KEY)
-      if (!saved) return
-      const state = JSON.parse(saved)
+      const state = await api<Record<string, any>>('/api/ui-state')
       if (typeof state.expandedIde === 'string') expandedIde.value = state.expandedIde
       if (typeof state.expandedIdeCard === 'string') expandedIdeCard.value = state.expandedIdeCard
       if (state.ideCardTab && typeof state.ideCardTab === 'object') {
         Object.assign(ideCardTab, state.ideCardTab)
       }
     } catch { /* 静默失败 */ }
+    ideUiLoaded.value = true
   }
 
-  function saveIdeUiState() {
-    try {
-      localStorage.setItem(IDE_UI_KEY, JSON.stringify({
-        expandedIde: expandedIde.value,
-        expandedIdeCard: expandedIdeCard.value,
-        ideCardTab: { ...ideCardTab },
-      }))
-    } catch { /* 静默失败 */ }
-  }
-
-  // 同步加载（localStorage 是同步的，确保在渲染前恢复状态）
+  // 异步加载（不阻塞渲染，加载完成前先用默认值）
   loadIdeUiState()
 
   // ===== computed =====
