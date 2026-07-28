@@ -73,11 +73,15 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
     quote = lambda s: f'"{s}"' if " " in s and not s.startswith('"') else s
     inner_parts = [quote(exe_path)] + [quote(a) for a in args]
     inner_cmd = " ".join(inner_parts)
-    if cwd:
+    if cwd and os.path.isdir(cwd):
         inner_cmd = f'cd /d "{cwd}" && {inner_cmd}'
 
     # 用 cmd /K 让窗口保持打开（关窗即退进程）；TITLE 设置窗口标题
-    safe_title = (title or "TUI CLI").replace('"', '')
+    # 标题不含路径（路径中的冒号会被 cmd 误认为驱动器引用）
+    safe_title = (title or "TUI CLI").replace('"', '').replace("\\", "/")
+    # 截取标题中第一个 " - " 之前的部分（只保留 IDE 名称）
+    if " - " in safe_title:
+        safe_title = safe_title.split(" - ")[0]
     full_cmd = f'TITLE {safe_title} && {inner_cmd}'
     cmd = ["cmd.exe", "/K", full_cmd]
 
