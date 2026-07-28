@@ -920,7 +920,7 @@ detect_meta:
       - "{ProgramFiles}/Cursor/Cursor.exe"
       - "{ProgramFiles(x86)}/Cursor/Cursor.exe"
     config_dirs: [".cursor"]
-    sessions_subdir: projects
+    sessions_subdir: acp-sessions
     is_tui: false
 
   Trae:
