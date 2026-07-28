@@ -247,6 +247,17 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         active_protocols = [p for p in active_protocols if p in ide_protocols]
         if not active_protocols:
             active_protocols = list(ide_protocols)
+        # 回退：如果 active provider 不包含 ide_protocols 指定的协议，
+        # 把 openaiv1/openai(旧名) 也加入 active_protocols，
+        # 确保 OPENAI_MODEL 等标准环境变量能从回退协议中设置
+        active_provider_name = llm.get("_active_provider", "") if isinstance(llm, dict) else ""
+        if active_provider_name and active_provider_name in llm:
+            apd = llm[active_provider_name]
+            if isinstance(apd, dict) and not _is_flat_provider(apd):
+                has_ide_proto = any(p in apd for p in active_protocols)
+                if not has_ide_proto:
+                    if "openaiv1" in apd or "openai" in apd:
+                        active_protocols.append("openaiv1")
 
     if isinstance(llm, dict):
         for provider_name, provider_value in llm.items():
