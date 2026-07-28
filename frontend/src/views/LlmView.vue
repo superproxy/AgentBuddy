@@ -9,7 +9,8 @@ import SmartProviderPicker from '../components/SmartProviderPicker.vue'
 
 const env = useEnvStore()
 const ui = useUiStore()
-const { envData, envDataText, selectedProvider, providerNames, enabledProviderNames, isProviderEnabled, toggleProviderEnabled, proxyEnabled, smartBusy, envVars, envVarsBusy } = storeToRefs(env)
+const { envData, envDataText, selectedProvider, providerNames, enabledProviderNames, proxyEnabled, smartBusy, envVars, envVarsBusy } = storeToRefs(env)
+const { isProviderEnabled, toggleProviderEnabled } = env
 const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
   addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
