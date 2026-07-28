@@ -454,8 +454,51 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
         f.write("\n")
 
 
+def _resolve_litellm_cmd() -> str:
+    """解析 litellm 启动命令。
+
+    优先级：
+    1. 找到 litellm CLI 的完整路径（兼容 pip install 但不在 PATH）
+    2. 直接用 litellm（已在 PATH 中）
+    """
+    import shutil
+    # 1. 先检查 PATH 中是否有 litellm
+    if shutil.which("litellm"):
+        return "litellm"
+    # 2. 在 Python 的 Scripts/bin 目录中找 litellm CLI
+    py = _get_python()
+    py_dir = Path(py).parent
+    candidates = []
+    if sys.platform == "win32":
+        candidates.append(py_dir / "litellm.exe")
+        candidates.append(py_dir / "Scripts" / "litellm.exe")
+    else:
+        candidates.append(py_dir / "litellm")
+        candidates.append(py_dir / "bin" / "litellm")
+    for c in candidates:
+        if c.exists():
+            return _shell_quote(str(c))
+    # 3. fallback: 直接用 litellm，让 shell 报错
+    return "litellm"
+
+
+def _get_python() -> str:
+    """获取当前 Python 可执行文件路径。"""
+    if getattr(sys, "frozen", False):
+        # PyInstaller 打包后，用内嵌的 python
+        base = Path(sys.executable).parent
+        if sys.platform == "win32":
+            py = base / "python.exe"
+        else:
+            py = base / "python"
+        if py.exists():
+            return str(py)
+    return sys.executable
+
+
 def _stream_process(cmd: str, cwd: Optional[Path] = None):
     """运行子进程并以生成器形式逐行产出日志（SSE 格式）"""
+    cmd = _login_shell_cmd(cmd)  # macOS 用交互式 shell 继承 nvm PATH
     yield f"data: [CMD] {cmd}\n\n"
     try:
         proc = subprocess.Popen(
@@ -4243,7 +4286,9 @@ def start_proxy_sse():
     host = proxy_gateway.get("listen_host", "127.0.0.1")
     port = proxy_gateway.get("listen_port", 4000)
     config_path = PROJECT_ROOT / "config" / "proxy" / "config.yaml"
-    cmd = f"litellm --config {config_path} --host {host} --port {port}"
+    # 优先用 python -m litellm（兼容 pip install 但 CLI 不在 PATH 的情况）
+    litellm_cmd = _resolve_litellm_cmd()
+    cmd = f"{litellm_cmd} --config {config_path} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
