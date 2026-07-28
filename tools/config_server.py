@@ -454,12 +454,33 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
         f.write("\n")
 
 
+def _check_litellm_installed() -> tuple[bool, str]:
+    """检查 litellm 包是否已安装。
+
+    Returns:
+        (installed, info) — installed=True 时 info=版本号；installed=False 时 info=安装提示。
+    """
+    py = _get_python()
+    try:
+        r = subprocess.run(
+            [py, "-c", "import litellm; print(litellm.__version__)"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if r.returncode == 0:
+            ver = r.stdout.strip()
+            return True, ver
+    except Exception:
+        pass
+    return False, f"未安装。请运行: {py} -m pip install 'litellm[proxy]'"
+
+
 def _resolve_litellm_cmd() -> str:
     """解析 litellm 启动命令。
 
     优先级：
-    1. 找到 litellm CLI 的完整路径（兼容 pip install 但不在 PATH）
-    2. 直接用 litellm（已在 PATH 中）
+    1. shutil.which 找 PATH 中的 litellm
+    2. Python Scripts/bin 目录中找 litellm CLI
+    3. fallback: 直接用 litellm
     """
     import shutil
     # 1. 先检查 PATH 中是否有 litellm
@@ -475,6 +496,9 @@ def _resolve_litellm_cmd() -> str:
     else:
         candidates.append(py_dir / "litellm")
         candidates.append(py_dir / "bin" / "litellm")
+        # Mac Homebrew Python
+        candidates.append(Path("/opt/homebrew/bin/litellm"))
+        candidates.append(Path("/usr/local/bin/litellm"))
     for c in candidates:
         if c.exists():
             return _shell_quote(str(c))
@@ -4286,7 +4310,18 @@ def start_proxy_sse():
     host = proxy_gateway.get("listen_host", "127.0.0.1")
     port = proxy_gateway.get("listen_port", 4000)
     config_path = PROJECT_ROOT / "config" / "proxy" / "config.yaml"
-    # 优先用 python -m litellm（兼容 pip install 但 CLI 不在 PATH 的情况）
+
+    # 检查 litellm 是否已安装
+    installed, info = _check_litellm_installed()
+    if not installed:
+        def _not_installed_stream():
+            yield f"data: [ERROR] litellm {info}\n\n"
+            yield "data: [DONE]\n\n"
+        return Response(
+            stream_with_context(_not_installed_stream()),
+            mimetype="text/event-stream",
+        )
+
     litellm_cmd = _resolve_litellm_cmd()
     cmd = f"{litellm_cmd} --config {config_path} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出

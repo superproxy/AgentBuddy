@@ -14,6 +14,7 @@ const { isProviderEnabled, toggleProviderEnabled } = env
 const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
   addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
+  isModelEnabled, toggleModelEnabled, setAllModelsEnabled,
   generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
   fetchEnvVars, setApiKeyFromEnv,
 } = env
@@ -577,6 +578,15 @@ function clearEnvRef() {
               <table class="w-full text-xs border-collapse mt-2.5 bg-white rounded-lg overflow-hidden border border-ink-300/80">
                 <thead>
                   <tr>
+                    <th class="px-2.5 py-2 w-8 bg-ink-100">
+                      <input
+                        type="checkbox"
+                        :checked="Object.keys(envData.llm[selectedProvider][proto].models || {}).length > 0 && Object.keys(envData.llm[selectedProvider][proto].models || {}).every((mk) => isModelEnabled(selectedProvider, proto, mk))"
+                        @change="setAllModelsEnabled(selectedProvider, proto, !Object.keys(envData.llm[selectedProvider][proto].models || {}).every((mk) => isModelEnabled(selectedProvider, proto, mk)))"
+                        class="w-3.5 h-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                        title="全选启用/禁用"
+                      />
+                    </th>
                     <th class="px-2.5 py-2 text-left bg-ink-100 text-ink-700 font-semibold text-[11px]">key</th>
                     <th class="px-2.5 py-2 text-left bg-ink-100 text-ink-700 font-semibold text-[11px]">name</th>
                     <th class="px-2.5 py-2 w-10 bg-ink-100"></th>
@@ -587,7 +597,17 @@ function clearEnvRef() {
                     v-for="(mv, mk) in (envData.llm[selectedProvider][proto].models || {})"
                     :key="mk"
                     class="border-t border-ink-100"
+                    :class="{ 'opacity-40': !isModelEnabled(selectedProvider, proto, String(mk)) }"
                   >
+                    <td class="px-2.5 py-1.5 text-center">
+                      <input
+                        type="checkbox"
+                        :checked="isModelEnabled(selectedProvider, proto, String(mk))"
+                        @change="toggleModelEnabled(selectedProvider, proto, String(mk))"
+                        class="w-3.5 h-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                        title="启用/禁用"
+                      />
+                    </td>
                     <td class="px-2.5 py-1.5">
                       <input
                         :value="mk"

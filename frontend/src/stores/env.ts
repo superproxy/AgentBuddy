@@ -269,7 +269,7 @@ export const useEnvStore = defineStore('env', () => {
   function addModel(pn: string, proto: string) {
     envData.llm[pn][proto].models = envData.llm[pn][proto].models || {}
     const k = 'new-model-' + Date.now()
-    envData.llm[pn][proto].models[k] = { name: k }
+    envData.llm[pn][proto].models[k] = { name: k, _enabled: true }
   }
   function deleteModel(pn: string, proto: string, mk: string) {
     delete envData.llm[pn][proto].models[mk]
@@ -279,6 +279,25 @@ export const useEnvStore = defineStore('env', () => {
     const m = envData.llm[pn][proto].models
     m[newKey] = m[oldKey]
     delete m[oldKey]
+  }
+  function isModelEnabled(pn: string, proto: string, mk: string): boolean {
+    const m = envData.llm?.[pn]?.[proto]?.models?.[mk]
+    if (!m || typeof m !== 'object') return false
+    if (m._enabled === false) return false
+    if (m._enabled === true) return true
+    return true // 默认启用
+  }
+  function toggleModelEnabled(pn: string, proto: string, mk: string) {
+    const m = envData.llm?.[pn]?.[proto]?.models
+    if (!m || !m[mk]) return
+    m[mk]._enabled = !isModelEnabled(pn, proto, mk)
+  }
+  function setAllModelsEnabled(pn: string, proto: string, enabled: boolean) {
+    const models = envData.llm?.[pn]?.[proto]?.models
+    if (!models || typeof models !== 'object') return
+    for (const mk of Object.keys(models)) {
+      models[mk]._enabled = enabled
+    }
   }
   async function saveEnv(silent = false) {
     const r = await api<{ ok: boolean; error?: string }>('/api/llm', {
@@ -603,6 +622,7 @@ export const useEnvStore = defineStore('env', () => {
     envVars, envVarsBusy, fetchEnvVars, setApiKeyFromEnv,
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
     addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
+    isModelEnabled, toggleModelEnabled, setAllModelsEnabled,
     generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
     cancelSmartPicker, confirmSmartPicker, confirmSmartCustomUrl,
     runSmartDetect, smartFlowAgain, protocolOf, catalogUrlOf,

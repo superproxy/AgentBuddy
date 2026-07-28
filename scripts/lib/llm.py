@@ -268,9 +268,15 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                     if k.startswith("_"):
                         continue
                     if k == "models" and isinstance(v, dict):
+                        # 过滤掉 _enabled === false 的模型
+                        filtered_models = {
+                            mk: {mk2: mv2 for mk2, mv2 in mv.items() if mk2 != "_enabled"}
+                            for mk, mv in v.items()
+                            if not (isinstance(mv, dict) and mv.get("_enabled") is False)
+                        }
                         named_key = f"LLM_{provider_upper}_{protocol_upper}_MODELS"
-                        flat[named_key] = json.dumps(v, ensure_ascii=False)
-                        default_model = next(iter(v.keys()), "")
+                        flat[named_key] = json.dumps(filtered_models, ensure_ascii=False)
+                        default_model = next(iter(filtered_models.keys()), "")
                         if default_model:
                             default_model_key = f"LLM_{provider_upper}_{protocol_upper}_MODEL"
                             flat[default_model_key] = default_model
@@ -280,6 +286,10 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                     flat[named_key] = v
 
                 models_dict = protocol_value.get("models", {})
+                # 过滤掉 _enabled === false 的模型
+                if isinstance(models_dict, dict):
+                    models_dict = {mk: mv for mk, mv in models_dict.items()
+                                   if not (isinstance(mv, dict) and mv.get("_enabled") is False)}
                 default_model = next(iter(models_dict.keys()), "") if isinstance(models_dict, dict) else ""
                 # 优先使用用户在 UI 中选择的 _active_model
                 active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
