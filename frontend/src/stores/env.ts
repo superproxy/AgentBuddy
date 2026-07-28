@@ -66,6 +66,40 @@ export const useEnvStore = defineStore('env', () => {
       (k) => !k.startsWith('_') && envData.llm[k] && typeof envData.llm[k] === 'object',
     ),
   )
+  /** 已启用的 provider 名称列表
+   *  规则：_enabled 显式为 false → 禁用；_enabled 显式为 true → 启用；
+   *  未设置 _enabled → 根据是否有 api_key 自动判断（兼容老版本） */
+  const enabledProviderNames = computed(() =>
+    providerNames.value.filter((pn) => {
+      const provider = envData.llm?.[pn]
+      if (!provider || typeof provider !== 'object') return false
+      // 显式禁用
+      if (provider._enabled === false) return false
+      // 显式启用
+      if (provider._enabled === true) return true
+      // 默认：至少一个协议配置了 api_key（非空、非占位符）则视为启用
+      for (const proto of Object.keys(provider)) {
+        if (proto.startsWith('_')) continue
+        const protoCfg = provider[proto]
+        if (protoCfg && typeof protoCfg === 'object') {
+          const key = protoCfg.api_key
+          if (key && typeof key === 'string' && key.trim() && !key.startsWith('${')) {
+            return true
+          }
+        }
+      }
+      return false
+    }),
+  )
+  function isProviderEnabled(pn: string): boolean {
+    return enabledProviderNames.value.includes(pn)
+  }
+  /** 切换 provider 启用状态（写入 _enabled 字段） */
+  function toggleProviderEnabled(pn: string) {
+    const provider = envData.llm?.[pn]
+    if (!provider || typeof provider !== 'object') return
+      ;(provider as any)._enabled = !isProviderEnabled(pn)
+  }
   const proxyEnabled = computed(() => !!(envData.proxy?.gateway?.enabled))
   const envVars = ref<string[]>([])
   const envVarsBusy = ref(false)
@@ -549,7 +583,8 @@ export const useEnvStore = defineStore('env', () => {
   const smartPicker = smartFlow
 
   return {
-    envData, envDataText, selectedProvider, providerNames, proxyEnabled,
+    envData, envDataText, selectedProvider, providerNames, enabledProviderNames,
+    isProviderEnabled, toggleProviderEnabled, proxyEnabled,
     smartFlow, smartPicker, smartBusy,
     envVars, envVarsBusy, fetchEnvVars, setApiKeyFromEnv,
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,

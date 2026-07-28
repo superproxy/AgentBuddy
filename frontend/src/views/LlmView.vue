@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch } from 'vue'
 import { storeToRefs } from 'pinia'
+import * as yaml from 'js-yaml'
 import { useEnvStore } from '../stores/env'
 import { useUiStore } from '../stores/ui'
 import { api } from '../api/client'
@@ -8,7 +9,7 @@ import SmartProviderPicker from '../components/SmartProviderPicker.vue'
 
 const env = useEnvStore()
 const ui = useUiStore()
-const { envData, envDataText, selectedProvider, providerNames, proxyEnabled, smartBusy, envVars, envVarsBusy } = storeToRefs(env)
+const { envData, envDataText, selectedProvider, providerNames, enabledProviderNames, isProviderEnabled, toggleProviderEnabled, proxyEnabled, smartBusy, envVars, envVarsBusy } = storeToRefs(env)
 const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
   addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
@@ -87,6 +88,47 @@ async function toggleProxyRun() {
   proxyRunning.value = true
   ui.toast('LLM 网关已启动，配置已生成')
   await startProxyServer()
+}
+
+function exportLlmConfig() {
+  const llmConfig = { llm: envData.value.llm, proxy: envData.value.proxy }
+  const text = yaml.dump(llmConfig, { indent: 2, lineWidth: 120 })
+  const blob = new Blob([text], { type: 'text/yaml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'llm-config.yaml'
+  a.click()
+  URL.revokeObjectURL(url)
+  ui.toast('LLM 配置已导出')
+}
+
+const importFileInput = ref<HTMLInputElement | null>(null)
+function triggerImport() {
+  importFileInput.value?.click()
+}
+async function handleImportFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  try {
+    const text = await file.text()
+    // 自动识别 YAML / JSON
+    const data = text.trim().startsWith('{') || text.trim().startsWith('[')
+      ? JSON.parse(text)
+      : yaml.load(text) as any
+    if (data.llm && typeof data.llm === 'object') {
+      envData.value.llm = data.llm
+    }
+    if (data.proxy && typeof data.proxy === 'object') {
+      envData.value.proxy = data.proxy
+    }
+    await saveEnv(true)
+    ui.toast('LLM 配置已导入并保存')
+  } catch (err: any) {
+    ui.toast(`导入失败: ${err?.message || err}`, 'err')
+  }
+  input.value = ''
 }
 
 const filteredProviders = computed(() => {
@@ -178,14 +220,20 @@ const availableModels = computed<string[]>(() => {
   return [...new Set(models)]
 })
 
-const hasProviders = computed(() => providerNames.value.length > 0)
+const hasProviders = computed(() => enabledProviderNames.value.length > 0)
 
 /* ============ 自动保存 ============ */
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 function autoSave() {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(async () => {
-    await saveEnv(true)
+    const ok = await saveEnv(true)
+    if (ok) {
+      // 保存后自动重新生成 IDE 配置（codex config.toml / auth.json 等）
+      try {
+        await api('/api/init-env', { method: 'POST' })
+      } catch { /* 静默失败，不影响保存 */ }
+    }
   }, 500)
 }
 watch(activeSource, () => autoSave())
@@ -295,6 +343,29 @@ function clearEnvRef() {
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           保存
         </button>
+        <button
+          type="button"
+          @click="exportLlmConfig"
+          class="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          导出
+        </button>
+        <button
+          type="button"
+          @click="triggerImport"
+          class="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          导入
+        </button>
+        <input
+          ref="importFileInput"
+          type="file"
+          accept=".yaml,.yml,.json"
+          class="hidden"
+          @change="handleImportFile"
+        />
       </div>
     </div>
 
@@ -318,8 +389,8 @@ function clearEnvRef() {
             :disabled="!hasProviders && !proxyEnabled"
             class="px-3 py-2 text-xs border border-ink-300 rounded-lg bg-white min-w-[220px] disabled:bg-ink-100 disabled:text-ink-500"
           >
-            <option value="" disabled>{{ hasProviders ? '请选择…' : '暂无 Provider' }}</option>
-            <option v-for="p in providerNames" :key="p" :value="p">{{ p }}</option>
+            <option value="" disabled>{{ hasProviders ? '请选择…' : '暂无启用的 Provider' }}</option>
+            <option v-for="p in enabledProviderNames" :key="p" :value="p">{{ p }}</option>
             <option :value="GATEWAY_SOURCE">LLM 网关</option>
           </select>
         </div>
@@ -372,15 +443,32 @@ function clearEnvRef() {
               :style="{ background: avatarStyle(pn) }"
             >{{ providerInitials(pn) }}</div>
             <div class="min-w-0 flex-1">
-              <div class="text-[13px] font-semibold truncate">
+              <div class="text-[13px] font-semibold truncate flex items-center gap-1">
                 {{ pn }}
                 <span
                   v-if="activeSource === pn"
-                  class="ml-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-50 text-brand-600 align-middle"
+                  class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-brand-50 text-brand-600 align-middle"
                 >默认</span>
+                <span
+                  v-if="!isProviderEnabled(pn)"
+                  class="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-ink-100 text-ink-500 align-middle"
+                >未启用</span>
               </div>
               <div class="text-[11px] text-ink-500 font-mono mt-0.5 truncate">{{ protocolSummary(pn) }}</div>
             </div>
+            <!-- 启用/禁用开关 -->
+            <button
+              type="button"
+              class="relative w-8 h-[18px] rounded-full transition shrink-0"
+              :class="isProviderEnabled(pn) ? 'bg-brand-500' : 'bg-ink-300'"
+              @click.stop="toggleProviderEnabled(pn); autoSave()"
+              :title="isProviderEnabled(pn) ? '点击禁用' : '点击启用'"
+            >
+              <span
+                class="absolute top-0.5 w-[14px] h-[14px] rounded-full bg-white shadow transition-all"
+                :class="isProviderEnabled(pn) ? 'left-[16px]' : 'left-[2px]'"
+              />
+            </button>
           </button>
           <p v-if="!filteredProviders.length" class="text-xs text-ink-500 text-center py-8 px-3">
             {{ providerNames.length ? '无匹配厂商' : '暂无 Provider，请添加' }}

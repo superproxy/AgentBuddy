@@ -529,49 +529,48 @@ def _find_trae_cli_sessions_dir() -> Path:
 
 
 def scan_trae_cli_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[dict]:
-    """扫描 traecli CLI 会话：~/AppData/Local/trae-cli/sessions/<uuid>/session.json
+    """扫描 Trae CN 会话：合并 CLI 会话和 App 会话。
 
-    session.json 格式：
-    {"id":"<uuid>","created_at":"...","updated_at":"...","metadata":{"cwd":"...","title":"..."}}
+    CLI 会话：~/AppData/Local/trae-cli/sessions/<uuid>/session.json
+    App 会话：~/.trae-cn/memory/projects/<hash>/<date>/session_memory_<uuid>.jsonl
     """
-    # 忽略传入的 sessions_dir（那是 Trae CN IDE 的目录），用 traecli 自己的目录
-    cli_sessions_dir = _find_trae_cli_sessions_dir()
-    if not cli_sessions_dir.exists():
-        return []
-
     results = []
-    for session_dir in cli_sessions_dir.iterdir():
-        if not session_dir.is_dir():
-            continue
-        session_file = session_dir / "session.json"
-        if not session_file.exists():
-            continue
 
-        stat = _safe_stat(session_file)
-        session_id = session_dir.name
-        title = ""
-        cwd = ""
-        created_at = ""
-        updated_at = ""
+    # --- 1. CLI 会话 ---
+    cli_sessions_dir = _find_trae_cli_sessions_dir()
+    if cli_sessions_dir.exists():
+        for session_dir in cli_sessions_dir.iterdir():
+            if not session_dir.is_dir():
+                continue
+            session_file = session_dir / "session.json"
+            if not session_file.exists():
+                continue
 
-        try:
-            with open(session_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            session_id = data.get("id", session_dir.name)
-            created_at = data.get("created_at", "")
-            updated_at = data.get("updated_at", "")
-            metadata = data.get("metadata", {})
-            title = metadata.get("title", "")
-            cwd = metadata.get("cwd", "")
-        except Exception:
-            pass
+            stat = _safe_stat(session_file)
+            session_id = session_dir.name
+            title = ""
+            cwd = ""
+            created_at = ""
+            updated_at = ""
 
-        # 统计消息数（events.jsonl）
-        events_file = session_dir / "events.jsonl"
-        messages_count = _count_jsonl_messages(events_file) if events_file.exists() else 0
+            try:
+                with open(session_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                session_id = data.get("id", session_dir.name)
+                created_at = data.get("created_at", "")
+                updated_at = data.get("updated_at", "")
+                metadata = data.get("metadata", {})
+                title = metadata.get("title", "")
+                cwd = metadata.get("cwd", "")
+            except Exception:
+                pass
 
-        if not updated_at:
-            updated_at = stat.get("updated_at", "")
+            # 统计消息数（events.jsonl）
+            events_file = session_dir / "events.jsonl"
+            messages_count = _count_jsonl_messages(events_file) if events_file.exists() else 0
+
+            if not updated_at:
+                updated_at = stat.get("updated_at", "")
 
         results.append({
             "id": session_id,
@@ -583,7 +582,60 @@ def scan_trae_cli_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[
             "messages_count": messages_count,
             "file_path": str(session_file),
             "size_bytes": stat.get("size_bytes", 0),
+            "source": "cli",
         })
+
+    # --- 2. App 会话（Trae CN IDE）---
+    app_sessions_dir = Path.home() / ".trae-cn" / "memory" / "projects"
+    if app_sessions_dir.exists():
+        for jsonl_file in app_sessions_dir.rglob("session_memory_*.jsonl"):
+            session_id = jsonl_file.stem.replace("session_memory_", "")
+            if not session_id:
+                continue
+
+            stat = _safe_stat(jsonl_file)
+
+            try:
+                date_dir = jsonl_file.parent
+                project_hash_dir = date_dir.parent
+                project_hash = project_hash_dir.name
+            except Exception:
+                project_hash = ""
+
+            cwd = _decode_project_hash(project_hash)
+
+            title = ""
+            updated_at = ""
+            try:
+                with open(jsonl_file, "r", encoding="utf-8", errors="ignore") as f:
+                    first_line = f.readline()
+                    obj = json.loads(first_line)
+                    title = obj.get("intent", "") or ""
+                    summary_time = obj.get("message_summary_time", "")
+                    if summary_time:
+                        try:
+                            updated_at = summary_time.replace(" ", "T")
+                        except Exception:
+                            updated_at = summary_time
+            except Exception:
+                pass
+
+            if not cwd or not os.path.isdir(cwd):
+                pass
+
+            results.append({
+                "id": session_id,
+                "ide": ide_key,
+                "title": title[:80] + ("..." if len(title) > 80 else "") if title else f"Session {session_id[:8]}",
+                "cwd": cwd,
+                "created_at": stat.get("created_at", ""),
+                "updated_at": updated_at,
+                "messages_count": 0,
+                "file_path": str(jsonl_file),
+                "size_bytes": stat.get("size_bytes", 0),
+                "source": "app",
+            })
+
     return results
 
 
@@ -775,8 +827,15 @@ IDE_RESUME_COMMANDS = {
 }
 
 
-def build_resume_command(ide_key: str, exe_path: str, session_id: str, cwd: str = "") -> str:
+def build_resume_command(ide_key: str, exe_path: str, session_id: str, cwd: str = "", source: str = "") -> str:
     """构造恢复会话的命令行。
+
+    Args:
+        ide_key: IDE 标识
+        exe_path: 可执行文件路径
+        session_id: 会话 ID
+        cwd: 工作目录
+        source: 会话来源（"cli" / "app"），用于区分 TraeCN CLI 和 App 会话
 
     Returns:
         完整命令字符串。若 IDE 不支持 resume，返回空字符串。
@@ -784,6 +843,9 @@ def build_resume_command(ide_key: str, exe_path: str, session_id: str, cwd: str 
     template = IDE_RESUME_COMMANDS.get(ide_key)
     if not template or not exe_path:
         return ""
+    # TraeCN App 会话不能用 traecli --resume，直接打开 IDE
+    if ide_key == "TraeCN" and source == "app":
+        return f'"{exe_path}"'
     return template.format(exe=exe_path, session_id=session_id, cwd=cwd)
 
 

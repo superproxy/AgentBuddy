@@ -243,7 +243,7 @@ def _launch_macos_app(app_path: str, cwd: str = "") -> dict:
         return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
 
 
-def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = "") -> dict:
+def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = "", source: str = "") -> dict:
     """启动 IDE。
 
     Args:
@@ -270,7 +270,7 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             return None
         args = []
         if session_id:
-            resume_cmd = build_resume_command(ide_key, exe_path, session_id, cwd)
+            resume_cmd = build_resume_command(ide_key, exe_path, session_id, cwd, source=source)
             _log(f"launch_ide({ide_key}): resume_cmd={resume_cmd!r}, session_id={session_id}, cwd={cwd!r}")
             if resume_cmd:
                 parts = resume_cmd.split()
@@ -379,9 +379,9 @@ def launch_ide_with_project(ide_key: str, project_path: str) -> dict:
     return launch_ide(ide_key, cwd=project_path)
 
 
-def launch_ide_resume_session(ide_key: str, session_id: str, cwd: str = "", mode: str = "") -> dict:
+def launch_ide_resume_session(ide_key: str, session_id: str, cwd: str = "", mode: str = "", source: str = "") -> dict:
     """启动 IDE 并恢复指定会话。"""
-    return launch_ide(ide_key, cwd=cwd, session_id=session_id, mode=mode)
+    return launch_ide(ide_key, cwd=cwd, session_id=session_id, mode=mode, source=source)
 
 
 __all__ = ["launch_ide", "launch_ide_with_project", "launch_ide_resume_session"]
