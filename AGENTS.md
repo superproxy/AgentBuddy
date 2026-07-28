@@ -18,3 +18,26 @@
 | [docs/project-overview.md](docs/project-overview.md) | 项目定位、项目结构、Skill 目录体系（三源）、插件导入导出 |
 | [docs/build-release.md](docs/build-release.md) | 发布流程（Release）、安装更新（升级覆盖）、Windows 批处理脚本规范 |
 | [docs/agent-governance.md](docs/agent-governance.md) | Agent 架构拓扑、协作流程、治理规则、FAQ/最佳实践、自我迭代、协同进度、Skill 依赖表、通信协议 |
+
+## IDE CLI 会话恢复命令参考
+
+> 所有命令均来自官方文档验证，禁止臆测。更新时务必查官方文档。
+
+| IDE | 命令 | 官方文档来源 |
+|-----|------|-------------|
+| Claude | `claude --resume <id>` | docs.anthropic.com/claude-code/cli-reference |
+| Codex | `codex resume <id>` | 用户确认（非 `--resume`） |
+| KimiCLI / KimiCode | `kimi --session <id>` | kimi-cli.com/reference/kimi-command |
+| Cursor | `cursor --continue` | 无 `--resume`，只能继续最近会话 |
+| OpenCode | `opencode --session <id>` | open-code.ai/docs/cli（非 `--resume`） |
+| Qoder | `qodercli -r <id>` | docs.qoder.com/zh/cli/using-cli（非 `--resume`） |
+| QoderCN | `qoderclicn -r <id>` | help.aliyun.com/zh/lingma/qodercli-cn |
+| WorkBuddy | `codebuddy --resume <id>` | codebuddy.ai/docs/cli/slash-commands |
+| TraeCN | `traecli --resume <id>` | docs.trae.cn/cli |
+
+### 不支持 CLI 会话恢复的 IDE
+
+| IDE | 原因 |
+|-----|------|
+| OpenClaw | Gateway 服务架构，非 TUI CLI（`openclaw sessions` 仅列出会话，无 `--resume` 参数） |
+| ZCode | 桌面 IDE，非 TUI CLI（会话管理通过 UI 进行） |

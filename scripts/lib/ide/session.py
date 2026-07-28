@@ -709,19 +709,18 @@ def list_sessions(ide_key: str, sessions_dir: str | Path) -> list[dict]:
 # ===== 会话 resume 命令构造 =====
 
 # 各 IDE 的 resume 命令模板（{exe} 为可执行文件，{session_id} 为会话 ID，{cwd} 为工作目录）
+# 命令格式均来自官方文档验证，详见 AGENTS.md
 IDE_RESUME_COMMANDS = {
-    "Claude": "{exe} --resume {session_id}",                  # claude --resume <id>
-    "Codex": "{exe} resume {session_id}",                    # codex resume <id>
-    "KimiCLI": "{exe} --session {session_id}",                # kimi --session <id>
-    "KimiCode": "{exe} --session {session_id}",               # kimi --session <id>
-    "Cursor": "{exe} --continue",                             # Cursor 无 CLI resume，只能 --continue 最近会话
-    "OpenCode": "{exe} --resume {session_id}",
-    "Qoder": "{exe} --resume {session_id}",
-    "QoderCN": "{exe} --resume {session_id}",
-    "OpenClaw": "{exe} --resume {session_id}",
-    "WorkBuddy": "{exe} --resume {session_id}",
-    "ZCode": "{exe} --resume {session_id}",
-    "TraeCN": "{exe} --resume {session_id}",                  # trae-cli --resume <id>
+    "Claude": "{exe} --resume {session_id}",                  # claude --resume <id>  (docs.anthropic.com)
+    "Codex": "{exe} resume {session_id}",                    # codex resume <id>     (用户确认)
+    "KimiCLI": "{exe} --session {session_id}",                # kimi --session <id>   (kimi-cli.com)
+    "KimiCode": "{exe} --session {session_id}",               # kimi --session <id>   (kimi-cli.com)
+    "Cursor": "{exe} --continue",                             # cursor --continue     (无 --resume，只能继续最近会话)
+    "OpenCode": "{exe} --session {session_id}",               # opencode --session <id>  (open-code.ai/docs/cli)
+    "Qoder": "{exe} -r {session_id}",                         # qodercli -r <id>      (docs.qoder.com)
+    "QoderCN": "{exe} -r {session_id}",                       # qoderclicn -r <id>    (help.aliyun.com)
+    "WorkBuddy": "{exe} --resume {session_id}",               # codebuddy --resume <id>  (codebuddy.ai/docs)
+    "TraeCN": "{exe} --resume {session_id}",                  # traecli --resume <id> (docs.trae.cn)
 }
 
 
