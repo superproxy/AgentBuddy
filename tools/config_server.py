@@ -608,17 +608,6 @@ def api_version():
                 return jsonify(json.load(f))
         except Exception:
             pass
-    # 开发模式：从 git tag 推断版本号
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0"],
-            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=3,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return jsonify({"version": result.stdout.strip().lstrip("v"), "build_time": ""})
-    except Exception:
-        pass
     return jsonify({"version": "dev", "build_time": ""})
 
 
