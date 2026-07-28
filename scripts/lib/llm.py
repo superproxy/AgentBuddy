@@ -378,22 +378,23 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
 
     if enable_gateway:
         listener_url = gateway_config.get("base_url", "http://127.0.0.1:4000/v1")
+        # 网关 api_key：未配置时用占位符（litellm 本地网关默认不校验）
+        gateway_api_key = gateway_config.get("api_key", "") or "sk-agentbuddy-gateway"
         flat["LLM_ACTIVE_BASE_URL"] = listener_url
-        flat["LLM_ACTIVE_API_KEY"] = gateway_config.get("api_key", "")
+        flat["LLM_ACTIVE_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_BASE_URL"] = listener_url
-        flat["LLM_CODEX_API_KEY"] = gateway_config.get("api_key", "")
+        flat["LLM_CODEX_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_WIRE_API"] = "chat"
         flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
-        # 默认模型：优先使用 _active_model，否则取第一条启用路由的 gateway_model
+        # 网关模型：优先匹配 _active_model 在路由 gateway_model 中，否则取第一条启用路由
         routes = gateway_config.get("routes", [])
         active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
-        if active_model_override:
+        gateway_models = [r.get("gateway_model", "") for r in routes
+                           if isinstance(r, dict) and r.get("enabled", True) and r.get("gateway_model")]
+        if active_model_override and active_model_override in gateway_models:
             flat["OPENAI_MODEL"] = active_model_override
-        elif isinstance(routes, list) and routes:
-            for r in routes:
-                if isinstance(r, dict) and r.get("enabled", True) and r.get("gateway_model"):
-                    flat["OPENAI_MODEL"] = r["gateway_model"]
-                    break
+        elif gateway_models:
+            flat["OPENAI_MODEL"] = gateway_models[0]
     elif active_provider_name and active_provider_name in llm:
         active_provider_data = llm[active_provider_name]
         if isinstance(active_provider_data, dict):
