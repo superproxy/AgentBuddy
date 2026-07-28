@@ -82,9 +82,13 @@ def _extract_title_from_jsonl(p: Path, max_chars: int = 60) -> str:
 
 
 def _extract_cwd_from_jsonl(p: Path) -> str:
-    """从 jsonl 文件中提取 cwd 字段。
+    """从 jsonl 文件中提取 cwd 字段（支持嵌套）。
 
-    Claude session jsonl 中 type=user 的行含 cwd 字段（真实工作目录），
+    各 IDE 的 cwd 存储位置不同：
+    - Claude: 顶层 cwd 字段（type=user 行）
+    - Codex: payload.cwd 字段（type=session_meta 行）
+    - 其他: 尝试顶层 cwd，再尝试 payload.cwd
+
     比从 project_hash 目录名反编码更准确（路径含 - 时反编码不可逆）。
     """
     try:
@@ -94,9 +98,16 @@ def _extract_cwd_from_jsonl(p: Path) -> str:
                     obj = json.loads(line)
                 except Exception:
                     continue
+                # 优先顶层 cwd
                 cwd = obj.get("cwd", "")
                 if cwd:
                     return cwd
+                # 再尝试 payload.cwd（Codex 格式）
+                payload = obj.get("payload")
+                if isinstance(payload, dict):
+                    cwd = payload.get("cwd", "")
+                    if cwd:
+                        return cwd
     except Exception:
         pass
     return ""
@@ -141,43 +152,57 @@ def scan_claude_sessions(sessions_dir: Path, ide_key: str = "Claude") -> list[di
 def scan_codex_sessions(sessions_dir: Path, ide_key: str = "Codex") -> list[dict]:
     """扫描 Codex 会话：sessions_dir = ~/.codex/sessions。
 
-    结构：
+    结构（新格式）：
+    - YYYY/MM/DD/rollout-<timestamp>-<session-id>.jsonl
+    结构（旧格式）：
     - <session-id>/rollout.jsonl（活跃会话）
     - archived_sessions/<session-id>/rollout.jsonl（归档会话）
     - rollout-<timestamp>-<session-id>.jsonl（旧格式单文件）
-    rollout.jsonl 首行含 session_meta：{type:session_meta, id, timestamp, cwd, ...}
+
+    cwd 在 payload.cwd 字段（type=session_meta 行），用 _extract_cwd_from_jsonl 读取。
     """
     results = []
     if not sessions_dir.exists():
         return results
 
-    # 子目录形式
+    # 新格式：YYYY/MM/DD/rollout-*.jsonl（递归扫描日期目录）
+    for rollout in sessions_dir.rglob("rollout-*.jsonl"):
+        stat = _safe_stat(rollout)
+        # 文件名格式：rollout-<timestamp>-<session-id>.jsonl
+        m = re.match(r"rollout-[\dT-]+-(.+)\.jsonl", rollout.name)
+        sid = m.group(1) if m else rollout.stem
+        cwd = _extract_cwd_from_jsonl(rollout)
+        results.append({
+            "id": sid,
+            "ide": ide_key,
+            "title": _extract_title_from_jsonl(rollout) or rollout.stem,
+            "cwd": cwd,
+            "created_at": stat.get("created_at", ""),
+            "updated_at": stat.get("updated_at", ""),
+            "messages_count": _count_jsonl_messages(rollout),
+            "file_path": str(rollout),
+            "size_bytes": stat.get("size_bytes", 0),
+        })
+
+    # 旧格式：子目录形式 <session-id>/rollout.jsonl
     for session_dir in sessions_dir.iterdir():
         if not session_dir.is_dir():
+            continue
+        # 跳过日期目录（新格式已通过 rglob 扫描）
+        if re.match(r"^\d{4}$", session_dir.name):
             continue
         rollout = session_dir / "rollout.jsonl"
         if not rollout.exists():
             continue
         stat = _safe_stat(rollout)
-        cwd = ""
-        created_at = stat.get("created_at", "")
-        # 读首行 session_meta
-        try:
-            with open(rollout, "r", encoding="utf-8", errors="ignore") as f:
-                first = f.readline()
-                meta = json.loads(first)
-                if meta.get("type") == "session_meta":
-                    cwd = meta.get("cwd", "")
-                    created_at = meta.get("timestamp", created_at)
-        except Exception:
-            pass
+        cwd = _extract_cwd_from_jsonl(rollout)
         title = _extract_title_from_jsonl(rollout) or session_dir.name
         results.append({
             "id": session_dir.name,
             "ide": ide_key,
             "title": title,
             "cwd": cwd,
-            "created_at": created_at,
+            "created_at": stat.get("created_at", ""),
             "updated_at": stat.get("updated_at", ""),
             "messages_count": _count_jsonl_messages(rollout),
             "file_path": str(rollout),
@@ -194,36 +219,19 @@ def scan_codex_sessions(sessions_dir: Path, ide_key: str = "Codex") -> list[dict
             if not rollout.exists():
                 continue
             stat = _safe_stat(rollout)
+            cwd = _extract_cwd_from_jsonl(rollout)
             title = _extract_title_from_jsonl(rollout) or session_dir.name
             results.append({
                 "id": session_dir.name,
                 "ide": ide_key,
                 "title": f"[archived] {title}",
-                "cwd": "",
+                "cwd": cwd,
                 "created_at": stat.get("created_at", ""),
                 "updated_at": stat.get("updated_at", ""),
                 "messages_count": _count_jsonl_messages(rollout),
                 "file_path": str(rollout),
                 "size_bytes": stat.get("size_bytes", 0),
             })
-
-    # 旧格式单文件 rollout-*.jsonl
-    for f in sessions_dir.glob("rollout-*.jsonl"):
-        stat = _safe_stat(f)
-        # 文件名格式：rollout-<timestamp>-<session-id>.jsonl
-        m = re.match(r"rollout-[\dT-]+-(.+)\.jsonl", f.name)
-        sid = m.group(1) if m else f.stem
-        results.append({
-            "id": sid,
-            "ide": ide_key,
-            "title": _extract_title_from_jsonl(f) or f.stem,
-            "cwd": "",
-            "created_at": stat.get("created_at", ""),
-            "updated_at": stat.get("updated_at", ""),
-            "messages_count": _count_jsonl_messages(f),
-            "file_path": str(f),
-            "size_bytes": stat.get("size_bytes", 0),
-        })
 
     return results
 
@@ -466,6 +474,25 @@ def scan_trae_cn_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[d
                         updated_at = summary_time
         except Exception:
             pass
+
+        # cwd fallback：_decode_project_hash 路径含 - 时不可逆，
+        # 从 intent 字段中用正则提取 Windows/macOS 路径作为补充
+        if not cwd or not os.path.isdir(cwd):
+            if title:
+                # Windows 路径：C:\xxx — 只匹配 ASCII 路径字符，遇中文停止
+                m = re.search(r'([a-zA-Z]:\\[\w\\\-./ ]+)', title)
+                if m:
+                    cwd = m.group(1).rstrip('.,;，。 \t')
+                    # 验证路径存在
+                    if not os.path.isdir(cwd):
+                        cwd = ""
+                if not cwd:
+                    # macOS/Linux 路径：/Users/xxx 或 /home/xxx
+                    m = re.search(r'(/(?:Users|home|tmp|var|opt|etc)/[\w\-./ ]+)', title)
+                    if m:
+                        cwd = m.group(1).rstrip('.,;，。 \t')
+                        if not os.path.isdir(cwd):
+                            cwd = ""
 
         # 如果没有从内容获取到时间，回退到文件 mtime
         if not updated_at:
