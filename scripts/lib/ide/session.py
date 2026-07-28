@@ -81,6 +81,27 @@ def _extract_title_from_jsonl(p: Path, max_chars: int = 60) -> str:
     return ""
 
 
+def _extract_cwd_from_jsonl(p: Path) -> str:
+    """从 jsonl 文件中提取 cwd 字段。
+
+    Claude session jsonl 中 type=user 的行含 cwd 字段（真实工作目录），
+    比从 project_hash 目录名反编码更准确（路径含 - 时反编码不可逆）。
+    """
+    try:
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                cwd = obj.get("cwd", "")
+                if cwd:
+                    return cwd
+    except Exception:
+        pass
+    return ""
+
+
 # ===== 各 IDE 会话扫描器 =====
 
 def scan_claude_sessions(sessions_dir: Path, ide_key: str = "Claude") -> list[dict]:
@@ -88,6 +109,7 @@ def scan_claude_sessions(sessions_dir: Path, ide_key: str = "Claude") -> list[di
 
     结构：<project-hash>/<session-id>.jsonl
     project-hash 由 cwd 路径转换：/ → -
+    cwd 优先从 jsonl 文件内读取（准确），fallback 到目录名反编码。
     """
     results = []
     if not sessions_dir.exists():
@@ -95,11 +117,13 @@ def scan_claude_sessions(sessions_dir: Path, ide_key: str = "Claude") -> list[di
     for project_dir in sessions_dir.iterdir():
         if not project_dir.is_dir():
             continue
-        # 反推 cwd：C--Users-59300 → C:\Users\59300
-        cwd = _decode_project_hash(project_dir.name)
+        # 反推 cwd：C--Users-59300 → C:\Users\59300（路径含 - 时不可逆，仅作 fallback）
+        fallback_cwd = _decode_project_hash(project_dir.name)
         for session_file in project_dir.glob("*.jsonl"):
             stat = _safe_stat(session_file)
             title = _extract_title_from_jsonl(session_file) or session_file.stem
+            # 优先从 jsonl 内读取 cwd（准确），fallback 到目录名反编码
+            cwd = _extract_cwd_from_jsonl(session_file) or fallback_cwd
             results.append({
                 "id": session_file.stem,
                 "ide": ide_key,
