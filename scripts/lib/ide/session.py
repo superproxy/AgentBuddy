@@ -25,7 +25,9 @@
 }
 """
 import json
+import os
 import re
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -459,6 +461,81 @@ def scan_trae_cn_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[d
     return results
 
 
+def _find_trae_cli_sessions_dir() -> Path:
+    """查找 traecli 的 sessions 目录。
+
+    Windows: ~/AppData/Local/trae-cli/sessions/
+    macOS:   ~/Library/Application Support/trae-cli/sessions/
+    Linux:   ~/.local/share/trae-cli/sessions/
+    """
+    home = Path.home()
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA", str(home / "AppData" / "Local"))
+        return Path(local_appdata) / "trae-cli" / "sessions"
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "trae-cli" / "sessions"
+    return home / ".local" / "share" / "trae-cli" / "sessions"
+
+
+def scan_trae_cli_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[dict]:
+    """扫描 traecli CLI 会话：~/AppData/Local/trae-cli/sessions/<uuid>/session.json
+
+    session.json 格式：
+    {"id":"<uuid>","created_at":"...","updated_at":"...","metadata":{"cwd":"...","title":"..."}}
+    """
+    # 忽略传入的 sessions_dir（那是 Trae CN IDE 的目录），用 traecli 自己的目录
+    cli_sessions_dir = _find_trae_cli_sessions_dir()
+    if not cli_sessions_dir.exists():
+        return []
+
+    results = []
+    for session_dir in cli_sessions_dir.iterdir():
+        if not session_dir.is_dir():
+            continue
+        session_file = session_dir / "session.json"
+        if not session_file.exists():
+            continue
+
+        stat = _safe_stat(session_file)
+        session_id = session_dir.name
+        title = ""
+        cwd = ""
+        created_at = ""
+        updated_at = ""
+
+        try:
+            with open(session_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            session_id = data.get("id", session_dir.name)
+            created_at = data.get("created_at", "")
+            updated_at = data.get("updated_at", "")
+            metadata = data.get("metadata", {})
+            title = metadata.get("title", "")
+            cwd = metadata.get("cwd", "")
+        except Exception:
+            pass
+
+        # 统计消息数（events.jsonl）
+        events_file = session_dir / "events.jsonl"
+        messages_count = _count_jsonl_messages(events_file) if events_file.exists() else 0
+
+        if not updated_at:
+            updated_at = stat.get("updated_at", "")
+
+        results.append({
+            "id": session_id,
+            "ide": ide_key,
+            "title": title[:80] + ("..." if len(title) > 80 else "") if title else f"Session {session_id[:8]}",
+            "cwd": cwd,
+            "created_at": created_at or stat.get("created_at", ""),
+            "updated_at": updated_at,
+            "messages_count": messages_count,
+            "file_path": str(session_file),
+            "size_bytes": stat.get("size_bytes", 0),
+        })
+    return results
+
+
 def _extract_zcode_title_from_jsonl(p: Path, max_chars: int = 80) -> str:
     """从 ZCode rollout jsonl 提取标题（第一条真实 user 消息内容）。
 
@@ -599,8 +676,8 @@ IDE_SESSION_SCANNERS = {
     "QoderCN": lambda d, k="QoderCN": scan_generic_sessions(d, k),
     "OpenCode": lambda d, k="OpenCode": scan_generic_sessions(d, k),
     "Trae": lambda d, k="Trae": scan_generic_sessions(d, k),
-    "TraeCN": scan_trae_cn_sessions,
-    "TraeSoloCN": scan_trae_cn_sessions,
+    "TraeCN": scan_trae_cli_sessions,
+    "TraeSoloCN": scan_trae_cli_sessions,
     "ZCode": scan_zcode_sessions,
 }
 

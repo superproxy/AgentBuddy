@@ -544,7 +544,11 @@ def index():
 def dist_assets(filename):
     """Vite 构建产物（JS/CSS chunk）。"""
     from flask import send_from_directory
-    return send_from_directory(PROJECT_ROOT / "tools" / "dist-ui" / "assets", filename)
+    resp = send_from_directory(PROJECT_ROOT / "tools" / "dist-ui" / "assets", filename)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 # ============================================================
