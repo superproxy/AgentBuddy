@@ -601,18 +601,39 @@ def api_ui_state_set():
     return jsonify({"ok": True, "state": state})
 
 
-@app.route("/api/version", methods=["GET"])
-def api_version():
-    """返回应用版本号。构建时由 build.py 写入 tools/dist-ui/version.json，供运行时 /api/version 读取。"""
+def _read_version() -> tuple[str, str]:
+    """读取版本号。优先 version.json，开发模式 fallback 到 git tag。
+
+    返回 (version, build_time)。version 为 "dev" 表示开发模式。
+    """
     import json
     version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
     if version_file.exists():
         try:
             with open(version_file, "r", encoding="utf-8") as f:
-                return jsonify(json.load(f))
+                data = json.load(f) or {}
+                return data.get("version") or "dev", data.get("build_time") or ""
         except Exception:
             pass
-    return jsonify({"version": "dev", "build_time": ""})
+    # 开发模式：version.json 不存在时从 git tag 推断版本号
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip().lstrip("v"), ""
+    except Exception:
+        pass
+    return "dev", ""
+
+
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    """返回应用版本号。构建时由 build.py 写入 tools/dist-ui/version.json，供运行时 /api/version 读取。"""
+    version, build_time = _read_version()
+    return jsonify({"version": version, "build_time": build_time})
 
 
 # ============================================================
@@ -663,14 +684,7 @@ def upgrade_check():
     import urllib.error
 
     # 读取当前版本
-    current = "dev"
-    version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
-    if version_file.exists():
-        try:
-            with open(version_file, "r", encoding="utf-8") as f:
-                current = (json.load(f) or {}).get("version") or "dev"
-        except Exception:
-            pass
+    current, _ = _read_version()
 
     # 开发模式直接返回无升级
     if current == "dev":
