@@ -39,8 +39,11 @@ def _log(msg: str) -> None:
     try:
         _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        line = f"[{ts}] {msg}"
         with open(_LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] {msg}\n")
+            f.write(line + "\n")
+        # frozen windowed 应用的 stdout 已由 app.py 重定向到 app.log。
+        print(line, flush=True)
     except Exception:
         pass
 
@@ -108,6 +111,7 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
     cmd = ["cmd.exe", "/K", full_cmd]
 
     _log(f"win32_console: full_cmd={full_cmd!r}")
+    _log(f"win32_console: popen_cmd={cmd!r}")
 
     try:
         # CREATE_NEW_CONSOLE = 0x00000010：新建控制台窗口（有 TTY）
