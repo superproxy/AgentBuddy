@@ -1,13 +1,13 @@
 _description: LLM Provider 配置模板 - 复制为 llm.yaml 并填入真实密钥。此文件可安全提交到版本控制。
 llm:
   _active_provider: bigmodelCoding
-  _active_protocol: openai|anthropic
+  _active_protocol: openaiv1|anthropic
   proxy:
     enable: false
     base_url: http://127.0.0.1:4000/v1
     api_key: ''
   openicu:
-    openai:
+    openaiv1:
       base_url: https://openrouter.icu/v1
       api_key: ''
       models:
@@ -47,7 +47,7 @@ llm:
   # 约束：Coding 端点（/api/coding/paas/v4）≠ 通用端点（/api/paas/v4），不可互换；
   #       资源包/余额场景下 Anthropic 端点仅对从未购买过 Coding Plan 的账号有效。
   bigmodel:
-    openai:
+    openaiv1:
       base_url: https://open.bigmodel.cn/api/paas/v4
       api_key: ''
       models:
@@ -64,7 +64,7 @@ llm:
         glm-5-turbo:
           name: GLM 5 Turbo
   bigmodelCoding:
-    openai:
+    openaiv1:
       base_url: https://open.bigmodel.cn/api/coding/paas/v4
       api_key: ''
       models:
@@ -73,7 +73,7 @@ llm:
         glm-5-turbo:
           name: GLM 5 Turbo
   zai:
-    openai:
+    openaiv1:
       base_url: https://api.z.ai/api/paas/v4
       api_key: ''
       models:
@@ -90,7 +90,7 @@ llm:
         glm-5-turbo:
           name: GLM 5 Turbo
   zaiCoding:
-    openai:
+    openaiv1:
       base_url: https://api.z.ai/api/coding/paas/v4
       api_key: ''
       models:
@@ -99,7 +99,7 @@ llm:
         glm-5-turbo:
           name: GLM 5 Turbo
   openrouter:
-    openai:
+    openaiv1:
       base_url: https://openrouter.ai/api/v1
       api_key: ''
       models:
@@ -133,8 +133,8 @@ llm:
           name: Claude Haiku 4.5
         z-ai/glm-5.2:
           name: GLM 5.2
-  openai:
-    openai:
+  openaiv1:
+    openaiv1:
       base_url: https://api.openai.com/v1
       api_key: ''
       models:
@@ -156,7 +156,7 @@ llm:
         claude-haiku-4-5:
           name: Claude Haiku 4.5
   deepseek:
-    openai:
+    openaiv1:
       base_url: https://api.deepseek.com
       api_key: ''
       models:
@@ -173,7 +173,7 @@ llm:
         deepseek-v4-flash:
           name: DeepSeek V4 Flash
   volcengine:
-    openai:
+    openaiv1:
       base_url: https://ark.cn-beijing.volces.com/api/v3
       api_key: ''
       models:
@@ -210,7 +210,7 @@ llm:
         kimi-k2.6:
           name: Kimi K2.6
   volcengineCoding:
-    openai:
+    openaiv1:
       base_url: https://ark.cn-beijing.volces.com/api/coding/v3
       api_key: ''
       models:
@@ -251,7 +251,7 @@ llm:
         kimi-k2.6:
           name: Kimi K2.6
   volcengineAgent:
-    openai:
+    openaiv1:
       base_url: https://ark.cn-beijing.volces.com/api/plan/v3
       api_key: ''
       models:

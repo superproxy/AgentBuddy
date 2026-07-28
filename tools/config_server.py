@@ -373,7 +373,7 @@ def _ensure_llm_file() -> Path:
             return LLM_FILE
         except Exception:
             pass
-    save_env_config_file(LLM_FILE, {"llm": {"_active_provider": "", "_active_protocol": "openai|anthropic"}})
+    save_env_config_file(LLM_FILE, {"llm": {"_active_provider": "", "_active_protocol": "openaiv1|anthropic"}})
     return LLM_FILE
 
 
@@ -5436,7 +5436,7 @@ def verify_llm():
     base_url = (body.get("base_url") or "").rstrip("/")
     api_key_raw = body.get("api_key", "")
     api_key = _resolve_api_key(api_key_raw)
-    protocol = (body.get("protocol") or "openai").lower()
+    protocol = (body.get("protocol") or "openaiv1").lower()
     if not base_url:
         return jsonify({"ok": False, "error": "base_url 必填"}), 400
     if not api_key:

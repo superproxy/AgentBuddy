@@ -33,11 +33,11 @@ def _generate_claude_settings(template_file: Path, target_file: Path,
     env_map = {}
     if env_config:
         active_provider = ""
-        active_protocols = ["openai"]
+        active_protocols = ["openaiv1"]
         llm_section = env_config.get("llm", {})
         if isinstance(llm_section, dict):
             active_provider = llm_section.get("_active_provider", "")
-            raw = llm_section.get("_active_protocol", "openai")
+            raw = llm_section.get("_active_protocol", "openaiv1")
             active_protocols = [p.strip() for p in str(raw).split("|") if p.strip()]
         # IDE 协议过滤：如果指定了 ide_protocols，只同步这些协议
         if ide_protocols is not None:
@@ -45,7 +45,7 @@ def _generate_claude_settings(template_file: Path, target_file: Path,
             if not active_protocols:
                 active_protocols = list(ide_protocols)
         protocol_env_map = {
-            "openai": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
+            "openaiv1": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
             "responses": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
             "anthropic": {"base_url": "ANTHROPIC_BASE_URL", "api_key": "ANTHROPIC_AUTH_TOKEN", "model": "ANTHROPIC_MODEL"},
         }

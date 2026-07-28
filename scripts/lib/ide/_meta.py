@@ -49,17 +49,17 @@ def get_detect_meta() -> Dict[str, dict]:
 
 
 def get_ide_protocols(ide_name: str) -> list[str]:
-    """返回某个 IDE 支持的 LLM 协议列表（如 ['openai'] 或 ['openai', 'anthropic']）。
+    """返回某个 IDE 支持的 LLM 协议列表（如 ['openaiv1'] 或 ['openaiv1', 'anthropic']）。
 
     从 ide.yaml 的 detect_meta.<ide>.protocols 读取。
-    未配置时默认返回 ['openai']。
+    未配置时默认返回 ['openaiv1']。
     """
     meta = get_detect_meta()
     entry = meta.get(ide_name, {})
     protocols = entry.get("protocols")
     if isinstance(protocols, list) and protocols:
         return [str(p).strip() for p in protocols if str(p).strip()]
-    return ["openai"]
+    return ["openaiv1"]
 
 
 def reload() -> None:

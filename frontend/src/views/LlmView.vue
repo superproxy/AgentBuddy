@@ -22,8 +22,8 @@ const {
 const providerFilter = ref('')
 const proxyRunning = ref(false)
 
-/* ============ 协议排序：openai 最靠前，anthropic 靠后 ============ */
-const PROTOCOL_ORDER = ['openai', 'responses', 'anthropic']
+/* ============ 协议排序：openaiv1 最靠前，anthropic 靠后 ============ */
+const PROTOCOL_ORDER = ['openaiv1', 'responses', 'anthropic']
 function protocolSortKey(proto: string): number {
   const idx = PROTOCOL_ORDER.indexOf(proto)
   return idx >= 0 ? idx : PROTOCOL_ORDER.length
@@ -55,7 +55,7 @@ function addGatewayRoute() {
   envData.value.proxy.gateway.routes.push({
     enabled: true,
     provider: '',
-    protocol: 'openai',
+    protocol: 'openaiv1',
     upstream_model: '',
     gateway_model: '',
   })
@@ -243,7 +243,7 @@ watch(activeModel, () => autoSave())
 
 function avatarStyle(name: string) {
   const hues: Record<string, string> = {
-    openai: 'linear-gradient(145deg,#0e42d2,#1f2329)',
+    openaiv1: 'linear-gradient(145deg,#0e42d2,#1f2329)',
     responses: 'linear-gradient(145deg,#0e42d2,#1f2329)',
     anthropic: 'linear-gradient(145deg,#4e5969,#1f2329)',
     deepseek: 'linear-gradient(145deg,#165dff,#0a2e9c)',
@@ -751,7 +751,7 @@ function clearEnvRef() {
               <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-medium text-ink-700">协议</label>
                 <select v-model="route.protocol" class="w-full px-2 py-1.5 text-xs border border-ink-300 rounded-lg bg-white">
-                  <option value="openai">openai</option>
+                  <option value="openaiv1">openaiv1</option>
                   <option value="responses">responses</option>
                   <option value="anthropic">anthropic</option>
                 </select>

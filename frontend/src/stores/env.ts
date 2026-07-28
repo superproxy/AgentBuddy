@@ -211,7 +211,7 @@ export const useEnvStore = defineStore('env', () => {
     })
     if (!name) return
     const t = name.trim()
-    envData.llm[t] = { openai: { base_url: '', api_key: '', models: {} } }
+    envData.llm[t] = { openaiv1: { base_url: '', api_key: '', models: {} } }
     if (!envData.llm._active_provider) envData.llm._active_provider = t
     selectProvider(t)
     ui.toast('已添加 Provider: ' + t)
@@ -239,15 +239,15 @@ export const useEnvStore = defineStore('env', () => {
       title: '添加协议',
       message: `为 ${pn} 新增协议配置块。`,
       label: '协议名称',
-      placeholder: 'openai 或 anthropic',
-      defaultValue: 'openai',
+      placeholder: 'openaiv1 或 anthropic',
+      defaultValue: 'openaiv1',
       confirmText: '添加',
       mono: true,
       validate: (v) => {
         const t = v.toLowerCase()
         if (!t) return '请输入协议名称'
         if (envData.llm[pn]?.[t]) return '协议已存在'
-        if (!/^[a-z][a-z0-9_-]{0,31}$/.test(t)) return '建议使用小写协议名，如 openai / anthropic'
+        if (!/^[a-z][a-z0-9_-]{0,31}$/.test(t)) return '建议使用小写协议名，如 openaiv1 / anthropic'
         return null
       },
     })
@@ -400,14 +400,14 @@ export const useEnvStore = defineStore('env', () => {
   }
 
   function protocolOf(c: ProviderCandidate) {
-    return c.detected_protocol || c.suggested_protocol || c.active_protocol || 'openai'
+    return c.detected_protocol || c.suggested_protocol || c.active_protocol || 'openaiv1'
   }
 
   function catalogUrlOf(c: ProviderCandidate) {
     const proto = protocolOf(c)
     return (
       c.protocols?.[proto]?.base_url
-      || c.protocols?.openai?.base_url
+      || c.protocols?.openaiv1?.base_url
       || c.protocols?.anthropic?.base_url
       || Object.values(c.protocols || {})[0]?.base_url
       || ''
