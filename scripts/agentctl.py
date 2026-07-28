@@ -35,6 +35,7 @@ from lib.logging import (
 )
 from lib import llm, mcp, skills, plugins
 from lib.ide import get_ide, IDE_REGISTRY
+from lib.ide._meta import get_ide_protocols as get_ide_protocols
 
 
 def _resolve_project_root() -> Path:
@@ -107,17 +108,21 @@ def cmd_generate(args):
         mcp._inject_opencode_models(opencode_output, env_config)
 
     # 3. 生成 codex auth.json + config.toml（从模板）→ config/ide/codex/
+    # Codex 使用 responses 协议，需要专用 flat_config
+    codex_protocols = get_ide_protocols("Codex")
+    codex_flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols,
+                                               ide_protocols=codex_protocols)
     codex_auth_template = PROJECT_ROOT / "template" / "ide" / "codex" / "auth.template.json"
     codex_auth_output = PROJECT_ROOT / "config" / "ide" / "codex" / "auth.json"
     if codex_auth_template.exists():
         codex_auth_output.parent.mkdir(parents=True, exist_ok=True)
-        mcp.invoke_generate_step(flat_config, codex_auth_template, codex_auth_output)
+        mcp.invoke_generate_step(codex_flat_config, codex_auth_template, codex_auth_output)
 
     codex_config_template = PROJECT_ROOT / "template" / "ide" / "codex" / "config.template.toml"
     codex_config_output = PROJECT_ROOT / "config" / "ide" / "codex" / "config.toml"
     if codex_config_template.exists():
         codex_config_output.parent.mkdir(parents=True, exist_ok=True)
-        mcp.invoke_generate_step(flat_config, codex_config_template, codex_config_output)
+        mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
 
     # 4. 生成 claude settings.json（从模板）→ config/ide/claude/
     claude_template = PROJECT_ROOT / "template" / "ide" / "claude" / "settings.template.json"

@@ -267,6 +267,9 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             for protocol_name, protocol_value in protocols_to_iter.items():
                 if protocol_name.startswith("_"):
                     continue
+                # 兼容旧协议名 openai → openaiv1
+                if protocol_name == "openai":
+                    protocol_name = "openaiv1"
                 if not isinstance(protocol_value, dict):
                     continue
                 is_active_protocol = is_active and protocol_name in active_protocols
@@ -375,27 +378,45 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
     elif active_provider_name and active_provider_name in llm:
         active_provider_data = llm[active_provider_name]
         if isinstance(active_provider_data, dict):
-            openai_config = None
-            if _is_flat_provider(active_provider_data):
-                openai_config = active_provider_data
-            elif "openaiv1" in active_provider_data:
-                openai_config = active_provider_data["openaiv1"]
+            # 查找用于 LLM_ACTIVE_BASE_URL/API_KEY 的协议配置
+            # 优先级：ide_protocols 指定的协议 > openaiv1 > openai(旧) > responses
+            active_config = None
+            if ide_protocols is not None:
+                # IDE 专用模式：优先使用 ide_protocols 指定的协议
+                for proto in ide_protocols:
+                    if proto in active_provider_data and isinstance(active_provider_data[proto], dict):
+                        active_config = active_provider_data[proto]
+                        break
+                # 回退到 openaiv1/openai
+                if active_config is None:
+                    if "openaiv1" in active_provider_data:
+                        active_config = active_provider_data["openaiv1"]
+                    elif "openai" in active_provider_data:
+                        active_config = active_provider_data["openai"]
+            else:
+                if _is_flat_provider(active_provider_data):
+                    active_config = active_provider_data
+                elif "openaiv1" in active_provider_data:
+                    active_config = active_provider_data["openaiv1"]
+                elif "openai" in active_provider_data:
+                    # 兼容旧协议名 openai → openaiv1
+                    active_config = active_provider_data["openai"]
 
-            if isinstance(openai_config, dict):
-                flat["LLM_ACTIVE_BASE_URL"] = openai_config.get("base_url", "")
-                flat["LLM_ACTIVE_API_KEY"] = openai_config.get("api_key", "")
+            if isinstance(active_config, dict):
+                flat["LLM_ACTIVE_BASE_URL"] = active_config.get("base_url", "")
+                flat["LLM_ACTIVE_API_KEY"] = active_config.get("api_key", "")
             else:
                 flat["LLM_ACTIVE_BASE_URL"] = ""
                 flat["LLM_ACTIVE_API_KEY"] = ""
 
-            if "codex" in active_provider_data:
-                codex_protocol = active_provider_data["codex"]
-                if isinstance(codex_protocol, dict):
-                    flat["LLM_CODEX_BASE_URL"] = codex_protocol.get("base_url", "http://127.0.0.1:4000/v1")
-                    flat["LLM_CODEX_API_KEY"] = codex_protocol.get("api_key", "")
-                else:
-                    flat["LLM_CODEX_BASE_URL"] = "http://127.0.0.1:4000/v1"
-                    flat["LLM_CODEX_API_KEY"] = ""
+            # 确保 LLM_ACTIVE_PROVIDER 在非 gateway 模式下始终设置
+            flat.setdefault("LLM_ACTIVE_PROVIDER", active_provider_name)
+
+            # Codex 使用 responses 协议（兼容旧 codex 协议名）
+            responses_protocol = active_provider_data.get("responses") or active_provider_data.get("codex")
+            if isinstance(responses_protocol, dict):
+                flat["LLM_CODEX_BASE_URL"] = responses_protocol.get("base_url", "http://127.0.0.1:4000/v1")
+                flat["LLM_CODEX_API_KEY"] = responses_protocol.get("api_key", "")
             else:
                 flat["LLM_CODEX_BASE_URL"] = flat.get("LLM_ACTIVE_BASE_URL", "")
                 flat["LLM_CODEX_API_KEY"] = flat.get("LLM_ACTIVE_API_KEY", "")
@@ -532,7 +553,9 @@ def get_active_protocols(env_config: dict) -> list[str]:
     llm = env_config.get("llm", {})
     if isinstance(llm, dict):
         raw = llm.get("_active_protocol", "openaiv1")
-        return [p.strip() for p in str(raw).split("|") if p.strip()]
+        protocols = [p.strip() for p in str(raw).split("|") if p.strip()]
+        # 兼容旧协议名 openai → openaiv1
+        return ["openaiv1" if p == "openai" else p for p in protocols]
     return ["openaiv1"]
 
 

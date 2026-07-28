@@ -88,13 +88,27 @@ class IdeTarget:
 
     # ---------- 编排入口 ----------
 
-    def run(self, source_rules: Path, source_mcp_file: Path,
-            source_skills_dir: Path, source_agents_md: Path) -> str:
-        """执行完整的 IDE 同步流程。"""
+    def run(self, source_rules, source_mcp_file: Path,
+            source_skills_dir, source_agents_md: Path) -> str:
+        """执行完整的 IDE 同步流程。
+
+        Args:
+            source_rules: Path 或 list[Path]（多源，前者优先）。
+            source_skills_dir: Path 或 list[Path]（多源，前者优先）。
+        """
         print(f"\n{COLOR_MAGENTA}--- {self.name} IDE ---{COLOR_RESET}")
 
-        if "rules" in self.scope:
-            self.init_rules(source_rules)
+        # 归一化 rules：list → 第一个非空存在的 Path（多源合并由 agents.py 自行处理）
+        rules_src = source_rules
+        if isinstance(rules_src, list):
+            rules_src = next(
+                (Path(r) for r in rules_src
+                 if Path(r).exists() and any(Path(r).iterdir())),
+                Path(rules_src[0]) if rules_src else None
+            )
+
+        if "rules" in self.scope and rules_src is not None:
+            self.init_rules(rules_src)
 
         if "mcp" in self.scope:
             self.init_mcp(source_mcp_file)
