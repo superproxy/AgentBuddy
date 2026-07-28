@@ -807,6 +807,27 @@ def get_llm():
     path = _ensure_llm_file()
     try:
         data = load_env_config_file(path)
+        # 兼容旧 llm.proxy → 顶层 proxy.gateway 迁移（自动写回文件）
+        llm_section = data.get("llm", {})
+        migrated = False
+        if isinstance(llm_section, dict):
+            llm_proxy = llm_section.get("proxy")
+            if isinstance(llm_proxy, dict):
+                proxy_section = data.setdefault("proxy", {})
+                gateway = proxy_section.setdefault("gateway", {})
+                if not isinstance(gateway, dict):
+                    gateway = {}
+                    proxy_section["gateway"] = gateway
+                if not gateway.get("enabled") and llm_proxy.get("enable") is not None:
+                    gateway["enabled"] = llm_proxy["enable"]
+                if llm_proxy.get("base_url") and not gateway.get("base_url"):
+                    gateway["base_url"] = llm_proxy["base_url"]
+                if llm_proxy.get("api_key") and not gateway.get("api_key"):
+                    gateway["api_key"] = llm_proxy["api_key"]
+                del llm_section["proxy"]
+                migrated = True
+        if migrated:
+            save_env_config_file(path, data)
         return jsonify({
             "ok": True,
             "data": data,
