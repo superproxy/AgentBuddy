@@ -359,16 +359,24 @@ def scan_generic_sessions(sessions_dir: Path, ide_key: str) -> list[dict]:
 def _decode_trae_project_hash(project_hash: str) -> str:
     """将 Trae CN 的 project_hash 反编码为工作目录路径。
 
-    Trae CN 用 `-` 替换路径分隔符 `/` 作为目录名，例如：
-    `-Users-yangxuezeng-Desktop-MyAgentPlugin` -> `/Users/yangxuezeng/Desktop/MyAgentPlugin`
+    Trae CN 用 `-` 替换路径分隔符作为目录名，例如：
+    - macOS: `-Users-yangxuezeng-Desktop-MyAgentPlugin` -> `/Users/yangxuezeng/Desktop/MyAgentPlugin`
+    - Windows: `-d-yxz-MyAgentPlugin` -> `D:\\yxz\\MyAgentPlugin`
 
-    注意：目录名本身含 `-` 时会有歧义，此处按 `-` 分割后过滤空段做近似还原。
+    Windows 判定：第一段为单字母（盘符），如 c/d/e 等。
     """
     if project_hash.startswith("-"):
         project_hash = project_hash[1:]
-    # 按 - 分割，过滤空字符串（连续 --- 产生的空段），用 / 连接
+    # 按 - 分割，过滤空字符串（连续 --- 产生的空段）
     parts = [p for p in project_hash.split("-") if p]
-    return "/" + "/".join(parts) if parts else ""
+    if not parts:
+        return ""
+    # Windows 路径：第一段是单字母盘符（如 c/d/e）
+    if len(parts[0]) == 1 and parts[0].isalpha():
+        drive = parts[0].upper()
+        return drive + ":\\" + "\\".join(parts[1:]) if len(parts) > 1 else drive + ":\\"
+    # macOS/Linux 路径
+    return "/" + "/".join(parts)
 
 
 def scan_trae_cn_sessions(sessions_dir: Path, ide_key: str = "TraeCN") -> list[dict]:
