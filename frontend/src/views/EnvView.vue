@@ -3,6 +3,7 @@ import { computed, ref, reactive } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useEnvStore } from '../stores/env'
 import { useUiStore } from '../stores/ui'
+import { api } from '../api/client'
 import SmartProviderPicker from '../components/SmartProviderPicker.vue'
 
 const env = useEnvStore()
@@ -50,11 +51,20 @@ function toggleProxyDetail() {
   proxyDetailOpen.value = !proxyDetailOpen.value
 }
 
-function toggleProxyRun() {
-  proxyRunning.value = !proxyRunning.value
-  if (proxyRunning.value && !proxyEnabled.value) {
-    envData.value.proxy.codex.enabled = true
+async function toggleProxyRun() {
+  if (proxyRunning.value) {
+    proxyRunning.value = false
+    return
   }
+  // 启用代理并保存配置 + 生成 + 启动
+  envData.value.proxy.codex.enabled = true
+  const sr = await saveEnv(true)
+  if (!sr) { ui.toast('保存失败', 'err'); return }
+  const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/init-env', { method: 'POST' })
+  if (!r.ok) { ui.toast('生成配置失败', 'err'); return }
+  proxyRunning.value = true
+  ui.toast('Codex 代理已启动，配置已生成')
+  await startProxyServer()
 }
 
 const filteredProviders = computed(() => {

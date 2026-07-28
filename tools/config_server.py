@@ -253,7 +253,7 @@ MARKETPLACE_INDEX = MARKETPLACE_DIR / "index.json"
 UI_STATE_FILE = PROJECT_ROOT / "config" / "ui" / "ui-state.json"
 
 # env.yaml 中属于 llm.yaml 的顶层键（其余归 mcp.yaml 的只有 mcp）
-LLM_TOP_KEYS = ["llm", "embedding", "tts", "asr", "vision", "misc"]
+LLM_TOP_KEYS = ["llm", "ide", "proxy", "embedding", "tts", "asr", "vision", "misc"]
 
 # 外部市场端点
 MODELSCOPE_SKILLS_API = "https://www.modelscope.cn/openapi/v1/skills"
