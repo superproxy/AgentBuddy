@@ -42,7 +42,7 @@ export interface SmartFlowResult {
 
 export const useEnvStore = defineStore('env', () => {
   const ui = useUiStore()
-  const envData = reactive<any>({ llm: {}, proxy: {} })
+  const envData = reactive<any>({ llm: {}, ide: { codex: {} }, proxy: { codex: {} } })
   const envDataText = reactive<Record<string, string>>({})
   const selectedProvider = ref('')
   const smartFlow = reactive({
@@ -66,7 +66,7 @@ export const useEnvStore = defineStore('env', () => {
       (k) => !k.startsWith('_') && envData.llm[k] && typeof envData.llm[k] === 'object',
     ),
   )
-  const proxyEnabled = computed(() => envData.proxy && envData.proxy.enable)
+  const proxyEnabled = computed(() => !!(envData.proxy?.codex?.enabled))
   const envVars = ref<string[]>([])
   const envVarsBusy = ref(false)
 
@@ -103,9 +103,27 @@ export const useEnvStore = defineStore('env', () => {
 
   function replaceEnvData(data: any) {
     Object.keys(envData).forEach((k) => delete (envData as any)[k])
-    Object.assign(envData, data || { llm: {}, proxy: {} })
+    Object.assign(envData, data || { llm: {}, ide: { codex: {} }, proxy: { codex: {} } })
     if (!envData.llm) envData.llm = {}
+    if (!envData.ide) envData.ide = {}
+    if (!envData.ide.codex) envData.ide.codex = {}
     if (!envData.proxy) envData.proxy = {}
+    if (!envData.proxy.codex) envData.proxy.codex = {}
+    // 兼容旧顶层 proxy → proxy.codex 迁移
+    if ((envData as any).proxy?.enable !== undefined && !envData.proxy.codex?.enabled) {
+      envData.proxy.codex.enabled = (envData as any).proxy.enable
+      envData.proxy.codex.base_url = (envData as any).proxy.base_url || 'http://127.0.0.1:4000/v1'
+      envData.proxy.codex.api_key = (envData as any).proxy.api_key || ''
+      delete (envData as any).proxy.enable
+      delete (envData as any).proxy.base_url
+      delete (envData as any).proxy.api_key
+      delete (envData as any).proxy.start_cmd
+    }
+    if (!envData.proxy.codex.base_url) envData.proxy.codex.base_url = 'http://127.0.0.1:4000/v1'
+    if (!envData.ide.codex.route) {
+      envData.ide.codex.route = { provider: '', protocol: 'responses', upstream_model: '' }
+    }
+    if (!envData.ide.codex.model) envData.ide.codex.model = ''
     ;['embedding', 'tts', 'asr', 'vision', 'misc'].forEach((sec) => {
       envDataText[sec] = JSON.stringify((envData as any)[sec] || {}, null, 2)
     })
@@ -226,10 +244,9 @@ export const useEnvStore = defineStore('env', () => {
     } else { ui.toast('生成失败', 'err') }
   }
   async function startProxyServer() {
-    if (!proxyEnabled.value) { ui.toast('请先开启 proxy', 'warn'); return }
-    const cmd = envData.proxy.start_cmd || 'litellm --config proxy/config.yaml --port 4000'
+    if (!proxyEnabled.value) { ui.toast('请先开启 Codex 代理', 'warn'); return }
     ui.clearLog()
-    await runSse('/api/proxy/start?cmd=' + encodeURIComponent(cmd), (line) => ui.appendLog(line))
+    await runSse('/api/proxy/start', (line) => ui.appendLog(line))
   }
 
   async function verifyLlm(pn: string, proto: string, silent = false) {

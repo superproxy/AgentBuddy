@@ -16,6 +16,46 @@ const {
 } = env
 
 const providerFilter = ref('')
+const proxyDetailOpen = ref(false)
+
+const codexRoute = computed(() => envData.value.ide?.codex?.route || { provider: '', protocol: 'responses', upstream_model: '' })
+const codexModel = computed(() => envData.value.ide?.codex?.model || '')
+const proxyCodex = computed(() => envData.value.proxy?.codex || {})
+const proxyRunning = ref(false)
+
+const routeSummary = computed(() => {
+  const r = codexRoute.value
+  const m = codexModel.value || '未设置'
+  const p = r.provider || '未选择'
+  const proto = r.protocol || '未选择'
+  const um = r.upstream_model || '未选择'
+  return `${m} → ${p} / ${proto} / ${um}`
+})
+
+const proxyMode = computed(() => {
+  const proto = codexRoute.value.protocol
+  return proto === 'responses' ? 'Responses 原生直通' : `Responses → ${proto} 协议转换`
+})
+
+const upstreamBaseUrl = computed(() => {
+  const r = codexRoute.value
+  if (!r.provider || !r.protocol) return ''
+  const provider = envData.value.llm?.[r.provider]
+  if (!provider) return ''
+  const proto = provider[r.protocol]
+  return proto?.base_url || ''
+})
+
+function toggleProxyDetail() {
+  proxyDetailOpen.value = !proxyDetailOpen.value
+}
+
+function toggleProxyRun() {
+  proxyRunning.value = !proxyRunning.value
+  if (proxyRunning.value && !proxyEnabled.value) {
+    envData.value.proxy.codex.enabled = true
+  }
+}
 
 const filteredProviders = computed(() => {
   const q = providerFilter.value.trim().toLowerCase()
@@ -408,94 +448,144 @@ function clearEnvRef() {
       </section>
     </div>
 
-    <!-- Side strip: Proxy + extras -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-      <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card p-[18px]">
-        <h3 class="m-0 mb-1.5 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
-          Proxy
-        </h3>
-        <p class="m-0 mb-3 text-xs text-ink-500 leading-relaxed">
-          IDE → proxy(127.0.0.1:4000) → 真实 provider。开启后 init-env 会覆盖 ACTIVE_BASE_URL。
-        </p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <div class="flex items-center gap-2.5">
-            <label class="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" v-model="envData.proxy.enable" class="sr-only peer">
-              <div class="w-9 h-5 bg-ink-300 rounded-full peer-checked:bg-emerald-500 transition relative">
-                <div
-                  class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition"
-                  :class="{ 'translate-x-4': envData.proxy && envData.proxy.enable }"
-                />
-              </div>
-            </label>
-            <span
-              :class="['text-xs font-semibold', envData.proxy && envData.proxy.enable ? 'text-emerald-600' : 'text-ink-500']"
-            >{{ envData.proxy && envData.proxy.enable ? '已开启' : '已关闭' }}</span>
-          </div>
-          <div class="hidden sm:block" />
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">base_url</label>
-            <input
-              v-model="envData.proxy.base_url"
-              :disabled="!envData.proxy || !envData.proxy.enable"
-              placeholder="http://127.0.0.1:4000/v1"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono disabled:bg-ink-100 disabled:text-ink-500"
-            />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">api_key</label>
-            <input
-              type="password"
-              v-model="envData.proxy.api_key"
-              :disabled="!envData.proxy || !envData.proxy.enable"
-              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg disabled:bg-ink-100 disabled:text-ink-500"
-            />
+    <!-- Codex 协议代理（样式1：摘要 + 原位展开） -->
+    <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card overflow-hidden">
+      <div class="flex items-center justify-between gap-3.5 px-[18px] py-3.5 flex-wrap">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" v-model="envData.proxy.codex.enabled" class="sr-only peer">
+            <div class="w-9 h-5 bg-ink-300 rounded-full peer-checked:bg-emerald-500 transition relative">
+              <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition" :class="{ 'translate-x-4': envData.proxy.codex.enabled }" />
+            </div>
+          </label>
+          <div class="min-w-0">
+            <h3 class="m-0 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
+              Codex 协议代理
+            </h3>
+            <p class="m-0 mt-0.5 text-[11px] text-ink-500 font-mono truncate">{{ proxyEnabled ? '已启用' : '未启用' }} · {{ routeSummary }}</p>
           </div>
         </div>
-        <div class="flex flex-col gap-1 mb-3">
-          <label class="text-[11px] font-medium text-ink-700">启动命令</label>
-          <input
-            v-model="envData.proxy.start_cmd"
-            placeholder="litellm --config proxy/config.yaml --port 4000"
-            class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono"
-          />
-        </div>
-        <div class="flex gap-2 flex-wrap">
-          <button
-            type="button"
-            @click="generateProxyConfig"
-            class="inline-flex items-center h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
-          >生成 config</button>
-          <button
-            type="button"
-            @click="startProxyServer"
-            :disabled="!proxyEnabled"
-            class="inline-flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] text-white border border-brand-700/20 bg-gradient-to-b from-[#2f72ff] via-brand-500 to-[#1454e8] hover:from-brand-500 hover:to-brand-600 disabled:opacity-45 transition"
+        <div class="flex items-center gap-2 flex-wrap">
+          <span
+            :class="['inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full', proxyRunning ? 'bg-emerald-50 text-emerald-600' : 'bg-ink-100 text-ink-500']"
           >
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            启动代理
+            <span class="w-1.5 h-1.5 rounded-full" :class="proxyRunning ? 'bg-emerald-500' : 'bg-ink-400'" />
+            {{ proxyRunning ? '运行中' : '已停止' }}
+          </span>
+          <button
+            type="button"
+            @click="toggleProxyDetail"
+            :aria-expanded="proxyDetailOpen"
+            class="inline-flex items-center h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+          >{{ proxyDetailOpen ? '收起' : '配置路由' }}</button>
+          <button
+            type="button"
+            @click="toggleProxyRun"
+            :class="['inline-flex items-center gap-1.5 h-[34px] px-3.5 text-[12.5px] font-semibold rounded-[10px] text-white border transition', proxyRunning ? 'bg-red-500 border-red-600 hover:bg-red-600' : 'bg-gradient-to-b from-[#2f72ff] via-brand-500 to-[#1454e8] border-brand-700/20 hover:from-brand-500 hover:to-brand-600']"
+          >
+            <svg v-if="!proxyRunning" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            {{ proxyRunning ? '停止' : '启动' }}
           </button>
         </div>
-      </section>
+      </div>
 
-      <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card p-[18px]">
-        <h3 class="m-0 mb-1.5 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
-          Embedding / TTS / ASR / Vision / Misc
-        </h3>
-        <p class="m-0 mb-3 text-xs text-ink-500 leading-relaxed">附属段以 JSON 编辑，保存时写回 llm.yaml。</p>
-        <div class="space-y-3">
-          <div v-for="sec in ['embedding','tts','asr','vision','misc']" :key="sec" class="flex flex-col gap-1">
-            <label class="text-[11px] font-medium text-ink-700">{{ sec }}</label>
-            <textarea
-              v-model="envDataText[sec]"
-              @input="updateEnvDataSection(sec)"
-              rows="4"
-              class="w-full px-2.5 py-2 text-[11px] border border-ink-300 rounded-lg font-mono bg-ink-100"
+      <div v-if="proxyDetailOpen" class="border-t border-ink-100 px-[18px] py-4 bg-ink-100/30">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-[11px] font-medium text-ink-700">Codex 内置模型</label>
+            <input
+              v-model="envData.ide.codex.model"
+              placeholder="gpt-5.4"
+              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-[11px] font-medium text-ink-700">购买渠道</label>
+            <select
+              v-model="envData.ide.codex.route.provider"
+              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg bg-white"
+            >
+              <option value="">未选择</option>
+              <option v-for="pn in providerNames" :key="pn" :value="pn">{{ pn }}</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-[11px] font-medium text-ink-700">上游协议</label>
+            <select
+              v-model="envData.ide.codex.route.protocol"
+              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg bg-white"
+            >
+              <option value="responses">Responses</option>
+              <option value="openai">OpenAI (Chat Completions)</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center gap-3 mb-3 p-3 border border-ink-300/80 rounded-[10px] bg-white">
+          <div>
+            <strong class="block text-xs mb-0.5">Codex</strong>
+            <span class="text-[11px] text-ink-500 font-mono">{{ codexModel || '—' }} · Responses</span>
+          </div>
+          <div class="text-brand-500 font-bold text-lg">→</div>
+          <div class="flex flex-col gap-1">
+            <label class="text-[11px] font-medium text-ink-700">上游实际模型</label>
+            <input
+              v-model="envData.ide.codex.route.upstream_model"
+              placeholder="gpt-5.5"
+              class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono"
             />
           </div>
         </div>
-      </section>
-    </div>
+
+        <div v-if="proxyEnabled" class="mb-3 px-3 py-2 border-l-[3px] border-emerald-500 bg-emerald-50 text-[12px] text-emerald-700 rounded-r">
+          ACTIVE_BASE_URL 已覆盖：{{ upstreamBaseUrl || '未配置上游' }} → <strong>{{ proxyCodex.base_url || 'http://127.0.0.1:4000/v1' }}</strong>
+        </div>
+
+        <details>
+          <summary class="cursor-pointer text-ink-500 text-xs font-semibold">高级代理设置</summary>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2.5">
+            <div class="flex flex-col gap-1">
+              <label class="text-[11px] font-medium text-ink-700">监听地址</label>
+              <input v-model="envData.proxy.codex.listen_host" placeholder="127.0.0.1" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-[11px] font-medium text-ink-700">端口</label>
+              <input v-model.number="envData.proxy.codex.listen_port" type="number" placeholder="4000" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-[11px] font-medium text-ink-700">适配器</label>
+              <input value="LiteLLM" disabled class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono bg-ink-100 text-ink-500" />
+            </div>
+          </div>
+        </details>
+
+        <div class="flex items-center gap-2 mt-3 text-[11px] text-ink-500">
+          <strong class="text-ink-700">转换模式：</strong>
+          <span>{{ proxyMode }}</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Embedding / TTS / ASR / Vision / Misc -->
+    <section class="bg-white border border-ink-300/80 rounded-[14px] shadow-card p-[18px]">
+      <h3 class="m-0 mb-1.5 text-[13px] font-semibold flex items-center gap-2 before:content-[''] before:w-[3px] before:h-3.5 before:rounded-sm before:bg-brand-500">
+        Embedding / TTS / ASR / Vision / Misc
+      </h3>
+      <p class="m-0 mb-3 text-xs text-ink-500 leading-relaxed">附属段以 JSON 编辑，保存时写回 llm.yaml。</p>
+      <div class="space-y-3">
+        <div v-for="sec in ['embedding','tts','asr','vision','misc']" :key="sec" class="flex flex-col gap-1">
+          <label class="text-[11px] font-medium text-ink-700">{{ sec }}</label>
+          <textarea
+            v-model="envDataText[sec]"
+            @input="updateEnvDataSection(sec)"
+            rows="4"
+            class="w-full px-2.5 py-2 text-[11px] border border-ink-300 rounded-lg font-mono bg-ink-100"
+          />
+        </div>
+      </div>
+    </section>
 
     <!-- 环境变量选择弹层 -->
     <Teleport to="body">

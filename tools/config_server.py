@@ -4212,12 +4212,17 @@ def trigger_init_ide_sse():
 
 @app.route("/api/proxy/start", methods=["GET"])
 def start_proxy_sse():
-    """SSE: 启动 LLM 代理服务（litellm）。
-    Query: cmd=启动命令（默认 litellm --config proxy/config.yaml --port 4000）
+    """SSE: 启动 Codex 协议代理（litellm）。
+
+    从 llm.yaml 的 proxy.codex 读取监听地址和端口，不再接受任意命令。
     """
-    cmd = request.args.get("cmd", "").strip()
-    if not cmd:
-        cmd = "litellm --config proxy/config.yaml --port 4000"
+    from lib.llm import load_split_env_config
+    env_config = load_split_env_config(PROJECT_ROOT, silent=True)
+    proxy_codex = (env_config.get("proxy") or {}).get("codex", {}) or {}
+    host = proxy_codex.get("listen_host", "127.0.0.1")
+    port = proxy_codex.get("listen_port", 4000)
+    config_path = PROJECT_ROOT / "config" / "proxy" / "config.yaml"
+    cmd = f"litellm --config {config_path} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
