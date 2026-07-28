@@ -602,19 +602,32 @@ def api_ui_state_set():
 
 
 def _read_version() -> tuple[str, str]:
-    """读取版本号。优先 version.json，开发模式 fallback 到 git tag。
+    """读取版本号。
+
+    frozen 模式：从 _MEIPASS（bundle 内）读取，Inno Setup 每次安装都会覆盖 _internal/，
+    不依赖 bootstrap 复制（bootstrap 可能因文件占用等原因未覆盖旧版本）。
+    dev 模式：从 PROJECT_ROOT/tools/dist-ui/version.json 读取（构建产物）。
+    都不存在时 fallback 到 git tag。
 
     返回 (version, build_time)。version 为 "dev" 表示开发模式。
     """
     import json
-    version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
-    if version_file.exists():
-        try:
-            with open(version_file, "r", encoding="utf-8") as f:
-                data = json.load(f) or {}
-                return data.get("version") or "dev", data.get("build_time") or ""
-        except Exception:
-            pass
+    # 候选路径：frozen 优先 _MEIPASS（bundle 内），dev 用 PROJECT_ROOT
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "tools" / "dist-ui" / "version.json")
+    candidates.append(PROJECT_ROOT / "tools" / "dist-ui" / "version.json")
+
+    for version_file in candidates:
+        if version_file.exists():
+            try:
+                with open(version_file, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+                    return data.get("version") or "dev", data.get("build_time") or ""
+            except Exception:
+                pass
     # 开发模式：version.json 不存在时从 git tag 推断版本号
     try:
         import subprocess
