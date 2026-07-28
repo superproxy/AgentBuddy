@@ -16,6 +16,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .detect import detect_ide, IDE_DETECT_META
@@ -26,6 +27,22 @@ from .install import IDE_INSTALL_META
 # macOS .app 启动命令模板（{app} 为 .app 路径，{cwd} 为工作目录）
 MACOS_OPEN_TEMPLATE = "open -a \"{app}\""
 MACOS_OPEN_CWD_TEMPLATE = "open -a \"{app}\" \"{cwd}\""
+
+
+# ===== 启动日志 =====
+# 写入 ~/.agentbuddy/logs/launch.log，用于排查"命令行窗口找不到路径"等问题
+_LOG_FILE = Path.home() / ".agentbuddy" / "logs" / "launch.log"
+
+
+def _log(msg: str) -> None:
+    """追加一行日志到 launch.log。"""
+    try:
+        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with open(_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
 
 
 def _launch_cli(exe_path: str, args: list[str], cwd: str = "", env: dict | None = None) -> dict:
@@ -66,7 +83,10 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
         {ok: bool, pid: int, cmd: str, error: str}
     """
     if not exe_path:
+        _log(f"win32_console: exe_path empty, args={args}, cwd={cwd}")
         return {"ok": False, "pid": 0, "cmd": "", "error": "exe_path is empty"}
+
+    _log(f"win32_console: exe={exe_path}, args={args}, cwd={cwd}, isdir={os.path.isdir(cwd) if cwd else 'N/A'}")
 
     # 构造在窗口内执行的 shell 命令：cd /d <cwd> && <exe> <args>
     # 路径含空格用双引号包裹；args 之间空格分隔（build_resume_command 已拆好）
@@ -75,6 +95,8 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
     inner_cmd = " ".join(inner_parts)
     if cwd and os.path.isdir(cwd):
         inner_cmd = f'cd /d "{cwd}" && {inner_cmd}'
+    else:
+        _log(f"win32_console: SKIP cd (cwd={cwd!r}, isdir={os.path.isdir(cwd) if cwd else False})")
 
     # 用 cmd /K 让窗口保持打开（关窗即退进程）；TITLE 设置窗口标题
     # 标题不含路径（路径中的冒号会被 cmd 误认为驱动器引用）
@@ -85,6 +107,8 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
     full_cmd = f'TITLE {safe_title} && {inner_cmd}'
     cmd = ["cmd.exe", "/K", full_cmd]
 
+    _log(f"win32_console: full_cmd={full_cmd!r}")
+
     try:
         # CREATE_NEW_CONSOLE = 0x00000010：新建控制台窗口（有 TTY）
         # 不用 start_new_session，否则关窗不会终止子进程
@@ -94,12 +118,14 @@ def _launch_cli_in_new_console_win32(exe_path: str, args: list[str], cwd: str = 
             env={**os.environ, **(env or {})},
             creationflags=0x00000010,
         )
+        _log(f"win32_console: OK pid={proc.pid}")
         return {
             "ok": True, "pid": proc.pid,
             "cmd": f"{exe_path} {' '.join(args)}".strip(),
             "error": "", "_new_console": True,
         }
     except Exception as e:
+        _log(f"win32_console: ERROR {e}")
         return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
 
 
@@ -234,13 +260,16 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
 
     def _try_cli():
         if not exe_path:
+            _log(f"launch_ide({ide_key}): no exe_path")
             return None
         args = []
         if session_id:
             resume_cmd = build_resume_command(ide_key, exe_path, session_id, cwd)
+            _log(f"launch_ide({ide_key}): resume_cmd={resume_cmd!r}, session_id={session_id}, cwd={cwd!r}")
             if resume_cmd:
                 parts = resume_cmd.split()
                 args = parts[1:]
+                _log(f"launch_ide({ide_key}): exe={exe_path}, args={args}")
         if is_tui:
             result = _launch_cli_in_terminal(
                 exe_path, args, cwd,
