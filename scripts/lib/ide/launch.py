@@ -359,10 +359,11 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             return {"ok": False, "pid": 0, "cmd": acp_cmd, "error": str(e),
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
 
-    # 自动模式：优先 CLI（支持 resume），回退 App
-    result = _try_cli()
-    if result:
-        return result
+    # 自动模式：App 会话直接走 App 启动（不走 CLI resume）
+    if source != "app":
+        result = _try_cli()
+        if result:
+            return result
     result = _try_app()
     if result:
         return result

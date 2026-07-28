@@ -141,6 +141,20 @@ export const useEnvStore = defineStore('env', () => {
     if (!envData.llm) envData.llm = {}
     if (!envData.proxy) envData.proxy = {}
     if (!envData.proxy.gateway) envData.proxy.gateway = {}
+    // 兼容旧 llm.proxy → 顶层 proxy.gateway 迁移
+    const llmProxy = (envData.llm as any)?.proxy
+    if (llmProxy && typeof llmProxy === 'object') {
+      if (!envData.proxy.gateway.enabled && llmProxy.enable !== undefined) {
+        envData.proxy.gateway.enabled = llmProxy.enable
+      }
+      if (!envData.proxy.gateway.base_url || envData.proxy.gateway.base_url === 'http://127.0.0.1:4000/v1') {
+        envData.proxy.gateway.base_url = llmProxy.base_url || 'http://127.0.0.1:4000/v1'
+      }
+      if (llmProxy.api_key && !envData.proxy.gateway.api_key) {
+        envData.proxy.gateway.api_key = llmProxy.api_key
+      }
+      delete (envData.llm as any).proxy
+    }
     // 兼容旧 proxy.codex → proxy.gateway 迁移
     const oldCodex = (envData.proxy as any).codex
     if (oldCodex && typeof oldCodex === 'object' && !envData.proxy.gateway.enabled) {

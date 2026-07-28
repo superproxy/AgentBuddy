@@ -104,6 +104,25 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
         # 保留 description
         if "_description" in llm_data:
             merged["_description"] = llm_data["_description"]
+
+        # 兼容旧 llm.proxy → 顶层 proxy.gateway 迁移
+        llm_section = merged.get("llm", {})
+        if isinstance(llm_section, dict):
+            llm_proxy = llm_section.get("proxy")
+            if isinstance(llm_proxy, dict):
+                proxy_section = merged.setdefault("proxy", {})
+                gateway = proxy_section.setdefault("gateway", {})
+                if not isinstance(gateway, dict):
+                    gateway = {}
+                    proxy_section["gateway"] = gateway
+                if not gateway.get("enabled") and llm_proxy.get("enable") is not None:
+                    gateway["enabled"] = llm_proxy["enable"]
+                if llm_proxy.get("base_url") and not gateway.get("base_url"):
+                    gateway["base_url"] = llm_proxy["base_url"]
+                if llm_proxy.get("api_key") and not gateway.get("api_key"):
+                    gateway["api_key"] = llm_proxy["api_key"]
+                del llm_section["proxy"]
+
         return merged
 
     if env_file.exists():

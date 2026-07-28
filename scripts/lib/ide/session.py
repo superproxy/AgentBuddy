@@ -843,9 +843,9 @@ def build_resume_command(ide_key: str, exe_path: str, session_id: str, cwd: str 
     template = IDE_RESUME_COMMANDS.get(ide_key)
     if not template or not exe_path:
         return ""
-    # TraeCN App 会话不能用 traecli --resume，直接打开 IDE
+    # TraeCN App 会话不走 CLI resume，由 launch.py 的 _try_app 处理
     if ide_key == "TraeCN" and source == "app":
-        return f'"{exe_path}"'
+        return ""
     return template.format(exe=exe_path, session_id=session_id, cwd=cwd)
 
 
