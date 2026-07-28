@@ -28,6 +28,11 @@ PROTOCOL_ENV_MAP = {
         "api_key": "OPEN_AI_API_KEY",
         "model": "OPENAI_MODEL",
     },
+    "responses": {
+        "base_url": "OPEN_AI_API_BASE_URL",
+        "api_key": "OPEN_AI_API_KEY",
+        "model": "OPENAI_MODEL",
+    },
     "anthropic": {
         "base_url": "ANTHROPIC_BASE_URL",
         "api_key": "ANTHROPIC_AUTH_TOKEN",
@@ -529,42 +534,6 @@ def get_active_protocols(env_config: dict) -> list[str]:
         raw = llm.get("_active_protocol", "openai")
         return [p.strip() for p in str(raw).split("|") if p.strip()]
     return ["openai"]
-
-
-def get_ide_protocols(env_config: dict, ide_name: str) -> list[str] | None:
-    """获取某个 IDE 需要同步的协议列表。
-
-    从 llm.yaml 的 llm._ide_protocols 读取，格式：
-        _ide_protocols:
-          Claude: [openai, anthropic]   # Claude 支持多协议
-          Codex: [openai]               # Codex 只支持 openai
-          WorkBuddy: [openai, anthropic]
-        _ide_protocols_default: [openai]  # 未配置的 IDE 默认值
-
-    返回 None 表示使用 active_protocols（向后兼容）。
-    返回 list 表示该 IDE 只同步这些协议。
-    """
-    llm = env_config.get("llm", {})
-    if not isinstance(llm, dict):
-        return None
-    ide_map = llm.get("_ide_protocols", {})
-    if not isinstance(ide_map, dict):
-        return None
-    if ide_name in ide_map:
-        protocols = ide_map[ide_name]
-        if isinstance(protocols, list):
-            return [str(p).strip() for p in protocols if str(p).strip()]
-        if isinstance(protocols, str):
-            return [p.strip() for p in protocols.split("|") if p.strip()]
-        return None
-    # 未配置的 IDE：使用默认值
-    default = llm.get("_ide_protocols_default")
-    if isinstance(default, list):
-        return [str(p).strip() for p in default if str(p).strip()]
-    if isinstance(default, str):
-        return [p.strip() for p in default.split("|") if p.strip()]
-    # 没有默认值：返回 None 表示用 active_protocols
-    return None
 
 
 def list_providers(env_config: dict) -> list[str]:

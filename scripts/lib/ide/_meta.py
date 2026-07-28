@@ -48,10 +48,24 @@ def get_detect_meta() -> Dict[str, dict]:
     return meta
 
 
+def get_ide_protocols(ide_name: str) -> list[str]:
+    """返回某个 IDE 支持的 LLM 协议列表（如 ['openai'] 或 ['openai', 'anthropic']）。
+
+    从 ide.yaml 的 detect_meta.<ide>.protocols 读取。
+    未配置时默认返回 ['openai']。
+    """
+    meta = get_detect_meta()
+    entry = meta.get(ide_name, {})
+    protocols = entry.get("protocols")
+    if isinstance(protocols, list) and protocols:
+        return [str(p).strip() for p in protocols if str(p).strip()]
+    return ["openai"]
+
+
 def reload() -> None:
     """清除缓存，下次访问时重新加载（调试/热更新用）。"""
     global _cache
     _cache = None
 
 
-__all__ = ["get_install_meta", "get_detect_meta", "reload"]
+__all__ = ["get_install_meta", "get_detect_meta", "get_ide_protocols", "reload"]

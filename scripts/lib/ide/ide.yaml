@@ -888,6 +888,7 @@ install_meta:
 #   config_dirs：配置目录列表（相对 Path.home()）
 #   sessions_subdir：会话子目录名
 #   is_tui：CLI 是否为交互式 TUI 应用
+#   protocols：该 IDE 支持的 LLM 协议列表（openai/anthropic），用于 sync 时过滤
 detect_meta:
   Claude:
     label: Claude Code
@@ -897,6 +898,7 @@ detect_meta:
     config_dirs: [".claude"]
     sessions_subdir: projects
     is_tui: true
+    protocols: [openai, anthropic]
 
   Codex:
     label: Codex
@@ -908,6 +910,7 @@ detect_meta:
     config_dirs: [".codex"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [responses]
 
   Cursor:
     label: Cursor
@@ -922,6 +925,7 @@ detect_meta:
     config_dirs: [".cursor"]
     sessions_subdir: acp-sessions
     is_tui: false
+    protocols: [openai]
 
   Trae:
     label: Trae
@@ -933,6 +937,7 @@ detect_meta:
     config_dirs: [".trae"]
     sessions_subdir: sessions
     is_tui: false
+    protocols: [openai]
 
   TraeCN:
     label: Trae CN
@@ -948,6 +953,7 @@ detect_meta:
     config_dirs: [".trae-cn", ".traecn"]
     sessions_subdir: memory/projects
     is_tui: false
+    protocols: [openai]
 
   TraeSoloCN:
     label: Trae Work CN
@@ -959,6 +965,7 @@ detect_meta:
     config_dirs: [".trae-solo-cn", ".traesolocn"]
     sessions_subdir: memory/projects
     is_tui: false
+    protocols: [openai]
 
   OpenCode:
     label: OpenCode
@@ -968,6 +975,7 @@ detect_meta:
     config_dirs: [".config/opencode", ".opencode"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai, anthropic]
 
   Qoder:
     label: Qoder
@@ -979,6 +987,7 @@ detect_meta:
     config_dirs: [".qoder"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   QoderCN:
     label: Qoder CN
@@ -992,6 +1001,7 @@ detect_meta:
     config_dirs: [".qoder-cn", ".qodercn"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   OpenClaw:
     label: OpenClaw
@@ -1001,6 +1011,7 @@ detect_meta:
     config_dirs: [".openclaw"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   HermesAgent:
     # Hermes Agent（Nous Research 开源自进化 AI Agent）
@@ -1013,6 +1024,7 @@ detect_meta:
     config_dirs: [".hermes", ".ade-hermes"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   OpenWorker:
     # OpenWorker（吴恩达 Andrew Ng 开源桌面 AI 智能体，仅桌面 App）
@@ -1025,6 +1037,7 @@ detect_meta:
     config_dirs: [".openworker"]
     sessions_subdir: sessions
     is_tui: false
+    protocols: [openai]
 
   WorkBuddy:
     label: WorkBuddy
@@ -1036,6 +1049,7 @@ detect_meta:
     config_dirs: [".workbuddy"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai, anthropic]
 
   IDEA:
     label: IDEA
@@ -1052,6 +1066,7 @@ detect_meta:
     config_dirs: [".idea", ".jetbrains"]
     sessions_subdir: null
     is_tui: false
+    protocols: [openai]
 
   Agents:
     label: Agents
@@ -1072,6 +1087,7 @@ detect_meta:
     config_dirs: [".kimi"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   KimiCode:
     # Kimi Code（新版 Node.js 二进制 CLI，仓库 MoonshotAI/kimi-code）
@@ -1082,6 +1098,7 @@ detect_meta:
     config_dirs: [".kimi-code"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   KimiWork:
     # Kimi Work（桌面应用，Moonshot 桌面 AI Agent）
@@ -1097,6 +1114,7 @@ detect_meta:
     config_dirs: [".kimi-work"]
     sessions_subdir: sessions
     is_tui: false
+    protocols: [openai]
 
   ZCode:
     # 智谱 ZCode ADE（Agent Development Environment）
@@ -1109,6 +1127,7 @@ detect_meta:
     config_dirs: [".zcode"]
     sessions_subdir: cli/rollout
     is_tui: true
+    protocols: [openai, anthropic]
 
   Pi:
     # Pi（极简 agent harness，CLI 工具）
@@ -1119,6 +1138,7 @@ detect_meta:
     config_dirs: [".pi"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   CommandCode:
     # Command Code（面向命令行场景的 AI 编程智能体）
@@ -1129,6 +1149,7 @@ detect_meta:
     config_dirs: [".commandcode"]
     sessions_subdir: sessions
     is_tui: true
+    protocols: [openai]
 
   VSCode:
     label: VSCode
@@ -1140,6 +1161,7 @@ detect_meta:
       - "{ProgramFiles}/Microsoft VS Code/Code.exe"
     config_dirs: [".vscode"]
     is_tui: false
+    protocols: [openai]
 
   Copilot:
     label: GitHub Copilot

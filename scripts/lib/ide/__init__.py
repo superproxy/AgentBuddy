@@ -61,17 +61,17 @@ def get_ide(name: str, project_root: Path, force: bool = False,
         force: 是否强制覆盖已存在文件
         include_skills: 技能白名单集合，None 表示全部
         scope: 同步范围集合，None 表示默认全部（llm/mcp/skill/rules）
-        env_config: llm.yaml 配置 dict，用于读取每个 IDE 的协议过滤配置
+        env_config: 保留参数（向后兼容），协议配置已移至 ide.yaml
 
     Returns:
         分发器实例列表
     """
-    from lib.llm import get_ide_protocols
+    from ._meta import get_ide_protocols
     targets = []
     if name == "All":
         for cls in IDE_REGISTRY.values():
             ide_name = cls.name if hasattr(cls, 'name') else ""
-            proto = get_ide_protocols(env_config or {}, ide_name) if env_config else None
+            proto = get_ide_protocols(ide_name)
             targets.append(cls(project_root=project_root, force=force,
                               include_skills=include_skills, scope=scope,
                               ide_protocols=proto))
@@ -79,7 +79,7 @@ def get_ide(name: str, project_root: Path, force: bool = False,
         if name not in IDE_REGISTRY:
             raise ValueError(f"Unknown IDE: {name}. Available: {', '.join(IDE_REGISTRY.keys())}")
         cls = IDE_REGISTRY[name]
-        proto = get_ide_protocols(env_config or {}, name) if env_config else None
+        proto = get_ide_protocols(name)
         targets.append(cls(project_root=project_root, force=force,
                           include_skills=include_skills, scope=scope,
                           ide_protocols=proto))

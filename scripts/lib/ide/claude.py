@@ -46,6 +46,7 @@ def _generate_claude_settings(template_file: Path, target_file: Path,
                 active_protocols = list(ide_protocols)
         protocol_env_map = {
             "openai": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
+            "responses": {"base_url": "OPEN_AI_API_BASE_URL", "api_key": "OPEN_AI_API_KEY", "model": "OPENAI_MODEL"},
             "anthropic": {"base_url": "ANTHROPIC_BASE_URL", "api_key": "ANTHROPIC_AUTH_TOKEN", "model": "ANTHROPIC_MODEL"},
         }
         for provider_name, provider_value in llm_section.items():
