@@ -1,4 +1,4 @@
-﻿"""Codex IDE 分发器。
+"""Codex IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_codex()。
 MCP 配置转换为 Codex TOML 格式（.codex/config.toml），并复制 auth.json。
@@ -41,10 +41,12 @@ class CodexTarget(IdeTarget):
         convert_to_codex_mcp(source_mcp_file, global_codex_dir / "config.toml",
                              self.force, codex_template)
 
-        # 复制 auth.json（从 config/ide/codex/ 生成产物）
+        # 复制 auth.json（从 config/ide/codex/ 生成产物）到项目级和全局
         codex_auth_src = source_dir / "config" / "ide" / "codex" / "auth.json"
         copy_file_safe(codex_auth_src, codex_dir / "auth.json",
                        ".codex/auth.json", self.force)
+        copy_file_safe(codex_auth_src, global_codex_dir / "auth.json",
+                       "~/.codex/auth.json", self.force)
 
     def init_skills(self, source_skills_dir: Path):
         # 同步到全局目录（~/.codex/skills/）
