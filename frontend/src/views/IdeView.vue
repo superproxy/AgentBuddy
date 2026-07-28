@@ -4,10 +4,12 @@ import { onMounted, computed, ref, reactive, watch } from 'vue'
 import { useIdeStore } from '../stores/ide'
 import { useSyncStore } from '../stores/sync'
 import { useUiStore } from '../stores/ui'
+import { useBrandOrderStore } from '../stores/brandOrder'
 
 const ide = useIdeStore()
 const sync = useSyncStore()
 const ui = useUiStore()
+const brandOrder = useBrandOrderStore()
 const {
   ideDetectStats, ideDetecting, ideInstallInfo, ideInstallInfoLoaded,
   installedIdes, notInstalledIdes, sessionableIdes, showNotInstalled,
@@ -24,31 +26,9 @@ const {
 // 一级 chip：品牌（默认 'all' 显示全部）
 const activeBrandChip = ref<string>('all')
 
-// 常用品牌（默认 5 个，可追加/移除，类似工具栏菜单的常用区）
-// 持久化到 localStorage，记忆用户排序
+// 常用品牌排序复用 brandOrder store（常用区 + 更多区 + 后端持久化）
 const DEFAULT_BRAND_COUNT = 5
-const BRAND_ORDER_KEY = 'ide:brand-order'
-const favoriteBrands = ref<string[]>(loadBrandOrder())
 const showMoreBrands = ref(false)
-
-// 从 localStorage 加载品牌顺序
-function loadBrandOrder(): string[] {
-  try {
-    const saved = localStorage.getItem(BRAND_ORDER_KEY)
-    if (saved) {
-      const arr = JSON.parse(saved)
-      if (Array.isArray(arr)) return arr
-    }
-  } catch { /* ignore */ }
-  return []
-}
-
-// 持久化品牌顺序
-function saveBrandOrder() {
-  try {
-    localStorage.setItem(BRAND_ORDER_KEY, JSON.stringify(favoriteBrands.value))
-  } catch { /* ignore */ }
-}
 
 // 品牌拖拽状态
 const draggingBrand = ref<string | null>(null)
@@ -74,14 +54,11 @@ function onBrandDrop(e: DragEvent, targetBrand: string) {
   e.preventDefault()
   const src = draggingBrand.value
   if (!src || src === targetBrand) return
-  const arr = [...favoriteBrands.value]
-  const srcIdx = arr.indexOf(src)
-  const tgtIdx = arr.indexOf(targetBrand)
-  if (srcIdx < 0 || tgtIdx < 0) return
-  arr.splice(srcIdx, 1)
-  arr.splice(tgtIdx, 0, src)
-  favoriteBrands.value = arr
-  saveBrandOrder()
+  const fromIdx = brandOrder.favoriteKeys.indexOf(src)
+  const toIdx = brandOrder.favoriteKeys.indexOf(targetBrand)
+  if (fromIdx < 0 || toIdx < 0) return
+  const adjusted = fromIdx < toIdx ? toIdx - 1 : toIdx
+  brandOrder.moveFavorite(fromIdx, adjusted)
 }
 
 // 拖拽结束
@@ -98,28 +75,26 @@ const brandChipOptions = computed(() => {
   return chips
 })
 
-// 初始化常用品牌（默认取已安装的前 3 个，不足则补未安装的品牌）
+// 初始化常用品牌（默认取已安装的前 N 个，不足则补未安装的品牌）
 const initFavoriteBrands = () => {
-  if (favoriteBrands.value.length === 0 && brandGroups.value.length > 0) {
-    // 优先选已安装的品牌（installedCount > 0）
-    const installed = brandGroups.value.filter((b) => b.installedCount > 0)
-    const notInstalled = brandGroups.value.filter((b) => b.installedCount === 0)
-    const picked = [...installed, ...notInstalled].slice(0, DEFAULT_BRAND_COUNT)
-    favoriteBrands.value = picked.map((b) => b.brand)
-  }
+  if (brandGroups.value.length === 0) return
+  const allBrands = brandGroups.value.map((b) => ({ key: b.brand, label: b.brand }))
+  // 默认常用区：优先已安装的品牌
+  const installed = brandGroups.value.filter((b) => b.installedCount > 0)
+  const notInstalled = brandGroups.value.filter((b) => b.installedCount === 0)
+  const defaults = [...installed, ...notInstalled]
+    .slice(0, DEFAULT_BRAND_COUNT)
+    .map((b) => b.brand)
+  brandOrder.init(allBrands, defaults)
 }
 
 // 更多品牌（非常用区的品牌）
-const moreBrands = computed(() => {
-  return brandGroups.value
-    .filter((bg) => !favoriteBrands.value.includes(bg.brand))
-    .map((bg) => bg.brand)
-})
+const moreBrands = computed(() => brandOrder.moreItems)
 
 // 当前显示的品牌 chip（"全部品牌" + 常用品牌，按用户排序）
 const visibleBrandChips = computed(() => {
   const allChip = brandChipOptions.value.filter((c) => c.key === 'all')
-  const favChips = favoriteBrands.value
+  const favChips = brandOrder.favoriteKeys
     .map((brand) => brandChipOptions.value.find((c) => c.key === brand))
     .filter((c): c is NonNullable<typeof c> => !!c)
   return [...allChip, ...favChips]
@@ -127,16 +102,14 @@ const visibleBrandChips = computed(() => {
 
 // 加入常用区
 const addToFavorite = (brand: string) => {
-  if (!favoriteBrands.value.includes(brand)) {
-    favoriteBrands.value.push(brand)
-    saveBrandOrder()
+  if (!brandOrder.favoriteKeys.includes(brand)) {
+    brandOrder.moveToFavorites(brand)
   }
 }
 
 // 移出常用区
 const removeFromFavorite = (brand: string) => {
-  favoriteBrands.value = favoriteBrands.value.filter((b) => b !== brand)
-  saveBrandOrder()
+  brandOrder.moveToMore(brand)
   // 如果当前选中的品牌被移出，切回"全部品牌"
   if (activeBrandChip.value === brand) {
     activeBrandChip.value = 'all'
@@ -155,10 +128,10 @@ const filteredBrandGroups = computed(() => {
     .filter((bg) => activeBrandChip.value === 'all' || bg.brand === activeBrandChip.value)
     .filter((g): g is NonNullable<typeof g> => g !== null)
   // 当显示全部品牌时，按用户自定义顺序排序
-  if (activeBrandChip.value === 'all' && favoriteBrands.value.length > 0) {
+  if (activeBrandChip.value === 'all' && brandOrder.favoriteKeys.length > 0) {
     return [...groups].sort((a, b) => {
-      const ia = favoriteBrands.value.indexOf(a.brand)
-      const ib = favoriteBrands.value.indexOf(b.brand)
+      const ia = brandOrder.favoriteKeys.indexOf(a.brand)
+      const ib = brandOrder.favoriteKeys.indexOf(b.brand)
       // 常用品牌按自定义顺序排前，非常用品牌保持原序
       if (ia >= 0 && ib >= 0) return ia - ib
       if (ia >= 0) return -1
@@ -429,15 +402,15 @@ const currentSelectedIde = computed(() => {
 // 进入 AIDE 管理页时自动检测（首次无数据才检测，避免重复请求）
 onMounted(async () => {
   if (!ide.ideDetects.length) await loadIdeDetect()
-  // 初始化常用品牌（默认前 3 个）
+  // 初始化常用品牌（默认前 N 个）
   initFavoriteBrands()
 })
 
-// brandGroups 异步加载完成后，如果常用品牌为空，自动初始化
+// brandGroups 异步加载完成后，如果常用品牌未初始化，自动初始化
 watch(
   () => brandGroups.value.length,
   (len) => {
-    if (len > 0 && favoriteBrands.value.length === 0) {
+    if (len > 0 && !brandOrder.ready) {
       initFavoriteBrands()
     }
   }
@@ -485,7 +458,7 @@ watch(
           >
             <span class="brand-chip-label">{{ chip.label }}</span>
             <span
-              v-if="chip.key !== 'all' && favoriteBrands.length > 1"
+              v-if="chip.key !== 'all' && brandOrder.favoriteKeys.length > 1"
               class="brand-chip-remove"
               title="移出常用区"
               @click.stop="removeFromFavorite(chip.key)"

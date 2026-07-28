@@ -301,24 +301,6 @@ export const useIdeStore = defineStore('ide', () => {
       })
     }
 
-    // 5. 按 sync.ideList 的用户自定义顺序排序品牌组
-    // brandGroups 的品牌组顺序默认由 ideDetects（后端返回）决定，
-    // 不反映用户拖拽调整的 sync.ideList 顺序。这里按 ideList 中品牌
-    // 首次出现的顺序排序，使拖拽排序生效。
-    const brandOrder = new Map<string, number>()
-    for (const ide of sync.ideList) {
-      const info = ideInstallInfo[ide.key] || {}
-      const brand = (info.brand as string) || ''
-      if (brand && !brandOrder.has(brand)) {
-        brandOrder.set(brand, brandOrder.size)
-      }
-    }
-    groups.sort((a, b) => {
-      const ia = brandOrder.get(a.brand)
-      const ib = brandOrder.get(b.brand)
-      return (ia === undefined ? 999 : ia) - (ib === undefined ? 999 : ib)
-    })
-
     return groups
   })
 
