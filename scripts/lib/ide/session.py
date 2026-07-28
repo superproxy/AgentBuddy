@@ -639,6 +639,7 @@ IDE_RESUME_COMMANDS = {
     "OpenClaw": "{exe} --resume {session_id}",
     "WorkBuddy": "{exe} --resume {session_id}",
     "ZCode": "{exe} --resume {session_id}",
+    "TraeCN": "{exe} --resume {session_id}",                  # trae-cli --resume <id>
 }
 
 
