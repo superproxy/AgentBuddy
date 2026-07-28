@@ -323,8 +323,15 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                 default_model = next(iter(models_dict.keys()), "") if isinstance(models_dict, dict) else ""
                 # 优先使用用户在 UI 中选择的 _active_model
                 active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
-                if is_active and active_model_override and isinstance(models_dict, dict) and active_model_override in models_dict:
-                    default_model = active_model_override
+                if is_active and active_model_override and isinstance(models_dict, dict):
+                    if active_model_override in models_dict:
+                        default_model = active_model_override
+                    else:
+                        # 后缀匹配：_active_model="gpt-5.4" 匹配 "openai/gpt-5.4"
+                        suffix = "/" + active_model_override
+                        matched = [k for k in models_dict if k.endswith(suffix)]
+                        if matched:
+                            default_model = matched[0]
 
                 if is_active_protocol:
                     env_mapping = PROTOCOL_ENV_MAP.get(protocol_name, {})
@@ -428,9 +435,12 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             if isinstance(responses_protocol, dict):
                 flat["LLM_CODEX_BASE_URL"] = responses_protocol.get("base_url", "http://127.0.0.1:4000/v1")
                 flat["LLM_CODEX_API_KEY"] = responses_protocol.get("api_key", "")
+                flat["LLM_CODEX_WIRE_API"] = "responses"
             else:
+                # provider 不支持 responses 协议，回退到 chat completions
                 flat["LLM_CODEX_BASE_URL"] = flat.get("LLM_ACTIVE_BASE_URL", "")
                 flat["LLM_CODEX_API_KEY"] = flat.get("LLM_ACTIVE_API_KEY", "")
+                flat["LLM_CODEX_WIRE_API"] = "chat"
         else:
             flat["LLM_ACTIVE_BASE_URL"] = ""
             flat["LLM_ACTIVE_API_KEY"] = ""

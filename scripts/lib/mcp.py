@@ -537,9 +537,11 @@ def convert_to_codex_mcp(source_file: Path, target_file: Path, force: bool,
 
     target_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # 选择 base 文本：target 优先（保留运行态），其次 template
+    # 选择 base 文本：force 时优先 template（generate 产物），否则 target 优先（保留运行态）
     base_text = None
-    if target_file.exists():
+    if force and template_file and template_file.exists():
+        base_text = template_file.read_text(encoding="utf-8")
+    elif target_file.exists():
         base_text = target_file.read_text(encoding="utf-8")
     elif template_file and template_file.exists():
         base_text = template_file.read_text(encoding="utf-8")

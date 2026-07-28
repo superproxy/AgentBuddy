@@ -9,7 +9,7 @@ windows_wsl_setup_acknowledged = true
 [model_providers.${LLM_ACTIVE_PROVIDER}]
 name = "${LLM_ACTIVE_PROVIDER}"
 base_url = "${LLM_ACTIVE_BASE_URL}"
-wire_api = "responses"
+wire_api = "${LLM_CODEX_WIRE_API:-responses}"
 requires_openai_auth = true
 
 [mcp_servers.my-rag]
