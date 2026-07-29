@@ -96,12 +96,15 @@ litellm_datas = collect_data_files('litellm')
 hiddenimports.extend(litellm_hidden)
 datas.extend(litellm_datas)
 
-# litellm proxy 依赖的额外库
-hiddenimports.extend([
-    'uvicorn', 'fastapi', 'starlette',
-    'backoff', 'cryptography', 'apscheduler',
-    'orjson', 'anyio', 'h11',
-])
+# litellm[proxy] 依赖的额外库 — 自动收集子模块 + 数据文件
+for _proxy_dep in ('uvicorn', 'fastapi', 'starlette', 'gunicorn',
+                   'backoff', 'cryptography', 'apscheduler',
+                   'orjson', 'anyio', 'h11', 'click', 'pydantic'):
+    try:
+        hiddenimports.extend(collect_submodules(_proxy_dep))
+        datas.extend(collect_data_files(_proxy_dep))
+    except Exception:
+        pass
 
 a = Analysis(
     ['app.py'],

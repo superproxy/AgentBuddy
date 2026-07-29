@@ -493,16 +493,28 @@ def _resolve_litellm_cmd() -> str:
     """解析 litellm 启动命令。
 
     优先级：
-    1. 打包模式：用内嵌 python -m litellm.proxy.proxy_server
+    1. 打包模式：查找内嵌的 litellm CLI（litellm.exe / litellm），fallback 到 python -c
     2. shutil.which 找 PATH 中的 litellm
     3. Python Scripts/bin 目录中找 litellm CLI
-    4. fallback: python -m litellm.proxy.proxy_server
+    4. fallback: python -c "from litellm import run_server; run_server()"
     """
     import shutil
-    # 1. 打包模式：用内嵌 python 运行 litellm 模块
+    # 1. 打包模式：查找内嵌的 litellm CLI
     if getattr(sys, "frozen", False):
+        base = Path(sys.executable).parent
+        candidates = []
+        if sys.platform == "win32":
+            candidates.append(base / "litellm.exe")
+            candidates.append(base / "Scripts" / "litellm.exe")
+        else:
+            candidates.append(base / "litellm")
+            candidates.append(base / "bin" / "litellm")
+        for c in candidates:
+            if c.exists():
+                return _shell_quote(str(c))
+        # fallback: 用内嵌 python 调用 litellm 的 click 入口
         py = _get_python()
-        return f'{_shell_quote(py)} -m litellm.proxy.proxy_server'
+        return f'{_shell_quote(py)} -c "from litellm import run_server; run_server()"'
     # 2. 先检查 PATH 中是否有 litellm
     if shutil.which("litellm"):
         return "litellm"
@@ -522,8 +534,8 @@ def _resolve_litellm_cmd() -> str:
     for c in candidates:
         if c.exists():
             return _shell_quote(str(c))
-    # 4. fallback: python -m litellm.proxy.proxy_server
-    return f'{_shell_quote(py)} -m litellm.proxy.proxy_server'
+    # 4. fallback: python -c 调用 click 入口
+    return f'{_shell_quote(py)} -c "from litellm import run_server; run_server()"'
 
 
 def _get_python() -> str:
