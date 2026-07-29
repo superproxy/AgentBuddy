@@ -293,7 +293,13 @@ def copy_skills_safe(src, dst: Path, label: str, force: bool,
             if include_skills is not None and skill_dir.name not in include_skills:
                 continue
             skill_dst = dst / skill_dir.name
-            if skill_dst.exists() or skill_dst.is_symlink() or _is_junction(skill_dst):
+            # exists() 在损坏的 junction/symlink 上可能抛 OSError，需 try/except
+            dst_exists = False
+            try:
+                dst_exists = skill_dst.exists() or skill_dst.is_symlink() or _is_junction(skill_dst)
+            except OSError:
+                dst_exists = True  # 损坏的链接，当作存在处理，force 时清理
+            if dst_exists:
                 if force:
                     try:
                         _remove_link_or_dir(skill_dst)

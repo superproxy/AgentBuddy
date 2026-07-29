@@ -381,6 +381,10 @@ export const useMcpStore = defineStore('mcp', () => {
     const r1 = await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
     const r2 = await api('/api/mcp-config', { method: 'POST', body: JSON.stringify({ data: mcpConfigData }) })
     if (!silent) (r1.ok && r2.ok) ? ui.toast('mcp.yaml 已保存') : ui.toast('保存失败', 'err')
+    // 保存后自动 generate + sync（与 LLM 配置页一致）
+    if (r1.ok && r2.ok) {
+      try { await api('/api/init-env', { method: 'POST' }) } catch { /* 静默失败 */ }
+    }
     return r1.ok && r2.ok
   }
   async function syncMcpFull() {
