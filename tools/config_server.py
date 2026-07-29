@@ -755,18 +755,6 @@ def upgrade_check():
     # 读取当前版本
     current, _ = _read_version()
 
-    # 开发模式直接返回无升级
-    if current == "dev":
-        return jsonify({
-            "ok": True,
-            "current": "dev",
-            "latest": None,
-            "has_upgrade": False,
-            "release_url": GITHUB_RELEASES_URL,
-            "downloads": [],
-            "note": "开发模式不检查升级",
-        })
-
     try:
         req = urllib.request.Request(
             GITHUB_RELEASES_API,
@@ -783,6 +771,7 @@ def upgrade_check():
         return jsonify({"ok": False, "error": f"解析失败: {e}"}), 500
 
     latest = (data.get("tag_name") or "").lstrip("vV")
+    # 开发模式下 current="dev"，解析为 (0,0,0)，始终小于 latest，因此始终提示升级
     has_upgrade = bool(latest) and _parse_version(latest) > _parse_version(current)
 
     # 收集 Windows / macOS 安装包
