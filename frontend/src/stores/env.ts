@@ -259,7 +259,7 @@ export const useEnvStore = defineStore('env', () => {
     if (envData.llm[pn]?.[proto]) {
       delete envData.llm[pn][proto]
     } else {
-      envData.llm[pn][proto] = { models: {} }
+      envData.llm[pn][proto] = { base_url: '', api_key: '', models: {} }
     }
   }
   function hasProtocol(pn: string, proto: string): boolean {
