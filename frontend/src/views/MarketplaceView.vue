@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { usePluginStore } from '../stores/plugin'
+import { useUiStore } from '../stores/ui'
 import { serverApi } from '../api/client'
 
 const mkt = useMarketplaceStore()
@@ -11,6 +12,122 @@ const { items, loading, searchQuery, installing, isMock } = storeToRefs(mkt)
 const pluginStore = usePluginStore()
 const { plugins, installingPlugin } = storeToRefs(pluginStore)
 const { refreshPluginList, onTogglePlugin, editPlugin, publishToMarketplace } = pluginStore
+
+const ui = useUiStore()
+
+// === Tab 切换 ===
+type TabKey = 'market' | 'team'
+const activeTab = ref<TabKey>('market')
+
+// === 团队空间 mock 数据（后续对接 server API） ===
+interface TeamSpace {
+  id: string
+  name: string
+  description: string
+  plugin_count: number
+  member_count: number
+  role: 'owner' | 'member'
+  members: { name: string; email: string; avatar: string; role: 'owner' | 'member' }[]
+  created_at: string
+}
+
+const teamSpaces = ref<TeamSpace[]>([
+  {
+    id: 'backend-team',
+    name: '后端架构组',
+    description: '团队内部使用的后端架构插件集合，包含微服务、消息队列、数据库设计等专用智能体。',
+    plugin_count: 12,
+    member_count: 5,
+    role: 'owner',
+    members: [
+      { name: '张三', email: 'zhangsan@company.com', avatar: '张', role: 'owner' },
+      { name: '李四', email: 'lisi@company.com', avatar: '李', role: 'member' },
+      { name: '王五', email: 'wangwu@company.com', avatar: '王', role: 'member' },
+    ],
+    created_at: '2026-06-15',
+  },
+  {
+    id: 'frontend-team',
+    name: '前端工程化',
+    description: '前端团队私有插件空间，包含组件库设计、性能优化、自动化测试等内部智能体。',
+    plugin_count: 8,
+    member_count: 3,
+    role: 'member',
+    members: [
+      { name: '赵六', email: 'zhaoliu@company.com', avatar: '赵', role: 'owner' },
+      { name: '钱七', email: 'qianqi@company.com', avatar: '钱', role: 'member' },
+    ],
+    created_at: '2026-06-20',
+  },
+])
+
+const teamSearchQuery = ref('')
+const selectedSpaceId = ref('')
+const createSpaceOpen = ref(false)
+const inviteOpen = ref(false)
+const newSpaceName = ref('')
+const newSpaceDesc = ref('')
+const inviteEmails = ref<string[]>([])
+const inviteInput = ref('')
+
+const filteredTeamSpaces = computed(() => {
+  if (!teamSearchQuery.value.trim()) return teamSpaces.value
+  const q = teamSearchQuery.value.trim().toLowerCase()
+  return teamSpaces.value.filter(s =>
+    s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
+  )
+})
+
+const selectedSpace = computed(() => teamSpaces.value.find(s => s.id === selectedSpaceId.value))
+
+function openSpaceDetail(id: string) {
+  selectedSpaceId.value = id
+}
+
+function backToSpaceList() {
+  selectedSpaceId.value = ''
+}
+
+function showCreateSpace() {
+  newSpaceName.value = ''
+  newSpaceDesc.value = ''
+  inviteEmails.value = []
+  createSpaceOpen.value = true
+}
+
+function addInviteEmail() {
+  const email = inviteInput.value.trim()
+  if (email && !inviteEmails.value.includes(email)) {
+    inviteEmails.value.push(email)
+    inviteInput.value = ''
+  }
+}
+
+function removeInviteEmail(email: string) {
+  inviteEmails.value = inviteEmails.value.filter(e => e !== email)
+}
+
+function createSpace() {
+  if (!newSpaceName.value.trim()) {
+    ui.toast('请输入空间名称', 'warn')
+    return
+  }
+  // TODO: 调用 server API 创建团队空间
+  ui.toast(`团队空间「${newSpaceName.value}」创建成功`)
+  createSpaceOpen.value = false
+}
+
+function showInvite() {
+  inviteEmails.value = []
+  inviteInput.value = ''
+  inviteOpen.value = true
+}
+
+function sendInvite() {
+  // TODO: 调用 server API 发送邀请
+  ui.toast(`已发送 ${inviteEmails.value.length} 份邀请`)
+  inviteOpen.value = false
+}
 
 // 热门推荐：本地未安装 + 综合能力分数（skills + mcp）前 4 个
 const featuredPlugins = computed(() => {
@@ -138,6 +255,36 @@ onMounted(() => {
 
 <template>
   <div class="mkt-page">
+    <!-- Tab 栏 -->
+    <nav class="mkt-tabs" role="tablist">
+      <button
+        type="button"
+        class="mkt-tab"
+        :class="{ active: activeTab === 'market' }"
+        role="tab"
+        :aria-selected="activeTab === 'market'"
+        @click="activeTab = 'market'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        插件市场
+        <span class="mkt-tab-badge">{{ items.length }}</span>
+      </button>
+      <button
+        type="button"
+        class="mkt-tab"
+        :class="{ active: activeTab === 'team' }"
+        role="tab"
+        :aria-selected="activeTab === 'team'"
+        @click="activeTab = 'team'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        团队空间
+        <span class="mkt-tab-badge">{{ teamSpaces.length }}</span>
+      </button>
+    </nav>
+
+    <!-- === 插件市场 === -->
+    <div v-show="activeTab === 'market'">
     <!-- Hero：搜索优先 -->
     <header class="mkt-hero">
       <div class="mkt-search">
@@ -385,6 +532,208 @@ onMounted(() => {
         </div>
       </aside>
     </div>
+    </div><!-- /插件市场 -->
+
+    <!-- === 团队空间 === -->
+    <div v-show="activeTab === 'team'">
+      <!-- 空间列表视图 -->
+      <div v-if="!selectedSpace">
+        <div class="team-toolbar">
+          <div class="mkt-search" style="max-width: 480px">
+            <span class="mkt-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+            </span>
+            <input
+              v-model="teamSearchQuery"
+              type="search"
+              placeholder="搜索团队空间…"
+              style="padding-left: 44px; height: 40px; border-radius: 12px; border: 1.5px solid var(--color-ink-300, #c9cdd4); background: var(--bg-elevated); width: 100%; font-size: 13px;"
+            />
+          </div>
+          <button type="button" class="mkt-btn mkt-btn-primary" @click="showCreateSpace">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            创建团队空间
+          </button>
+        </div>
+
+        <div v-if="!filteredTeamSpaces.length" class="mkt-empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <h3>暂无团队空间</h3>
+          <p>创建团队空间，邀请成员协作管理内部插件。</p>
+          <button type="button" class="mkt-btn mkt-btn-primary" @click="showCreateSpace">创建团队空间</button>
+        </div>
+
+        <div v-else class="team-grid">
+          <article
+            v-for="space in filteredTeamSpaces"
+            :key="space.id"
+            class="team-card"
+            @click="openSpaceDetail(space.id)"
+          >
+            <span class="team-role" :class="space.role === 'owner' ? 'role-owner' : 'role-member'">
+              {{ space.role === 'owner' ? 'Owner' : 'Member' }}
+            </span>
+            <div class="team-card-head">
+              <svg class="team-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <h3>{{ space.name }}</h3>
+            </div>
+            <p class="team-card-desc">{{ space.description }}</p>
+            <div class="team-card-meta">
+              <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> {{ space.plugin_count }} 个插件</span>
+              <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> {{ space.member_count }} 成员</span>
+            </div>
+            <div class="team-card-members">
+              <span
+                v-for="m in space.members.slice(0, 3)"
+                :key="m.email"
+                class="team-avatar"
+              >{{ m.avatar }}</span>
+              <span v-if="space.member_count > 3" class="team-more">+{{ space.member_count - 3 }}</span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <!-- 空间详情视图 -->
+      <div v-else>
+        <button type="button" class="team-back" @click="backToSpaceList">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+          返回空间列表
+        </button>
+
+        <div class="team-detail-header">
+          <div class="team-detail-info">
+            <div class="team-detail-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div>
+              <div class="team-detail-name">{{ selectedSpace.name }}</div>
+              <div class="team-detail-meta">{{ selectedSpace.plugin_count }} 个插件 · {{ selectedSpace.member_count }} 名成员 · 创建于 {{ selectedSpace.created_at }}</div>
+            </div>
+          </div>
+          <div class="team-detail-actions">
+            <button type="button" class="mkt-btn mkt-btn-ghost" @click="showInvite">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              邀请成员
+            </button>
+            <button type="button" class="mkt-btn mkt-btn-primary" @click="publishToMarketplace('')">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              发布插件
+            </button>
+          </div>
+        </div>
+
+        <!-- 成员管理 -->
+        <div class="team-members-panel">
+          <h3>成员管理</h3>
+          <div class="team-members-list">
+            <div v-for="m in selectedSpace.members" :key="m.email" class="team-member-row">
+              <div class="team-member-info">
+                <span class="team-avatar team-avatar-lg">{{ m.avatar }}</span>
+                <div>
+                  <div class="team-member-name">{{ m.name }}</div>
+                  <div class="team-member-email">{{ m.email }}</div>
+                </div>
+              </div>
+              <span class="team-role" :class="m.role === 'owner' ? 'role-owner' : 'role-member'">
+                {{ m.role === 'owner' ? 'Owner' : 'Member' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空间内插件（占位） -->
+        <div class="mkt-empty" style="margin-top: 16px">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <h3>暂无插件</h3>
+          <p>点击上方「发布插件」将本地插件分享到此团队空间。</p>
+        </div>
+      </div>
+    </div><!-- /团队空间 -->
+
+    <!-- === 创建团队空间弹窗 === -->
+    <Teleport to="body">
+      <Transition name="upgrade-modal">
+        <div v-if="createSpaceOpen" class="upgrade-mask" @click.self="createSpaceOpen = false">
+          <div class="upgrade-panel" role="dialog" aria-modal="true" style="max-width: 480px">
+            <header class="upgrade-head">
+              <h3>创建团队空间</h3>
+              <button type="button" class="upgrade-close" aria-label="关闭" @click="createSpaceOpen = false">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </header>
+            <div class="upgrade-body">
+              <div style="margin-bottom: 16px">
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">空间名称</label>
+                <input v-model="newSpaceName" type="text" placeholder="如：后端架构组" style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)" />
+              </div>
+              <div style="margin-bottom: 16px">
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">描述</label>
+                <input v-model="newSpaceDesc" type="text" placeholder="简要描述空间用途" style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)" />
+              </div>
+              <div>
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">邀请成员（可选）</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;min-height:44px;background:var(--bg-base,#f7f8fa)">
+                  <span v-for="email in inviteEmails" :key="email" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--color-brand-500,#165dff);color:#fff;font-size:12px;font-weight:600">
+                    {{ email }}
+                    <svg style="cursor:pointer;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24" @click="removeInviteEmail(email)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </span>
+                  <input
+                    v-model="inviteInput"
+                    type="text"
+                    placeholder="输入邮箱，回车邀请…"
+                    style="border:none;background:transparent;font-size:14px;outline:none;flex:1;min-width:120px"
+                    @keyup.enter="addInviteEmail"
+                  />
+                </div>
+                <p style="margin-top:4px;font-size:12px;color:var(--color-ink-500,#86909c)">被邀请的用户将收到邮件通知，加入后可查看和安装空间内插件</p>
+              </div>
+            </div>
+            <footer class="upgrade-foot">
+              <button type="button" class="mkt-btn mkt-btn-ghost" @click="createSpaceOpen = false">取消</button>
+              <button type="button" class="mkt-btn mkt-btn-primary" @click="createSpace">创建空间</button>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- === 邀请成员弹窗 === -->
+    <Teleport to="body">
+      <Transition name="upgrade-modal">
+        <div v-if="inviteOpen" class="upgrade-mask" @click.self="inviteOpen = false">
+          <div class="upgrade-panel" role="dialog" aria-modal="true" style="max-width: 480px">
+            <header class="upgrade-head">
+              <h3>邀请成员加入「{{ selectedSpace?.name }}」</h3>
+              <button type="button" class="upgrade-close" aria-label="关闭" @click="inviteOpen = false">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </header>
+            <div class="upgrade-body">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">邮箱地址</label>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;min-height:44px;background:var(--bg-base,#f7f8fa)">
+                <span v-for="email in inviteEmails" :key="email" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--color-brand-500,#165dff);color:#fff;font-size:12px;font-weight:600">
+                  {{ email }}
+                  <svg style="cursor:pointer;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24" @click="removeInviteEmail(email)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </span>
+                <input
+                  v-model="inviteInput"
+                  type="text"
+                  placeholder="输入邮箱，回车添加…"
+                  style="border:none;background:transparent;font-size:14px;outline:none;flex:1;min-width:120px"
+                  @keyup.enter="addInviteEmail"
+                />
+              </div>
+              <p style="margin-top:4px;font-size:12px;color:var(--color-ink-500,#86909c)">可同时邀请多位用户，被邀请者将收到邮件通知</p>
+            </div>
+            <footer class="upgrade-foot">
+              <button type="button" class="mkt-btn mkt-btn-ghost" @click="inviteOpen = false">取消</button>
+              <button type="button" class="mkt-btn mkt-btn-primary" @click="sendInvite">发送邀请</button>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -393,6 +742,278 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* === Tab 栏 === */
+.mkt-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-ink-200, #e5e6eb);
+  background: var(--bg-elevated, #fff);
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+}
+.mkt-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-500, #86909c);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.mkt-tab:hover { color: var(--color-ink-900, #1f2329); }
+.mkt-tab.active {
+  color: var(--color-brand-500, #165dff);
+  border-bottom-color: var(--color-brand-500, #165dff);
+}
+.mkt-tab svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+.mkt-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-ink-200, #e5e6eb);
+  color: var(--color-ink-500, #86909c);
+}
+.mkt-tab.active .mkt-tab-badge {
+  background: var(--color-brand-500, #165dff);
+  color: #fff;
+}
+
+/* === 团队空间 === */
+.team-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+.team-card {
+  position: relative;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--color-ink-200, #e5e6eb);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06));
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+}
+.team-card:hover {
+  border-color: var(--color-brand-500, #165dff);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(22, 93, 255, .08);
+}
+.team-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.team-card-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink-900, #1f2329);
+}
+.team-icon {
+  width: 20px;
+  height: 20px;
+  stroke: var(--color-orange, #ff7d00);
+  fill: none;
+  stroke-width: 2;
+  flex-shrink: 0;
+}
+.team-card-desc {
+  font-size: 13px;
+  color: var(--color-ink-700, #4e5969);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.team-card-meta {
+  font-size: 12px;
+  color: var(--color-ink-500, #86909c);
+  display: flex;
+  gap: 12px;
+}
+.team-card-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.team-card-meta svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+.team-card-members {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.team-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  border: 2px solid var(--bg-elevated, #fff);
+  background: var(--color-brand-500, #165dff);
+}
+.team-avatar:nth-child(2) { background: #722ed1; }
+.team-avatar:nth-child(3) { background: #00b42a; }
+.team-avatar.team-avatar-lg {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+}
+.team-more {
+  font-size: 12px;
+  color: var(--color-ink-500, #86909c);
+  margin-left: 4px;
+}
+.team-role {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.role-owner {
+  background: var(--color-brand-50, #eef4ff);
+  color: var(--color-brand-600, #0e42d2);
+}
+.role-member {
+  background: var(--color-ink-100, #f7f8fa);
+  color: var(--color-ink-500, #86909c);
+}
+
+/* 团队空间详情 */
+.team-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--color-brand-500, #165dff);
+  font-size: 13px;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  margin-bottom: 16px;
+  padding: 0;
+}
+.team-back svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.team-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--color-ink-200, #e5e6eb);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06));
+}
+.team-detail-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.team-detail-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 125, 0, .1);
+}
+.team-detail-icon svg {
+  width: 28px;
+  height: 28px;
+  stroke: var(--color-orange, #ff7d00);
+  fill: none;
+  stroke-width: 2;
+}
+.team-detail-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-ink-900, #1f2329);
+}
+.team-detail-meta {
+  font-size: 13px;
+  color: var(--color-ink-500, #86909c);
+  margin-top: 4px;
+}
+.team-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 成员管理 */
+.team-members-panel {
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--color-ink-200, #e5e6eb);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06));
+}
+.team-members-panel h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--color-ink-900, #1f2329);
+}
+.team-members-list {
+  display: flex;
+  flex-direction: column;
+}
+.team-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-ink-200, #e5e6eb);
+}
+.team-member-row:last-child { border-bottom: none; }
+.team-member-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.team-member-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-900, #1f2329);
+}
+.team-member-email {
+  font-size: 12px;
+  color: var(--color-ink-500, #86909c);
 }
 
 /* 热门推荐 */
