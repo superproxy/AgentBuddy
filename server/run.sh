@@ -45,6 +45,7 @@ check_python() {
 # === 安装依赖 ===
 setup_deps() {
     PIP="$PYTHON -m pip"
+    PIP_MIRROR="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
 
     # 确保 pip 可用
     if ! $PIP --version 2>/dev/null; then
@@ -55,9 +56,9 @@ setup_deps() {
 
     # 检查依赖是否已安装
     if ! $PYTHON -c "import flask" 2>/dev/null; then
-        info "安装依赖..."
-        $PIP install --upgrade pip -q 2>/dev/null
-        $PIP install -r requirements.txt -q
+        info "安装依赖（使用阿里云镜像）..."
+        $PIP install --upgrade pip -q 2>/dev/null $PIP_MIRROR
+        $PIP install -r requirements.txt -q $PIP_MIRROR
         info "依赖安装完成"
     else
         info "依赖已就绪"
