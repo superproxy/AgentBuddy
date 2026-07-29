@@ -42,38 +42,44 @@ check_python() {
     info "Python: $PYTHON ($version)"
 }
 
-# === 创建虚拟环境 + 安装依赖 ===
-setup_venv() {
+# === 安装依赖（优先 venv，失败则全局安装） ===
+setup_deps() {
+    # 尝试创建虚拟环境
     if [ ! -f "$VENV_DIR/bin/activate" ]; then
         info "创建虚拟环境 $VENV_DIR ..."
-        if ! $PYTHON -m venv "$VENV_DIR" 2>&1; then
-            # 检测 Python 版本，安装对应的 venv 包
-            local py_ver=$($PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-            local venv_pkg="python${py_ver}-venv"
-            error "虚拟环境创建失败，尝试安装 $venv_pkg ..."
-            apt-get update -qq 2>/dev/null
-            apt-get install -y -qq "$venv_pkg" 2>/dev/null || apt-get install -y -qq python3-venv 2>/dev/null || true
-            # 重试创建
-            $PYTHON -m venv "$VENV_DIR" || {
-                error "虚拟环境创建失败，请手动执行:"
-                error "  apt install $venv_pkg"
-                error "  $PYTHON -m venv $VENV_DIR"
-                exit 1
-            }
+        $PYTHON -m venv "$VENV_DIR" 2>/dev/null
+    fi
+
+    if [ -f "$VENV_DIR/bin/activate" ]; then
+        # venv 可用
+        source "$VENV_DIR/bin/activate"
+        PYTHON=python
+        PIP="pip"
+    else
+        # venv 不可用，尝试安装 python3-venv
+        local py_ver=$($PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        warn "venv 创建失败，尝试安装 python${py_ver}-venv ..."
+        apt-get update -qq 2>/dev/null
+        apt-get install -y -qq "python${py_ver}-venv" 2>/dev/null || apt-get install -y -qq python3-venv 2>/dev/null || true
+
+        # 再次尝试
+        $PYTHON -m venv "$VENV_DIR" 2>/dev/null
+        if [ -f "$VENV_DIR/bin/activate" ]; then
+            source "$VENV_DIR/bin/activate"
+            PYTHON=python
+            PIP="pip"
+        else
+            # 仍然失败，使用全局安装
+            warn "venv 不可用，使用全局安装"
+            PIP="$PYTHON -m pip"
         fi
     fi
 
-    # 激活虚拟环境
-    source "$VENV_DIR/bin/activate" || {
-        error "激活虚拟环境失败"
-        exit 1
-    }
-
     # 检查依赖是否已安装
-    if ! python -c "import flask" 2>/dev/null; then
+    if ! $PYTHON -c "import flask" 2>/dev/null; then
         info "安装依赖..."
-        pip install --upgrade pip -q
-        pip install -r requirements.txt -q
+        $PIP install --upgrade pip -q
+        $PIP install -r requirements.txt -q
         info "依赖安装完成"
     else
         info "依赖已就绪"
@@ -83,20 +89,20 @@ setup_venv() {
 # === 启动 ===
 start() {
     check_python
-    setup_venv
+    setup_deps
 
     info "启动 AgentBuddy Server ..."
     info "  监听: $HOST:$PORT"
     info "  数据目录: ${AGENTBUDDY_DATA_DIR:-$SCRIPT_DIR/data}"
     info "  LLM 配置: ${AGENTBUDDY_LLM_CONFIG:-$SCRIPT_DIR/config/llm/llm.yaml}"
 
-    python app.py
+    $PYTHON app.py
 }
 
 # === 后台启动 ===
 start_daemon() {
     check_python
-    setup_venv
+    setup_deps
 
     # 检查是否已在运行
     if [ -f "$PID_FILE" ]; then
@@ -112,7 +118,7 @@ start_daemon() {
     info "  监听: $HOST:$PORT"
     info "  日志: $LOG_FILE"
 
-    nohup "$VENV_DIR/bin/python" app.py > "$LOG_FILE" 2>&1 &
+    nohup $PYTHON app.py > "$LOG_FILE" 2>&1 &
     local pid=$!
     echo "$pid" > "$PID_FILE"
 
