@@ -48,6 +48,8 @@ check_python() {
 setup_deps() {
     PIP="$PYTHON -m pip"
     PIP_MIRROR="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
+    # Ubuntu 24.04 PEP 668 限制全局安装，需要 --break-system-packages
+    PIP_FLAGS="--break-system-packages"
 
     # 确保 pip 可用
     if ! $PIP --version 2>/dev/null; then
@@ -59,12 +61,10 @@ setup_deps() {
     # 检查依赖是否已安装
     if ! $PYTHON -c "import flask" 2>/dev/null; then
         info "安装依赖（使用阿里云镜像）..."
-        if ! $PIP install --upgrade pip $PIP_MIRROR 2>&1; then
-            warn "pip 升级失败，继续安装依赖..."
-        fi
-        if ! $PIP install -r requirements.txt $PIP_MIRROR 2>&1; then
+        $PIP install --upgrade pip $PIP_FLAGS $PIP_MIRROR 2>&1 || warn "pip 升级失败，继续..."
+        if ! $PIP install -r requirements.txt $PIP_FLAGS $PIP_MIRROR 2>&1; then
             error "依赖安装失败！请手动执行："
-            error "  $PIP install -r requirements.txt $PIP_MIRROR"
+            error "  $PIP install -r requirements.txt $PIP_FLAGS $PIP_MIRROR"
             exit 1
         fi
         info "依赖安装完成"
