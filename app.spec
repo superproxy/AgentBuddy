@@ -13,6 +13,7 @@
 """
 import fnmatch
 import os
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
@@ -84,13 +85,23 @@ hiddenimports = [
     'openai',
     'marketplace', 'marketplace.routes', 'marketplace.storage',
     'ai_generator', 'ai_generator.generator',
-    # LLM 网关代理（litellm 动态导入多，需显式声明）
-    'litellm',
-    'litellm.proxy',
-    'litellm.proxy.proxy_server',
-    'litellm.main',
-    'litellm.utils',
+    # LLM 网关代理（litellm 动态导入多，自动收集全部子模块）
+    # litellm proxy 运行时会动态导入各 provider、integrations 等，
+    # 手动列举不可靠，用 collect_submodules 自动收集
 ]
+
+# 自动收集 litellm 所有子模块 + 数据文件
+litellm_hidden = collect_submodules('litellm')
+litellm_datas = collect_data_files('litellm')
+hiddenimports.extend(litellm_hidden)
+datas.extend(litellm_datas)
+
+# litellm proxy 依赖的额外库
+hiddenimports.extend([
+    'uvicorn', 'fastapi', 'starlette',
+    'backoff', 'cryptography', 'apscheduler',
+    'orjson', 'anyio', 'h11',
+])
 
 a = Analysis(
     ['app.py'],
