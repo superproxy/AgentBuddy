@@ -298,6 +298,9 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                 continue
             if not isinstance(provider_value, dict):
                 continue
+            # 跳过被禁用的 provider（_enabled === false）
+            if provider_value.get("_enabled") is False:
+                continue
             is_active = provider_name == active_provider
 
             # 合并 _base 到各协议

@@ -81,7 +81,7 @@ async function syncToIde() {
   ui.clearLog()
   ui.toast('正在同步到 IDE...')
   try {
-    const resp = await fetch('/api/init-ide?ide=All&scope=llm,mcp', { method: 'GET', headers: { Accept: 'text/event-stream' } })
+    const resp = await fetch('/api/sync?ide=All&scope=llm,mcp', { method: 'GET', headers: { Accept: 'text/event-stream' } })
     if (!resp.ok) { ui.toast('同步失败', 'err'); return }
     const reader = resp.body!.getReader()
     const decoder = new TextDecoder()
@@ -111,7 +111,7 @@ async function toggleProxyRun() {
   envData.value.proxy.gateway.enabled = true
   const sr = await saveEnv(true)
   if (!sr) { ui.toast('保存失败', 'err'); return }
-  const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/init-env', { method: 'POST' })
+  const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/sync', { method: 'POST' })
   if (!r.ok) { ui.toast('生成配置失败', 'err'); return }
   proxyRunning.value = true
   ui.toast('LLM 网关已启动，配置已生成')
@@ -259,7 +259,7 @@ function autoSave() {
     if (ok) {
       // 保存后自动重新生成 IDE 配置（codex config.toml / auth.json 等）
       try {
-        await api('/api/init-env', { method: 'POST' })
+        await api('/api/sync', { method: 'POST' })
       } catch { /* 静默失败，不影响保存 */ }
     }
   }, 500)

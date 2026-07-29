@@ -215,7 +215,7 @@ async function syncCurrentScope() {
     } else {
       for (const ide of syncTargetIdes.value) {
         await runSse(
-          '/api/init-ide?ide=' + encodeURIComponent(ide) + '&scope=' + meta.key,
+          '/api/sync?ide=' + encodeURIComponent(ide) + '&scope=' + meta.key,
           (line) => ui.appendLog(line),
         )
       }

@@ -260,8 +260,8 @@ export const useMcpStore = defineStore('mcp', () => {
     r.ok ? ui.toast('模板已保存') : ui.toast('保存失败: ' + r.error, 'err')
   }
   async function generateMcpRuntime() {
-    const r = await api<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>('/api/init-env', { method: 'POST' })
-    if (r.ok) { ui.toast('mcp.json 已生成'); if (r.stdout) ui.showModal('init-env 输出', r.stdout + (r.stderr ? '\n--- stderr ---\n' + r.stderr : '')) }
+    const r = await api<{ ok: boolean; stdout?: string; stderr?: string; error?: string }>('/api/sync', { method: 'POST' })
+    if (r.ok) { ui.toast('mcp.json 已生成'); if (r.stdout) ui.showModal('sync 输出', r.stdout + (r.stderr ? '\n--- stderr ---\n' + r.stderr : '')) }
     else ui.toast('生成失败: ' + r.error, 'err')
   }
   function parsePastedMcp() {
@@ -383,7 +383,7 @@ export const useMcpStore = defineStore('mcp', () => {
     if (!silent) (r1.ok && r2.ok) ? ui.toast('mcp.yaml 已保存') : ui.toast('保存失败', 'err')
     // 保存后自动 generate + sync（与 LLM 配置页一致）
     if (r1.ok && r2.ok) {
-      try { await api('/api/init-env', { method: 'POST' }) } catch { /* 静默失败 */ }
+      try { await api('/api/sync', { method: 'POST' }) } catch { /* 静默失败 */ }
     }
     return r1.ok && r2.ok
   }
@@ -392,11 +392,11 @@ export const useMcpStore = defineStore('mcp', () => {
     const r1 = await api('/api/mcp/save', { method: 'POST', body: JSON.stringify({ data: mcpTemplate }) })
     const r2 = await api('/api/mcp-config', { method: 'POST', body: JSON.stringify({ data: mcpConfigData }) })
     if (!r1.ok || !r2.ok) { ui.toast('保存 mcp.yaml 失败', 'err'); return }
-    const g = await api('/api/init-env', { method: 'POST' })
+    const g = await api('/api/sync', { method: 'POST' })
     if (!g.ok) { ui.toast('生成 mcp.json 失败', 'err'); return }
     ui.clearLog()
     for (const ideKey of sync.syncTargetIdes) {
-      await runSse('/api/init-ide?ide=' + encodeURIComponent(ideKey) + '&scope=mcp', (line) => ui.appendLog(line))
+      await runSse('/api/sync?ide=' + encodeURIComponent(ideKey) + '&scope=mcp', (line) => ui.appendLog(line))
     }
   }
   function startEditMcp(name: string) {

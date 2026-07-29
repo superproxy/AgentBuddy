@@ -558,7 +558,7 @@ export const useIdeStore = defineStore('ide', () => {
     ideSyncing.value = ideKey
     try {
       const resp = await fetch(
-        `/api/init-ide?ide=${encodeURIComponent(ideKey)}&scope=llm,mcp,skill,rules`,
+        `/api/sync?ide=${encodeURIComponent(ideKey)}&scope=llm,mcp,skill,rules`,
         { method: 'GET', headers: { Accept: 'text/event-stream' } },
       )
       if (!resp.ok) {

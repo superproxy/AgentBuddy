@@ -324,10 +324,10 @@ export const useEnvStore = defineStore('env', () => {
   async function generateProxyConfig() {
     const sr = await api<{ ok: boolean }>('/api/llm', { method: 'POST', body: JSON.stringify({ data: envData }) })
     if (!sr.ok) { ui.toast('llm.yaml 保存失败', 'err'); return }
-    const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/init-env', { method: 'POST' })
+    const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/sync', { method: 'POST' })
     if (r.ok) {
       ui.toast('proxy/config.yaml 已生成')
-      if (r.stdout) ui.showModal('init-env 输出', r.stdout + (r.stderr ? '\n--- stderr ---\n' + r.stderr : ''))
+      if (r.stdout) ui.showModal('sync 输出', r.stdout + (r.stderr ? '\n--- stderr ---\n' + r.stderr : ''))
     } else { ui.toast('生成失败', 'err') }
   }
   async function startProxyServer() {
