@@ -15,7 +15,7 @@ cd "$SCRIPT_DIR"
 PID_FILE=".server.pid"
 LOG_FILE="server.log"
 HOST="${AGENTBUDDY_SERVER_HOST:-0.0.0.0}"
-PORT="${AGENTBUDDY_SERVER_PORT:-5001}"
+PORT="${AGENTBUDDY_SERVER_PORT:-80}"
 
 # Gitee 镜像地址（国内服务器优先使用）
 GITEE_URL="https://gitee.com/kyll/AgentBuddy.git"
