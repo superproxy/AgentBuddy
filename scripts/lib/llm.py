@@ -417,12 +417,13 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         listener_url = gateway_config.get("base_url", "http://127.0.0.1:4000/v1")
         # 网关 api_key：未配置时用占位符（litellm 本地网关默认不校验）
         gateway_api_key = gateway_config.get("api_key", "") or "sk-agentbuddy-gateway"
+        # 网关是个 provider：用户选了 active provider 就用，没选才用网关
+        flat["LLM_ACTIVE_PROVIDER"] = active_provider_name or "agentbuddy-gateway"
         flat["LLM_ACTIVE_BASE_URL"] = listener_url
         flat["LLM_ACTIVE_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_BASE_URL"] = listener_url
         flat["LLM_CODEX_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_WIRE_API"] = "responses"
-        flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
         # 网关模式下，Claude 用的 anthropic 标准环境变量也指向网关
         flat["ANTHROPIC_BASE_URL"] = listener_url
         flat["ANTHROPIC_AUTH_TOKEN"] = gateway_api_key

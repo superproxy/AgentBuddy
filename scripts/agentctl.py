@@ -67,7 +67,12 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
     if not isinstance(llm, dict):
         return
 
-    lines = []
+    # 网关也是个 provider，加入候选列表
+    gateway_config = env_config.get("proxy", {}).get("gateway", {})
+    enable_gateway = gateway_config.get("enabled", False) if isinstance(gateway_config, dict) else False
+
+    # 收集候选 provider，active provider 排第一
+    candidates = []
     for provider_name, provider_value in llm.items():
         if provider_name.startswith("_") or provider_name == "proxy":
             continue
@@ -75,8 +80,9 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
             continue
         if provider_value.get("_enabled") is False:
             continue
+        # active provider 已在模板中，跳过
         if provider_name == active_provider:
-            continue  # active provider 已在模板中
+            continue
 
         merged = _merge_base(provider_value)
         # 只同步有 responses 协议的 provider
@@ -88,6 +94,18 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
         if not base_url:
             continue
 
+        candidates.append((provider_name, base_url))
+
+    # 网关作为候选 provider 加入（启用了且不是 active provider）
+    # active_provider 为空时模板 fallback 到 agentbuddy-gateway，不需要重复加入
+    if enable_gateway and active_provider:
+        gw_url = str(gateway_config.get("base_url", "http://127.0.0.1:4000/v1")).strip()
+        gw_name = "agentbuddy-gateway"
+        if gw_url and active_provider != gw_name:
+            candidates.insert(0, (gw_name, gw_url))
+
+    lines = []
+    for provider_name, base_url in candidates:
         lines.append(f"\n[model_providers.{provider_name}]")
         lines.append(f'name = "{provider_name}"')
         lines.append(f'base_url = "{base_url}"')
