@@ -1,4 +1,4 @@
-_description: MCP 配置模板 - 复制为 mcp.yaml 并填入真实密钥。mcpServers 为服务定义（含 "" 占位符），mcp 为密钥明文。此文件可安全提交到版本控制。
+_description: MCP 配置模板 - 复制为 mcp.yaml 并填入真实密钥。mcpServers 为服务定义（含 ${VAR} 环境变量引用），mcp 为密钥明文。此文件可安全提交到版本控制。
 mcpServers:
 #  12306-mcp:
 #    args:
@@ -13,8 +13,8 @@ mcpServers:
 #    command: npx
 #    disabled: false
 #    env:
-#      BST: ""
-#      COOKIE: ""
+#      BST: ${BST}
+#      COOKIE: ${COOKIE}
   Redis:
     args:
     - -e
@@ -31,7 +31,7 @@ mcpServers:
     command: npx
     disabled: false
     env:
-      AMAP_MAPS_API_KEY: ""
+      AMAP_MAPS_API_KEY: ${AMAP_MAPS_API_KEY}
   arxiv-paper-mcp:
     args:
     - -y
@@ -42,7 +42,7 @@ mcpServers:
   context7:
     disabled: false
     headers:
-      CONTEXT7_API_KEY: ""
+      CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}
     type: http
     url: https://mcp.context7.com/mcp
   elevenlabs:
@@ -51,7 +51,7 @@ mcpServers:
     command: uvx
     disabled: false
     env:
-      ELEVENLABS_API_KEY: ""
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
   filesystem:
     args:
     - -y
@@ -72,7 +72,7 @@ mcpServers:
     command: npx
     disabled: true
     env:
-      FIRECRAWL_API_KEY: ""
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
   mastergo:
     args:
     - -y
@@ -84,7 +84,7 @@ mcpServers:
     args:
     - -y
     - '@mastergo/magic-mcp'
-    - --token=""
+    - --token=${MASTERGO_TOKEN}
     - --url=https://mastergo.com
     command: npx
     disabled: false
@@ -97,9 +97,9 @@ mcpServers:
     command: uvx
     disabled: true
     env:
-      OPENAI_API_KEY: ""
-      OPENAI_BASE: ""
-      OPENAI_EMBEDDING_MODEL: ""
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE: ${OPENAI_BASE}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL}
     startupTimeout: 10000
     type: streamableHttp
     url: http://localhost:8060/mcp
@@ -122,13 +122,13 @@ mcpServers:
     command: uvx
     disabled: false
     env:
-      DOUBAO_API_KEY: ""
-      DOUBAO_BASE_URL: ""
-      DOUBAO_MODEL: ""
+      DOUBAO_API_KEY: ${DOUBAO_API_KEY}
+      DOUBAO_BASE_URL: ${DOUBAO_BASE_URL}
+      DOUBAO_MODEL: ${DOUBAO_MODEL}
   stitch:
     disabled: false
     headers:
-      X-Goog-Api-Key: ""
+      X-Goog-Api-Key: ${STITCH_API_KEY}
     type: http
     url: https://stitch.googleapis.com/mcp
   tavily-mcp:
@@ -140,7 +140,7 @@ mcpServers:
     env:
       DEFAULT_PARAMETERS: '{"include_images": true, "max_results": 15, "search_depth":
         "advanced"}'
-      TAVILY_API_KEY: ""
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
   undoom-douyin-data-analysis:
     args:
     - --index-url
@@ -158,31 +158,31 @@ mcpServers:
     command: uvx
     disabled: false
     env:
-      VOLC_APPID: ""
-      VOLC_CLUSTER: ""
-      VOLC_TOKEN: ""
-      VOLC_VOICE_TYPE: ""
+      VOLC_APPID: ${VOLC_APPID}
+      VOLC_CLUSTER: ${VOLC_CLUSTER}
+      VOLC_TOKEN: ${VOLC_TOKEN}
+      VOLC_VOICE_TYPE: ${VOLC_VOICE_TYPE}
   wecom:
     args:
     - wecom-bot-mcp-server
     command: uvx
     disabled: false
     env:
-      WECOM_WEBHOOK_URL: ""
+      WECOM_WEBHOOK_URL: ${WECOM_WEBHOOK_URL}
   yuque-mcp:
     args:
     - -y
     - yuque-mcp
     - start
-    - --token=""
+    - --token=${YUQUE_TOKEN}
     - --client=vscode
     command: npx
     disabled: false
     env:
-      YUQUE_TOKEN: ""
+      YUQUE_TOKEN: ${YUQUE_TOKEN}
   zread:
     disabled: false
     headers:
-      Authorization: Bearer ""
+      Authorization: Bearer ${ZREAD_TOKEN}
     type: streamableHttp
     url: https://open.bigmodel.cn/api/mcp/zread/mcp
