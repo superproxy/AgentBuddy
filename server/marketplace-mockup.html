@@ -235,8 +235,8 @@
     </div>
   </div>
   <div class="space-tabs">
-    <div class="space-tab active" onclick="switchTabA('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="badge">128</span></div>
-    <div class="space-tab" onclick="switchTabA('private')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>私有空间<span class="badge">3</span></div>
+    <div class="space-tab active" onclick="switchTabA('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>插件市场<span class="badge">128</span></div>
+    <div class="space-tab" onclick="switchTabA('private')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>团队空间<span class="badge">3</span></div>
   </div>
   <div class="main">
     <div class="space-section active" id="a-public">
@@ -248,7 +248,7 @@
       </div>
     </div>
     <div class="space-section" id="a-private">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><header class="mkt-hero" style="flex:1"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索私有空间…"><button class="mkt-search-go">搜索</button></div></header><button class="btn btn-primary" onclick="showModal('create-space-dialog')" style="margin-left:12px"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建私有空间</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><header class="mkt-hero" style="flex:1"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索团队空间…"><button class="mkt-search-go">搜索</button></div></header><button class="btn btn-primary" onclick="showModal('create-space-dialog')" style="margin-left:12px"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建团队空间</button></div>
       <div class="space-grid">
         <div class="space-card"><div class="space-card-role role-owner">Owner</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组</div><p class="space-card-desc">团队内部使用的后端架构插件集合，包含微服务、消息队列、数据库设计等专用智能体。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 12 个插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5 成员</span></div><div class="space-card-members"><div class="member-avatar">张</div><div class="member-avatar">李</div><div class="member-avatar">王</div><span style="font-size:12px;color:var(--color-ink-500);margin-left:4px">+2</span></div></div>
         <div class="space-card"><div class="space-card-role role-member">Member</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>前端工程化</div><p class="space-card-desc">前端团队私有插件空间，包含组件库设计、性能优化、自动化测试等内部智能体。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 8 个插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 3 成员</span></div><div class="space-card-members"><div class="member-avatar">赵</div><div class="member-avatar">钱</div><div class="member-avatar">孙</div></div></div>
@@ -269,7 +269,7 @@
     <aside class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-label">公共</div>
-        <div class="sidebar-item active" onclick="switchSidebarB('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="count">128</span></div>
+        <div class="sidebar-item active" onclick="switchSidebarB('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>插件市场<span class="count">128</span></div>
       </div>
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">
@@ -277,12 +277,12 @@
         <div class="sidebar-item" onclick="switchSidebarB('backend')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组<span class="count">12</span></div>
         <div class="sidebar-item" onclick="switchSidebarB('frontend')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>前端工程化<span class="count">8</span></div>
         <div class="sidebar-item" onclick="switchSidebarB('ai')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>AI 实验室<span class="count">5</span></div>
-        <div class="sidebar-add" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建私有空间</div>
+        <div class="sidebar-add" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建团队空间</div>
       </div>
     </aside>
     <div class="content">
       <div class="content-header">
-        <div class="content-title" id="b-title"><svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间</div>
+        <div class="content-title" id="b-title"><svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>插件市场</div>
         <button class="btn btn-primary btn-sm" onclick="showModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>发布插件</button>
       </div>
       <div class="mkt-search" style="margin-bottom:16px"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索插件…" style="height:40px"></div>
@@ -306,10 +306,10 @@
   <div class="main">
     <header class="mkt-hero"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索所有空间的插件…"><button class="mkt-search-go">搜索</button></div></header>
 
-    <!-- 公共空间区 -->
+    <!-- 插件市场区 -->
     <div class="section-block">
       <div class="section-header">
-        <div class="section-title"><svg class="icon-public" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="count">· 128 个插件</span></div>
+        <div class="section-title"><svg class="icon-public" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>插件市场<span class="count">· 128 个插件</span></div>
         <div class="section-actions"><button class="btn btn-ghost btn-sm">查看全部</button><button class="btn btn-primary btn-sm" onclick="showModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>发布</button></div>
       </div>
       <div class="plugin-grid">
@@ -321,11 +321,11 @@
 
     <div class="divider"></div>
 
-    <!-- 私有空间区 -->
+    <!-- 团队空间区 -->
     <div class="section-block">
       <div class="section-header">
-        <div class="section-title"><svg class="icon-private" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>私有空间<span class="count">· 3 个空间</span></div>
-        <div class="section-actions"><button class="btn btn-primary btn-sm" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建空间</button></div>
+        <div class="section-title"><svg class="icon-private" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>团队空间<span class="count">· 3 个空间</span></div>
+        <div class="section-actions"><button class="btn btn-primary btn-sm" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建团队</button></div>
       </div>
       <div class="space-row">
         <div class="space-card"><div class="space-card-role role-owner">Owner</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组</div><p class="space-card-desc">团队内部使用的后端架构插件集合，包含微服务、消息队列等。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 12 插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5 成员</span></div><div class="space-card-members"><div class="member-avatar">张</div><div class="member-avatar">李</div><div class="member-avatar">王</div></div></div>
@@ -337,9 +337,9 @@
 </div>
 
 <!-- === 公共弹窗 === -->
-<div class="modal-mask" id="create-space-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>创建私有空间</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">空间名称</label><input class="form-input" placeholder="如：后端架构组"><p class="form-hint">创建后名称不可修改</p></div><div class="form-group"><label class="form-label">描述</label><input class="form-input" placeholder="简要描述空间用途"></div><div class="form-group"><label class="form-label">邀请成员（可选）</label><div class="invite-list"><span class="invite-chip">lisi@company.com <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><input class="invite-input" placeholder="输入邮箱，回车邀请…"></div><p class="form-hint">被邀请的用户将收到邮件通知</p></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('create-space-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('create-space-dialog')">创建空间</button></div></div></div>
+<div class="modal-mask" id="create-space-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>创建团队空间</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">空间名称</label><input class="form-input" placeholder="如：后端架构组"><p class="form-hint">创建后名称不可修改</p></div><div class="form-group"><label class="form-label">描述</label><input class="form-input" placeholder="简要描述空间用途"></div><div class="form-group"><label class="form-label">邀请成员（可选）</label><div class="invite-list"><span class="invite-chip">lisi@company.com <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><input class="invite-input" placeholder="输入邮箱，回车邀请…"></div><p class="form-hint">被邀请的用户将收到邮件通知</p></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('create-space-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('create-space-dialog')">创建空间</button></div></div></div>
 <div class="modal-mask" id="invite-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>邀请成员</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('invite-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">邮箱地址</label><div class="invite-list"><span class="invite-chip">newuser@company.com <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><input class="invite-input" placeholder="输入邮箱，回车添加…"></div></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('invite-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('invite-dialog')">发送邀请</button></div></div></div>
-<div class="modal-mask" id="publish-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>发布插件到市场</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">选择插件</label><select class="form-input"><option>SpringBoot 后端工程师 v1.4.2</option></select></div><div class="form-group"><label class="form-label">发布到</label><div class="radio-group"><label class="radio-label"><input type="radio" name="target" checked> 公共空间</label><label class="radio-label"><input type="radio" name="target"> 私有空间</label></div><p class="form-hint">公共空间：所有人可见。私有空间：仅成员可见。</p></div><div class="form-group"><label class="form-label">标签</label><input class="form-input" placeholder="如：Java, 后端"></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('publish-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('publish-dialog')">发布</button></div></div></div>
+<div class="modal-mask" id="publish-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>发布插件到市场</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">选择插件</label><select class="form-input"><option>SpringBoot 后端工程师 v1.4.2</option></select></div><div class="form-group"><label class="form-label">发布到</label><div class="radio-group"><label class="radio-label"><input type="radio" name="target" checked> 插件市场</label><label class="radio-label"><input type="radio" name="target"> 团队空间</label></div><p class="form-hint">插件市场：所有人可见。团队空间：仅成员可见。</p></div><div class="form-group"><label class="form-label">标签</label><input class="form-input" placeholder="如：Java, 后端"></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('publish-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('publish-dialog')">发布</button></div></div></div>
 
 <script>
 function switchScheme(s) {
@@ -361,7 +361,7 @@ function switchSidebarB(space) {
   const membersBar = document.getElementById('b-members-bar');
   const grid = document.getElementById('b-grid');
   if (space === 'public') {
-    title.innerHTML = '<svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间';
+    title.innerHTML = '<svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>插件市场';
     membersBar.style.display = 'none';
     grid.innerHTML = '<article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">SB</div><div><h3>SpringBoot 后端工程师<span class="plugin-ver">v1.4.2</span></h3><p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体。</p></div></div><div class="plugin-tags"><span class="plugin-tag">Java</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1284</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>';
   } else {
