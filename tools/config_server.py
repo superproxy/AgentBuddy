@@ -821,6 +821,149 @@ def upgrade_check():
 
 
 # ============================================================
+# 静默升级 API
+# ============================================================
+
+@app.route("/api/upgrade/silent", methods=["GET"])
+def upgrade_silent():
+    """SSE: 静默升级 — 下载安装包并启动安装。
+
+    流程：
+    1. 检查最新版本
+    2. 下载对应平台的安装包到临时目录
+    3. 启动安装程序（Windows: exe / macOS: pkg）
+    4. 退出当前应用
+    """
+    import urllib.request
+    import tempfile
+    import os
+
+    def _stream():
+        # 1. 检查版本
+        yield "data: [1/4] 检查最新版本...\n\n"
+        try:
+            req = urllib.request.Request(
+                GITHUB_RELEASES_API,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "AgentBuddy-Updater/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            yield f"data: [ERROR] 检查版本失败: {e}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        latest = (data.get("tag_name") or "").lstrip("vV")
+        if not latest:
+            yield "data: [ERROR] 无法获取最新版本号\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        current, _ = _read_version()
+        yield f"data: [1/4] 当前 v{current} → 最新 v{latest}\n\n"
+
+        # 2. 选择安装包
+        is_windows = sys.platform == "win32"
+        is_mac = sys.platform == "darwin"
+        target_asset = None
+        for asset in data.get("assets", []) or []:
+            name = (asset.get("name") or "").lower()
+            if is_windows and name.endswith(".exe") and "x64" in name:
+                target_asset = asset
+                break
+            elif is_mac and name.endswith(".pkg"):
+                target_asset = asset
+                break
+            elif is_mac and name.endswith(".dmg") and not target_asset:
+                target_asset = asset
+
+        if not target_asset:
+            yield "data: [ERROR] 未找到当前平台的安装包\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        url = target_asset.get("browser_download_url", "")
+        filename = target_asset.get("name", "AgentBuddy-Setup.exe")
+        size = target_asset.get("size", 0)
+        size_mb = f"{size / 1024 / 1024:.1f} MB" if size else "未知大小"
+        yield f"data: [2/4] 下载 {filename} ({size_mb})...\n\n"
+
+        # 3. 下载到临时目录
+        try:
+            tmp_dir = Path(tempfile.gettempdir()) / "AgentBuddyUpgrade"
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            tmp_file = tmp_dir / filename
+
+            # 如果已下载过且大小一致，跳过下载
+            if tmp_file.exists() and tmp_file.stat().st_size == size:
+                yield f"data: [2/4] 已缓存，跳过下载\n\n"
+            else:
+                req = urllib.request.Request(url, headers={"User-Agent": "AgentBuddy-Updater/1.0"})
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    with open(tmp_file, "wb") as f:
+                        downloaded = 0
+                        while True:
+                            chunk = resp.read(1024 * 256)  # 256KB
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if size > 0:
+                                pct = downloaded * 100 // size
+                                yield f"data: [2/4] 下载进度 {pct}%\n\n"
+                yield f"data: [2/4] 下载完成\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] 下载失败: {e}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        # 4. 启动静默安装
+        yield f"data: [3/4] 启动静默安装...\n\n"
+        try:
+            if is_windows:
+                # Inno Setup 静默安装：/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-
+                import subprocess
+                subprocess.Popen(
+                    [str(tmp_file), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-"],
+                    close_fds=True,
+                )
+                yield "data: [3/4] 静默安装已启动\n\n"
+                yield "data: [4/4] 安装完成，应用即将重启\n\n"
+                yield "data: [EXIT]\n\n"
+                # 延迟退出，让安装完成
+                import threading
+                def _quit():
+                    import time
+                    time.sleep(3)
+                    os._exit(0)
+                threading.Thread(target=_quit, daemon=True).start()
+            elif is_mac:
+                # macOS: 静默安装 pkg
+                import subprocess
+                subprocess.Popen(["open", str(tmp_file)], close_fds=True)
+                yield "data: [3/4] 安装程序已启动\n\n"
+                yield "data: [4/4] 请按安装程序指引完成升级\n\n"
+                yield "data: [EXIT]\n\n"
+                import threading
+                def _quit():
+                    import time
+                    time.sleep(2)
+                    os._exit(0)
+                threading.Thread(target=_quit, daemon=True).start()
+            else:
+                yield f"data: [ERROR] 不支持的平台: {sys.platform}\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] 启动安装失败: {e}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(_stream()),
+        mimetype="text/event-stream",
+    )
+
+
+# ============================================================
 # Env 配置 API（向后兼容：从 llm.yaml + mcp.yaml 合并读写）
 # ============================================================
 @app.route("/api/env", methods=["GET"])

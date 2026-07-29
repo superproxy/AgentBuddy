@@ -4,6 +4,8 @@ import { useThemeStore } from '../stores/theme'
 import { useUpgradeStore } from '../stores/upgrade'
 import { useNavOrderStore } from '../stores/navOrder'
 import SyncBar from './SyncBar.vue'
+import { useUiStore } from '../stores/ui'
+import { runSse } from '../api/sse'
 
 interface TabItem {
   key: string
@@ -21,6 +23,8 @@ const buildTime = ref('')
 
 const upgrade = useUpgradeStore()
 const upgradeOpen = ref(false)
+const ui = useUiStore()
+const silentUpgrading = ref(false)
 
 const nav = useNavOrderStore()
 
@@ -233,6 +237,22 @@ function closeUpgrade() {
 function ignoreUpgrade() {
   upgrade.ignoreLatest()
   upgradeOpen.value = false
+}
+
+async function silentUpgrade() {
+  if (silentUpgrading.value) return
+  silentUpgrading.value = true
+  ui.clearLog()
+  ui.toast('正在静默升级...')
+  upgradeOpen.value = false
+  try {
+    await runSse('/api/upgrade/silent', (line) => ui.appendLog(line))
+    ui.toast('升级完成，应用即将重启')
+  } catch (e) {
+    ui.toast('静默升级失败: ' + String(e), 'err')
+  } finally {
+    silentUpgrading.value = false
+  }
 }
 
 async function downloadAsset(url: string) {
@@ -603,6 +623,9 @@ onBeforeUnmount(() => {
 
           <footer class="upgrade-foot">
             <button type="button" class="btn-ghost" @click="ignoreUpgrade" v-if="upgrade.hasUpgrade">忽略此版本</button>
+            <button type="button" class="btn-silent" @click="silentUpgrade" :disabled="silentUpgrading" v-if="upgrade.hasUpgrade">
+              {{ silentUpgrading ? '升级中...' : '静默升级' }}
+            </button>
             <button type="button" class="btn-primary" @click="closeUpgrade">关闭</button>
           </footer>
         </div>
@@ -1405,6 +1428,22 @@ onBeforeUnmount(() => {
 .upgrade-foot .btn-primary:hover {
   background: var(--primary-hover);
   border-color: var(--primary-hover);
+}
+
+.upgrade-foot .btn-silent {
+  background: #1a8754;
+  color: #fff;
+  border-color: #1a8754;
+}
+
+.upgrade-foot .btn-silent:hover {
+  background: #157048;
+  border-color: #157048;
+}
+
+.upgrade-foot .btn-silent:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* 弹层过渡动画 */
