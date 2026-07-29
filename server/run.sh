@@ -48,7 +48,6 @@ check_python() {
 setup_deps() {
     PIP="$PYTHON -m pip"
     PIP_MIRROR="-i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com"
-    # Ubuntu 24.04 PEP 668 限制全局安装，需要 --break-system-packages
     PIP_FLAGS="--break-system-packages"
 
     # 确保 pip 可用
@@ -56,6 +55,35 @@ setup_deps() {
         info "安装 pip..."
         apt-get update -qq 2>/dev/null
         apt-get install -y -qq python3-pip 2>/dev/null || true
+    fi
+
+    # 尝试创建 venv
+    local venv_ok=false
+    if [ ! -f ".venv/bin/activate" ]; then
+        info "尝试创建虚拟环境..."
+        if $PYTHON -m venv .venv 2>/dev/null; then
+            venv_ok=true
+        else
+            # venv 失败，apt-get update 后安装 python3.X-venv
+            local py_ver=$($PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            warn "venv 创建失败，安装 python${py_ver}-venv ..."
+            apt-get update -qq 2>&1
+            apt-get install -y -qq "python${py_ver}-venv" 2>&1 || apt-get install -y -qq python3-venv 2>&1 || true
+            # 重试
+            $PYTHON -m venv .venv 2>/dev/null && venv_ok=true
+        fi
+    else
+        venv_ok=true
+    fi
+
+    if [ "$venv_ok" = true ] && [ -f ".venv/bin/activate" ]; then
+        info "使用虚拟环境 .venv"
+        source .venv/bin/activate
+        PYTHON=python
+        PIP="pip"
+        PIP_FLAGS=""
+    else
+        warn "venv 不可用，使用全局安装（--break-system-packages）"
     fi
 
     # 检查依赖是否已安装
