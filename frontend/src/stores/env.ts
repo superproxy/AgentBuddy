@@ -336,6 +336,15 @@ export const useEnvStore = defineStore('env', () => {
     await runSse('/api/proxy/start', (line) => ui.appendLog(line))
   }
 
+  async function stopProxyServer() {
+    const r = await api<{ ok: boolean; msg?: string; error?: string }>('/api/proxy/stop')
+    if (r.ok) {
+      ui.toast(r.msg || '网关已停止')
+    } else {
+      ui.toast(r.error || '停止失败', 'err')
+    }
+  }
+
   async function verifyLlm(pn: string, proto: string, silent = false) {
     const cfg = envData.llm[pn]?.[proto]
     if (!cfg || !cfg.base_url || !cfg.api_key) {
@@ -638,7 +647,7 @@ export const useEnvStore = defineStore('env', () => {
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
     addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
     isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
-    generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
+    generateProxyConfig, startProxyServer, stopProxyServer, verifyLlm, addSmartProvider,
     cancelSmartPicker, confirmSmartPicker, confirmSmartCustomUrl,
     runSmartDetect, smartFlowAgain, protocolOf, catalogUrlOf,
   }

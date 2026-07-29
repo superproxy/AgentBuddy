@@ -420,6 +420,9 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         flat["LLM_CODEX_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_WIRE_API"] = "responses"
         flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
+        # 网关模式下，Claude 用的 anthropic 标准环境变量也指向网关
+        flat["ANTHROPIC_BASE_URL"] = listener_url
+        flat["ANTHROPIC_AUTH_TOKEN"] = gateway_api_key
         # 网关模型：优先匹配 _active_model 在路由 gateway_model 中，否则取第一条启用路由
         routes = gateway_config.get("routes", [])
         active_model_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
@@ -427,8 +430,10 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                            if isinstance(r, dict) and r.get("enabled", True) and r.get("gateway_model")]
         if active_model_override and active_model_override in gateway_models:
             flat["OPENAI_MODEL"] = active_model_override
+            flat["ANTHROPIC_MODEL"] = active_model_override
         elif gateway_models:
             flat["OPENAI_MODEL"] = gateway_models[0]
+            flat["ANTHROPIC_MODEL"] = gateway_models[0]
     elif active_provider_name and active_provider_name in llm:
         active_provider_data = llm[active_provider_name]
         if isinstance(active_provider_data, dict):

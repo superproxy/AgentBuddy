@@ -116,6 +116,9 @@ def _resolve_project_root() -> Path:
 PROJECT_ROOT = _resolve_project_root()
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
+# 全局：litellm 网关进程引用（供 /api/proxy/stop 使用）
+_proxy_proc = None
+
 
 def _script_run_cmd(script_name: str, args: list) -> list:
     """构建运行 scripts/ 下脚本的命令列表（frozen-aware）。
@@ -4305,10 +4308,59 @@ def start_proxy_sse():
     rel_config = config_path.relative_to(PROJECT_ROOT)
     cmd = f"{litellm_cmd} --config {rel_config} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出
+    def _proxy_stream():
+        # 用全局变量跟踪进程，供 /api/proxy/stop 使用
+        global _proxy_proc
+        cmd_resolved = _login_shell_cmd(cmd)
+        yield f"data: [CMD] {cmd_resolved}\n\n"
+        try:
+            proc = subprocess.Popen(
+                cmd_resolved,
+                shell=True,
+                executable=_shell_executable(),
+                cwd=str(PROJECT_ROOT),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                bufsize=1,
+            )
+            _proxy_proc = proc
+            for line in iter(proc.stdout.readline, ""):
+                if line:
+                    yield f"data: {line.rstrip()}\n\n"
+            proc.wait()
+            yield f"data: [EXIT] returncode={proc.returncode}\n\n"
+        except Exception as e:
+            yield f"data: [ERROR] {e}\n\n"
+        finally:
+            _proxy_proc = None
+        yield "data: [DONE]\n\n"
     return Response(
-        stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
+        stream_with_context(_proxy_stream()),
         mimetype="text/event-stream",
     )
+
+
+@app.route("/api/proxy/stop", methods=["GET"])
+def stop_proxy():
+    """停止 LLM 网关（litellm）进程。"""
+    global _proxy_proc
+    if _proxy_proc is None:
+        return jsonify({"ok": True, "msg": "网关未运行"})
+    try:
+        _proxy_proc.terminate()
+        try:
+            _proxy_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _proxy_proc.kill()
+            _proxy_proc.wait(timeout=3)
+        _proxy_proc = None
+        return jsonify({"ok": True, "msg": "网关已停止"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ============================================================

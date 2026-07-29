@@ -15,7 +15,7 @@ const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
   addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
   isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
-  generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
+  generateProxyConfig, startProxyServer, stopProxyServer, verifyLlm, addSmartProvider,
   fetchEnvVars, setApiKeyFromEnv,
 } = env
 
@@ -79,6 +79,7 @@ function availableModelsFor(pn: string, proto: string): string[] {
 
 async function toggleProxyRun() {
   if (proxyRunning.value) {
+    await stopProxyServer()
     proxyRunning.value = false
     return
   }
