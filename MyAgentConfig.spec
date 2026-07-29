@@ -53,8 +53,8 @@ datas += [
     ('agents/commands', 'agents/commands'),
     ('agents/system-prompts', 'agents/system-prompts'),
     ('ide', 'ide'),
-    ('llm-env-example.yaml', '.'),
-    ('mcp-env-example.yaml', '.'),
+    ('llm-template.yaml', '.'),
+    ('mcp-template.yaml', '.'),
     ('AGENTS.md', '.'),
     # skills 目录较大，单独打包；如有 skills-mapping.csv 也含进 plugins
 ]

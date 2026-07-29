@@ -41,18 +41,18 @@ fi
 echo
 echo "[Step 1/3] 初始化配置文件"
 if [ ! -f "config/llm/llm.yaml" ]; then
-    if [ -f "template/llm/llm-env-example.yaml" ]; then
+    if [ -f "template/llm/llm-template.yaml" ]; then
         mkdir -p config/llm
-        cp "template/llm/llm-env-example.yaml" "config/llm/llm.yaml"
+        cp "template/llm/llm-template.yaml" "config/llm/llm.yaml"
         echo "  [NEW] 已生成 config/llm/llm.yaml（请填入 API Key）"
     fi
 else
     echo "  [OK]  config/llm/llm.yaml 已存在"
 fi
 if [ ! -f "config/mcp/mcp.yaml" ]; then
-    if [ -f "template/mcp/mcp-env-example.yaml" ]; then
+    if [ -f "template/mcp/mcp-template.yaml" ]; then
         mkdir -p config/mcp
-        cp "template/mcp/mcp-env-example.yaml" "config/mcp/mcp.yaml"
+        cp "template/mcp/mcp-template.yaml" "config/mcp/mcp.yaml"
         echo "  [NEW] 已生成 config/mcp/mcp.yaml"
     fi
 else

@@ -87,7 +87,7 @@ class ProviderCatalogTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         root = pathlib.Path(__file__).resolve().parents[1]
-        cls.example = root / "template" / "llm" / "llm-env-example.yaml"
+        cls.example = root / "template" / "llm" / "llm-template.yaml"
         cls.catalog = provider_catalog.load_provider_catalog(cls.example)
 
     def test_catalog_loads_known_providers(self):

@@ -253,10 +253,10 @@ def check_examples_present() -> None:
     base = DIST_DIR / "AgentBuddy" / "_internal"
     # PyInstaller 6.x 把数据放到 _internal/；旧版放到 exe 同级
     candidates = [
-        DIST_DIR / "AgentBuddy" / "template" / "llm" / "llm-env-example.yaml",
-        DIST_DIR / "AgentBuddy" / "template" / "mcp" / "mcp-env-example.yaml",
-        base / "template" / "llm" / "llm-env-example.yaml",
-        base / "template" / "mcp" / "mcp-env-example.yaml",
+        DIST_DIR / "AgentBuddy" / "template" / "llm" / "llm-template.yaml",
+        DIST_DIR / "AgentBuddy" / "template" / "mcp" / "mcp-template.yaml",
+        base / "template" / "llm" / "llm-template.yaml",
+        base / "template" / "mcp" / "mcp-template.yaml",
     ]
     found = [c for c in candidates if c.exists()]
     if not found:

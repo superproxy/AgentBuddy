@@ -1,4 +1,4 @@
-"""LLM Provider Catalog：从 llm-env-example.yaml 构建预设，并按 key/URL 推断厂商+协议。
+"""LLM Provider Catalog：从 llm-template.yaml 构建预设，并按 key/URL 推断厂商+协议。
 
 对齐 OpenClaw 配置管道思路：
   Catalog（模板预设）→ Detect（Key 指纹 / URL）→（模糊时端点探测）→ Apply → Verify
@@ -635,7 +635,7 @@ def infer_protocol(
 
 
 def load_provider_catalog(example_path: Path) -> List[Dict[str, Any]]:
-    """从 llm-env-example.yaml 解析 provider 预设列表。"""
+    """从 llm-template.yaml 解析 provider 预设列表。"""
     if not example_path.exists():
         return []
     data = load_env_config_file(example_path) or {}

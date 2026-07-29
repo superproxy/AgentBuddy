@@ -41,21 +41,21 @@ REM === Bootstrap config files from templates (first run) ===
 echo.
 echo [Step 1/3] Init config files
 if not exist "config\llm\llm.yaml" (
-    if exist "template\llm\llm-env-example.yaml" (
-        copy "template\llm\llm-env-example.yaml" "config\llm\llm.yaml" >nul
+    if exist "template\llm\llm-template.yaml" (
+        copy "template\llm\llm-template.yaml" "config\llm\llm.yaml" >nul
         echo   [NEW] config\llm\llm.yaml created (fill in your API Key)
     ) else (
-        echo   [WARN] template\llm\llm-env-example.yaml not found
+        echo   [WARN] template\llm\llm-template.yaml not found
     )
 ) else (
     echo   [OK]  config\llm\llm.yaml exists
 )
 if not exist "config\mcp\mcp.yaml" (
-    if exist "template\mcp\mcp-env-example.yaml" (
-        copy "template\mcp\mcp-env-example.yaml" "config\mcp\mcp.yaml" >nul
+    if exist "template\mcp\mcp-template.yaml" (
+        copy "template\mcp\mcp-template.yaml" "config\mcp\mcp.yaml" >nul
         echo   [NEW] config\mcp\mcp.yaml created
     ) else (
-        echo   [WARN] template\mcp\mcp-env-example.yaml not found
+        echo   [WARN] template\mcp\mcp-template.yaml not found
     )
 ) else (
     echo   [OK]  config\mcp\mcp.yaml exists

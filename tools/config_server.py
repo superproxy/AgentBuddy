@@ -219,8 +219,8 @@ KEYS_FILE_LEGACY = PROJECT_ROOT / "config" / "mcp" / "keys.yaml"
 # 旧路径2：config/keys/keys.yaml → config/keys.yaml（曾用 keys/ 子目录存放）
 KEYS_FILE_LEGACY_2 = PROJECT_ROOT / "config" / "keys" / "keys.yaml"
 # 拆分后的示例模板（可安全提交）
-LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
-MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
+LLM_EXAMPLE = PROJECT_ROOT / "template" / "llm" / "llm-template.yaml"
+MCP_CONFIG_EXAMPLE = PROJECT_ROOT / "template" / "mcp" / "mcp-template.yaml"
 MCP_TEMPLATE = PROJECT_ROOT / "template" / "mcp" / "mcp.template.json"
 PLUGINS_DIR = PROJECT_ROOT / "template" / "plugins"
 CONFIG_PLUGINS_DIR = PROJECT_ROOT / "config" / "plugins"
@@ -341,7 +341,7 @@ def _ensure_llm_file() -> Path:
     """确保 llm.yaml 存在。
     优先级：
       1. llm.yaml 已存在 → 迁移旧 env:VAR 语法后返回
-      2. llm-env-example.yaml 存在 → 直接复制（推荐方式）
+      2. llm-template.yaml 存在 → 直接复制（推荐方式）
       3. env.yaml / env.example.yaml 存在 → 从中拆出 llm/embedding/tts/asr/vision/misc 部分（向后兼容）
       4. 创建空模板
     """
@@ -381,7 +381,7 @@ def _ensure_mcp_config_file() -> Path:
     """确保 mcp.yaml 存在（统一存放 mcpServers 服务定义 + mcp 密钥）。
     优先级：
       1. mcp.yaml 已存在 → 直接返回
-      2. mcp-env-example.yaml 存在 → 直接复制（推荐方式）
+      2. mcp-template.yaml 存在 → 直接复制（推荐方式）
       3. env.yaml / env.example.yaml 存在 → 从中拆出 mcp 部分（向后兼容）
       4. 创建空模板
     """
@@ -909,7 +909,7 @@ def save_llm():
 
 @app.route("/api/llm/catalog", methods=["GET"])
 def get_llm_catalog():
-    """返回 llm-env-example.yaml 中的 Provider Catalog（预设 base_url / models）。"""
+    """返回 llm-template.yaml 中的 Provider Catalog（预设 base_url / models）。"""
     try:
         catalog = load_provider_catalog(LLM_EXAMPLE)
         return jsonify({"ok": True, "catalog": catalog, "count": len(catalog)})

@@ -209,7 +209,7 @@ def cmd_sync(args):
     plugins_dir = PROJECT_ROOT / "template" / "plugins"
 
     # 首次运行时从模板生成 mcp.yaml / llm.yaml（与 config_server._ensure_* 一致）
-    mcp_example = PROJECT_ROOT / "template" / "mcp" / "mcp-env-example.yaml"
+    mcp_example = PROJECT_ROOT / "template" / "mcp" / "mcp-template.yaml"
     if not mcp_yaml_file.exists() and mcp_example.exists():
         mcp_yaml_file.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -219,7 +219,7 @@ def cmd_sync(args):
         except Exception as e:
             hint(f"[WARN] 创建 mcp.yaml 失败: {e}")
     llm_yaml_file = PROJECT_ROOT / "config" / "llm" / "llm.yaml"
-    llm_example = PROJECT_ROOT / "template" / "llm" / "llm-env-example.yaml"
+    llm_example = PROJECT_ROOT / "template" / "llm" / "llm-template.yaml"
     if not llm_yaml_file.exists() and llm_example.exists():
         llm_yaml_file.parent.mkdir(parents=True, exist_ok=True)
         try:
