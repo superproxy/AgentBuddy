@@ -246,6 +246,38 @@ def cmd_sync(args):
                 pass
         mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
 
+    # sync 前自动 generate：重新生成 codex config.toml / auth.json / claude settings / proxy config 等
+    # 这样 sync 到 IDE 的配置始终是最新的
+    if "llm" in scope and llm_yaml_file.exists():
+        try:
+            env_config = llm.load_split_env_config(PROJECT_ROOT)
+            active_provider = llm.get_active_provider(env_config)
+            active_protocols = llm.get_active_protocols(env_config)
+            flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols)
+
+            # Codex 专用 flat_config（responses 协议）
+            codex_protocols = get_ide_protocols("Codex")
+            codex_flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols,
+                                                       ide_protocols=codex_protocols)
+            codex_config_template = PROJECT_ROOT / "template" / "ide" / "codex" / "config.template.toml"
+            codex_config_output = PROJECT_ROOT / "config" / "ide" / "codex" / "config.toml"
+            if codex_config_template.exists():
+                codex_config_output.parent.mkdir(parents=True, exist_ok=True)
+                mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
+            codex_auth_template = PROJECT_ROOT / "template" / "ide" / "codex" / "auth.template.json"
+            codex_auth_output = PROJECT_ROOT / "config" / "ide" / "codex" / "auth.json"
+            if codex_auth_template.exists():
+                mcp.invoke_generate_step(codex_flat_config, codex_auth_template, codex_auth_output)
+
+            # proxy config.yaml
+            proxy_template = PROJECT_ROOT / "template" / "proxy" / "config.template.yaml"
+            proxy_output = PROJECT_ROOT / "config" / "proxy" / "config.yaml"
+            if proxy_template.exists():
+                proxy_output.parent.mkdir(parents=True, exist_ok=True)
+                mcp.invoke_generate_step(flat_config, proxy_template, proxy_output, prune=False)
+        except Exception as e:
+            hint(f"[WARN] generate 步骤失败: {e}")
+
     # skill 源（三源并集）:
     #   1. template/skills/   - 内置预置技能（只读）
     #   2. .agents/skills/     - 项目级安装的技能（下载/插件）

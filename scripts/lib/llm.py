@@ -211,6 +211,14 @@ def build_proxy_model_list(env_config: dict) -> str:
                 if isinstance(protocol, dict):
                     base_url = protocol.get("base_url", "")
                     api_key = protocol.get("api_key", "")
+                # 回退：指定协议无 base_url 时，尝试 openaiv1/openai/anthropic
+                if not base_url and not _is_flat_provider(provider):
+                    for fallback_proto in ("openaiv1", "openai", "anthropic"):
+                        fb = provider.get(fallback_proto, {})
+                        if isinstance(fb, dict) and fb.get("base_url"):
+                            base_url = fb.get("base_url", "")
+                            api_key = fb.get("api_key", "")
+                            break
 
         if not base_url:
             continue
