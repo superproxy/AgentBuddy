@@ -44,13 +44,24 @@ check_python() {
 
 # === 创建虚拟环境 + 安装依赖 ===
 setup_venv() {
-    if [ ! -d "$VENV_DIR" ]; then
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
         info "创建虚拟环境 $VENV_DIR ..."
-        $PYTHON -m venv "$VENV_DIR"
+        if ! $PYTHON -m venv "$VENV_DIR" 2>&1; then
+            error "虚拟环境创建失败，尝试安装 python3-venv..."
+            # Ubuntu/Debian 需要 python3-venv 包
+            apt-get update -qq && apt-get install -y -qq python3-venv 2>/dev/null || true
+            $PYTHON -m venv "$VENV_DIR" || {
+                error "虚拟环境创建失败，请手动执行: python3 -m venv $VENV_DIR"
+                exit 1
+            }
+        fi
     fi
 
     # 激活虚拟环境
-    source "$VENV_DIR/bin/activate"
+    source "$VENV_DIR/bin/activate" || {
+        error "激活虚拟环境失败"
+        exit 1
+    }
 
     # 检查依赖是否已安装
     if ! python -c "import flask" 2>/dev/null; then
