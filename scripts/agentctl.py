@@ -59,10 +59,9 @@ PROJECT_ROOT = _resolve_project_root()
 def _append_codex_candidate_providers(config_path, env_config, active_provider):
     """在 codex config.toml 末尾追加其他启用的 provider 作为候选 model_providers。
 
-    active provider 已在模板中生成，这里只追加非 active 的启用 provider。
-    每个 provider 优先用 responses 协议，回退到 openaiv1。
+    只同步有 responses 协议且启用的 provider。active provider 已在模板中生成。
     """
-    from lib.llm import _merge_base, _is_flat_provider
+    from lib.llm import _merge_base
 
     llm = env_config.get("llm", {})
     if not isinstance(llm, dict):
@@ -80,15 +79,12 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
             continue  # active provider 已在模板中
 
         merged = _merge_base(provider_value)
-        # 优先 responses 协议，回退 openaiv1
-        proto_config = None
-        if isinstance(merged, dict):
-            proto_config = merged.get("responses") or merged.get("openaiv1") or merged.get("openai")
+        # 只同步有 responses 协议的 provider
+        proto_config = merged.get("responses") if isinstance(merged, dict) else None
         if not isinstance(proto_config, dict):
             continue
 
-        base_url = proto_config.get("base_url", "")
-        api_key = proto_config.get("api_key", "")
+        base_url = str(proto_config.get("base_url", "")).strip().strip("`").strip()
         if not base_url:
             continue
 
@@ -100,7 +96,7 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
 
     if lines:
         with open(config_path, "a", encoding="utf-8") as f:
-            f.write("\n# --- 候选 providers（启用的非默认 provider）---\n")
+            f.write("\n# --- candidate providers (enabled, non-default) ---\n")
             f.write("\n".join(lines) + "\n")
 
 
