@@ -47,11 +47,17 @@ setup_venv() {
     if [ ! -f "$VENV_DIR/bin/activate" ]; then
         info "创建虚拟环境 $VENV_DIR ..."
         if ! $PYTHON -m venv "$VENV_DIR" 2>&1; then
-            error "虚拟环境创建失败，尝试安装 python3-venv..."
-            # Ubuntu/Debian 需要 python3-venv 包
-            apt-get update -qq && apt-get install -y -qq python3-venv 2>/dev/null || true
+            # 检测 Python 版本，安装对应的 venv 包
+            local py_ver=$($PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+            local venv_pkg="python${py_ver}-venv"
+            error "虚拟环境创建失败，尝试安装 $venv_pkg ..."
+            apt-get update -qq 2>/dev/null
+            apt-get install -y -qq "$venv_pkg" 2>/dev/null || apt-get install -y -qq python3-venv 2>/dev/null || true
+            # 重试创建
             $PYTHON -m venv "$VENV_DIR" || {
-                error "虚拟环境创建失败，请手动执行: python3 -m venv $VENV_DIR"
+                error "虚拟环境创建失败，请手动执行:"
+                error "  apt install $venv_pkg"
+                error "  $PYTHON -m venv $VENV_DIR"
                 exit 1
             }
         fi
