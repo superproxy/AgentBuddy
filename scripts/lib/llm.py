@@ -206,6 +206,7 @@ def build_proxy_model_list(env_config: dict) -> str:
         if not base_url:
             provider = llm.get(provider_name, {})
             if isinstance(provider, dict):
+                provider = _merge_base(provider)
                 protocol = provider if _is_flat_provider(provider) else provider.get(protocol_name, {})
                 if isinstance(protocol, dict):
                     base_url = protocol.get("base_url", "")
@@ -230,7 +231,29 @@ def build_proxy_model_list(env_config: dict) -> str:
 
 
 def _is_flat_provider(provider_value: dict) -> bool:
-    return any(k in DIRECT_FIELD_KEYS for k in provider_value)
+    # _base 不算 flat provider 的标志
+    return any(k in DIRECT_FIELD_KEYS for k in provider_value if not k.startswith("_"))
+
+
+def _merge_base(provider_value: dict) -> dict:
+    """将 _base 字段合并到各协议（协议自身字段优先）。"""
+    if not isinstance(provider_value, dict):
+        return provider_value
+    base = provider_value.get("_base")
+    if not isinstance(base, dict) or not base:
+        return provider_value
+    merged = {}
+    for k, v in provider_value.items():
+        if k == "_base":
+            continue
+        if k.startswith("_"):
+            merged[k] = v
+            continue
+        if isinstance(v, dict):
+            merged[k] = {**base, **v}
+        else:
+            merged[k] = v
+    return merged
 
 
 def flatten_env_config(env_config: dict, active_provider: str, active_protocols: list[str],
@@ -268,6 +291,9 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             if not isinstance(provider_value, dict):
                 continue
             is_active = provider_name == active_provider
+
+            # 合并 _base 到各协议
+            provider_value = _merge_base(provider_value)
 
             if _is_flat_provider(provider_value):
                 flat_protocol_name = provider_name
@@ -398,6 +424,8 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
     elif active_provider_name and active_provider_name in llm:
         active_provider_data = llm[active_provider_name]
         if isinstance(active_provider_data, dict):
+            # 合并 _base 到各协议
+            active_provider_data = _merge_base(active_provider_data)
             # 查找用于 LLM_ACTIVE_BASE_URL/API_KEY 的协议配置
             # 优先级：ide_protocols 指定的协议 > openaiv1 > openai(旧) > responses
             active_config = None

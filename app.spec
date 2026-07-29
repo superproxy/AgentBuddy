@@ -84,6 +84,12 @@ hiddenimports = [
     'openai',
     'marketplace', 'marketplace.routes', 'marketplace.storage',
     'ai_generator', 'ai_generator.generator',
+    # LLM 网关代理（litellm 动态导入多，需显式声明）
+    'litellm',
+    'litellm.proxy',
+    'litellm.proxy.proxy_server',
+    'litellm.main',
+    'litellm.utils',
 ]
 
 a = Analysis(

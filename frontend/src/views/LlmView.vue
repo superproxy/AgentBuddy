@@ -13,7 +13,7 @@ const { envData, envDataText, selectedProvider, providerNames, enabledProviderNa
 const { isProviderEnabled, toggleProviderEnabled } = env
 const {
   selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
-  addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
+  addProtocol, deleteProtocol, toggleProtocol, hasProtocol, addModel, deleteModel, renameModel, saveEnv,
   isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
   generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
   fetchEnvVars, setApiKeyFromEnv,
@@ -28,6 +28,22 @@ function protocolSortKey(proto: string): number {
   const idx = PROTOCOL_ORDER.indexOf(proto)
   return idx >= 0 ? idx : PROTOCOL_ORDER.length
 }
+
+/* ============ _base 基础配置 ============ */
+const ALL_PROTOCOLS = ['openaiv1', 'responses', 'anthropic']
+const PROTOCOL_LABELS: Record<string, string> = {
+  openaiv1: 'OpenAI (Chat)',
+  responses: 'Responses API',
+  anthropic: 'Anthropic',
+}
+
+const providerBase = computed(() => {
+  const pn = selectedProvider.value
+  if (!pn || !envData.value.llm?.[pn]) return null
+  const p = envData.value.llm[pn]
+  if (!p._base) p._base = { api_key: '', base_url: '' }
+  return p._base
+})
 
 /* ============ 协议折叠状态 ============ */
 const collapsedProtocols = ref<Record<string, boolean>>({})
@@ -511,6 +527,65 @@ function clearEnvRef() {
           </div>
 
           <div class="px-[18px] py-4 pb-5 grid gap-3.5 overflow-auto">
+            <!-- 基础配置（_base：共享 api_key / base_url） -->
+            <div v-if="providerBase" class="border border-brand-200 rounded-xl bg-gradient-to-b from-brand-50/60 to-white overflow-hidden">
+              <div class="flex items-center gap-2 px-3.5 py-2.5 border-b border-brand-100">
+                <svg class="w-3.5 h-3.5 text-brand-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+                <h3 class="m-0 text-[12px] font-semibold tracking-wider uppercase text-brand-700">基础配置</h3>
+                <span class="text-[10px] text-ink-500">共享到所有协议</span>
+              </div>
+              <div class="px-3.5 py-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="flex flex-col gap-1">
+                  <label class="text-[11px] font-medium text-ink-700">base_url</label>
+                  <input v-model="providerBase.base_url" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" placeholder="https://api.example.com/v1" />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-[11px] font-medium text-ink-700 flex items-center justify-between">
+                    <span>api_key</span>
+                    <span
+                      v-if="isEnvRef(providerBase.api_key)"
+                      class="text-[10px] font-semibold text-emerald-600"
+                    >环境变量引用</span>
+                  </label>
+                  <div class="relative flex items-center">
+                    <input
+                      :type="isKeyVisible(selectedProvider, '_base') ? 'text' : 'password'"
+                      v-model="providerBase.api_key"
+                      :placeholder="isEnvRef(providerBase.api_key) ? '${VAR_NAME}' : 'sk-...'"
+                      class="w-full px-2.5 py-2 pr-10 text-xs border border-ink-300 rounded-lg font-mono"
+                      :class="{ 'border-emerald-300 bg-emerald-50/40': isEnvRef(providerBase.api_key) }"
+                    />
+                    <button
+                      type="button"
+                      :aria-label="isKeyVisible(selectedProvider, '_base') ? '隐藏' : '显示'"
+                      @click="toggleKeyVisible(selectedProvider, '_base')"
+                      class="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-700 transition"
+                    >
+                      <svg v-if="isKeyVisible(selectedProvider, '_base')" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                      <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <!-- 协议勾选 -->
+              <div class="px-3.5 pb-3 flex items-center gap-3 flex-wrap">
+                <span class="text-[11px] font-medium text-ink-700">支持协议:</span>
+                <label
+                  v-for="proto in ALL_PROTOCOLS"
+                  :key="proto"
+                  class="inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="hasProtocol(selectedProvider, proto)"
+                    @change="toggleProtocol(selectedProvider, proto); autoSave()"
+                    class="w-3.5 h-3.5 rounded border-ink-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  <span class="text-[11px] font-medium text-ink-700">{{ PROTOCOL_LABELS[proto] || proto }}</span>
+                </label>
+              </div>
+            </div>
+
             <div
               v-for="proto in selectedProtocols"
               :key="proto"
@@ -531,52 +606,7 @@ function clearEnvRef() {
                 >删除协议</button>
               </div>
               <div v-show="!isProtocolCollapsed(proto)" class="px-3.5 pb-3.5">
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-2.5">
-                <div class="flex flex-col gap-1">
-                  <label class="text-[11px] font-medium text-ink-700">base_url</label>
-                  <input v-model="envData.llm[selectedProvider][proto].base_url" class="w-full px-2.5 py-2 text-xs border border-ink-300 rounded-lg font-mono" />
-                </div>
-                <div class="flex flex-col gap-1">
-                  <label class="text-[11px] font-medium text-ink-700 flex items-center justify-between">
-                    <span>api_key</span>
-                    <span
-                      v-if="isEnvRef(envData.llm[selectedProvider][proto].api_key)"
-                      class="text-[10px] font-semibold text-emerald-600"
-                    >环境变量引用</span>
-                  </label>
-                  <div class="relative flex items-center">
-                    <input
-                      :type="isKeyVisible(selectedProvider, proto) ? 'text' : 'password'"
-                      v-model="envData.llm[selectedProvider][proto].api_key"
-                      :placeholder="isEnvRef(envData.llm[selectedProvider][proto].api_key) ? '${VAR_NAME}' : 'sk-...'"
-                      class="w-full px-2.5 py-2 pr-20 text-xs border border-ink-300 rounded-lg font-mono"
-                      :class="{ 'border-emerald-300 bg-emerald-50/40': isEnvRef(envData.llm[selectedProvider][proto].api_key) }"
-                    />
-                    <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                      <button
-                        type="button"
-                        :aria-label="isKeyVisible(selectedProvider, proto) ? '隐藏' : '显示'"
-                        :title="isKeyVisible(selectedProvider, proto) ? '隐藏密钥' : '查看密钥'"
-                        @click="toggleKeyVisible(selectedProvider, proto)"
-                        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-700 transition"
-                      >
-                        <svg v-if="isKeyVisible(selectedProvider, proto)" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                        <svg v-else class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="从环境变量选择"
-                        title="从环境变量选择"
-                        @click="openEnvVarPicker(selectedProvider, proto)"
-                        class="inline-flex items-center justify-center w-7 h-7 rounded-md text-ink-500 hover:bg-brand-50 hover:text-brand-600 transition"
-                      >
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <table class="w-full text-xs border-collapse mt-2.5 bg-white rounded-lg overflow-hidden border border-ink-300/80">
+              <table class="w-full text-xs border-collapse bg-white rounded-lg overflow-hidden border border-ink-300/80">
                 <thead>
                   <tr>
                     <th class="px-2.5 py-2 w-8 bg-ink-100">
@@ -662,15 +692,6 @@ function clearEnvRef() {
               </div>
               </div>
             </div>
-
-            <button
-              type="button"
-              @click="addProtocol(selectedProvider)"
-              class="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11.5px] font-semibold rounded-lg bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 justify-self-start transition"
-            >
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-              添加协议
-            </button>
           </div>
         </template>
 

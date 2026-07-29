@@ -211,7 +211,7 @@ export const useEnvStore = defineStore('env', () => {
     })
     if (!name) return
     const t = name.trim()
-    envData.llm[t] = { openaiv1: { base_url: '', api_key: '', models: {} } }
+    envData.llm[t] = { _base: { api_key: '', base_url: '' }, openaiv1: { models: {} } }
     if (!envData.llm._active_provider) envData.llm._active_provider = t
     selectProvider(t)
     ui.toast('已添加 Provider: ' + t)
@@ -253,7 +253,17 @@ export const useEnvStore = defineStore('env', () => {
     })
     if (!proto) return
     const t = proto.trim().toLowerCase()
-    envData.llm[pn][t] = { base_url: '', api_key: '', models: {} }
+    envData.llm[pn][t] = { models: {} }
+  }
+  function toggleProtocol(pn: string, proto: string) {
+    if (envData.llm[pn]?.[proto]) {
+      delete envData.llm[pn][proto]
+    } else {
+      envData.llm[pn][proto] = { models: {} }
+    }
+  }
+  function hasProtocol(pn: string, proto: string): boolean {
+    return !!envData.llm[pn]?.[proto]
   }
   async function deleteProtocol(pn: string, proto: string) {
     const ok = await ui.askConfirm({
@@ -636,7 +646,7 @@ export const useEnvStore = defineStore('env', () => {
     smartFlow, smartPicker, smartBusy,
     envVars, envVarsBusy, fetchEnvVars, setApiKeyFromEnv,
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
-    addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
+    addProtocol, deleteProtocol, toggleProtocol, hasProtocol, addModel, deleteModel, renameModel, saveEnv,
     isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
     generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
     cancelSmartPicker, confirmSmartPicker, confirmSmartCustomUrl,
