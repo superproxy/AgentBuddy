@@ -11,6 +11,94 @@
 
 > 原 AGENTS.md（仓库级治理文档）已备份为 `AGENTS.old.md`，含业务角色路由 / Rules / MCP / Skills 矩阵。
 
+---
+
+## 开发规范（强制）
+
+> 以下规范由近期反复出现的低级问题沉淀而来，**发布前必须逐条检查**。
+
+### 1. generate ≠ sync — 配置变更后两步缺一不可
+
+**问题**：修改 LLM 配置后只 generate（生成到 `config/ide/`），不 sync（同步到 `~/.codex/` `~/.claude/` 等），导致 IDE 不生效。
+
+**规则**：
+- `/api/init-env`（自动保存触发）必须执行 `agentctl generate` + `agentctl sync --ide All --force --scope llm,mcp`
+- `/api/init-ide`（手动同步触发）必须先 generate 再 sync（已在 `agentctl sync` 内置）
+- 任何修改 `config/llm/llm.yaml` 或 `config/mcp/mcp.yaml` 的 API，返回前必须触发 generate + sync
+
+### 2. 打包模式检测 — 不能用子进程执行 Python 代码
+
+**问题**：打包后 `AgentBuddy.exe -c "import litellm"` 失败，PyInstaller exe 不是标准 Python 解释器。
+
+**规则**：
+- `getattr(sys, "frozen", False)` 为 True 时，**直接在当前进程 `import`** 检测库是否可用
+- 子进程检测仅用于开发模式（`sys.executable` 是真实 Python 解释器）
+- 启动打包内嵌的 Python 模块用 `python -m <module>`，不用 PATH 中的 CLI 命令
+
+### 3. 第三方库版本属性 — 不要假设 `__version__`
+
+**问题**：`litellm.__version__` 不存在（litellm 1.93.0 用 `litellm._version.version`），导致检测永远失败。
+
+**规则**：
+- 检测第三方库时，`import` 成功即可，版本号用 `importlib.metadata.version("pkg_name")` 获取
+- 不要假设库有 `__version__` 属性，先 `hasattr` 检查或 try/except
+- 子进程检测的 timeout 要留足（litellm import 需 10-20 秒），至少 30 秒
+
+### 4. PyInstaller 打包 — 用 collect_submodules 自动收集
+
+**问题**：手动列举 litellm 子模块（5 个），遗漏了 40+ 个动态导入的子模块。
+
+**规则**：
+- `app.spec` 中对大型库（litellm / fastapi 等）用 `collect_submodules('pkg')` + `collect_data_files('pkg')` 自动收集
+- 不要手动列举子模块，维护成本高且容易遗漏
+- 新增 Python 依赖时，检查是否需要加入 `hiddenimports`
+
+### 5. 路径 — 日志和命令中不暴露开发目录绝对路径
+
+**问题**：打包后日志显示 `D:\yxz\MyAgentPlugin\config\proxy\config.yaml`，暴露开发目录。
+
+**规则**：
+- 命令中使用相对路径（如 `config/proxy/config.yaml`），配合 `cwd=PROJECT_ROOT` 执行
+- 日志输出前用 `Path.relative_to(PROJECT_ROOT)` 转相对路径
+- 例外：用户需要看到的配置文件路径（如"已生成: config/ide/codex/config.toml"）用相对路径
+
+### 6. 模板占位符 — generate 后必须验证无残留
+
+**问题**：网关模式下 `ANTHROPIC_BASE_URL` 等变量未设置，`settings.json` 中残留 `${VAR}`。
+
+**规则**：
+- `agentctl generate` 后检查所有产物中是否残留 `${` 占位符
+- 网关模式下，`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` 必须指向网关地址
+- 新增模板变量时，同步在 `flatten_env_config` 中设置对应的 flat key
+
+### 7. 发布前验证清单（强制）
+
+每次打 tag 发布前，**必须执行以下验证**：
+
+```bash
+# 1. generate + sync 全流程
+python scripts/agentctl.py generate
+python scripts/agentctl.py sync --ide All --force --scope llm,mcp,skill,rules
+
+# 2. 检查产物无占位符残留
+# codex
+grep '\${' config/ide/codex/config.toml config/ide/codex/auth.json
+# claude
+grep '\${' config/ide/claude/settings.json
+# proxy
+grep '\${' config/proxy/config.yaml
+
+# 3. 检查关键配置项
+# codex config.toml: wire_api = "responses"
+# claude settings.json: ANTHROPIC_BASE_URL 已填充
+# proxy config.yaml: 路由条目正确
+
+# 4. 前端构建
+cd frontend && npx vite build
+```
+
+以上验证全部通过后，方可 `git tag` 发布。
+
 ## 文档导航
 
 | 文档 | 内容 |
