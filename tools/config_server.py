@@ -3845,6 +3845,27 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
     return (jsonify(result), 200)
 
 
+@app.route("/api/plugin/save-ai", methods=["POST"])
+def save_ai_plugin():
+    """保存 AI 生成的插件 yaml 到本地。Body: {content: <yaml>}"""
+    body = request.get_json(force=True)
+    content = (body.get("content") or "").strip()
+    if not content:
+        return jsonify({"ok": False, "error": "缺少 content"}), 400
+    try:
+        data = yaml.safe_load(content)
+        if not isinstance(data, dict) or not data.get("name"):
+            return jsonify({"ok": False, "error": "无效的 plugin.yaml（缺少 name）"}), 400
+        safe_name = "".join(c for c in data["name"] if c.isalnum() or c in ("-", "_"))
+        out_path = CONFIG_PLUGINS_DIR / f"{safe_name}.plugin.yaml"
+        CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+        return jsonify({"ok": True, "path": str(out_path.relative_to(PROJECT_ROOT)),
+                        "name": data["name"]})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/plugin/import", methods=["POST"])
 def import_plugin():
     """导入插件（支持 zip 包或 yaml 文本）。
@@ -5873,22 +5894,9 @@ def sync_subagent():
 
 
 # ============================================================
-# 自建插件市场（Blueprint：server/marketplace/）
+# 插件市场 + AI 生成 — 已迁移到 server/ 独立部署
+# 桌面应用通过 HTTP 调用远程 server 服务
 # ============================================================
-# 将市场逻辑迁移到独立模块 server/marketplace/，通过依赖注入复用 config_server 的辅助函数
-sys.path.insert(0, str(PROJECT_ROOT / "server"))
-from marketplace import create_marketplace_bp
-
-marketplace_bp = create_marketplace_bp(
-    marketplace_dir=MARKETPLACE_DIR,
-    resolve_plugin_path=_resolve_plugin_path,
-    load_env_config_file=load_env_config_file,
-    collect_plugin_skill_dirs=_collect_plugin_skill_dirs,
-    add_plugin_extras_to_zip=_add_plugin_extras_to_zip,
-    import_plugin_zip=_import_plugin_zip,
-    add_dir_to_zip=_add_dir_to_zip,
-)
-app.register_blueprint(marketplace_bp, url_prefix="/api/marketplace")
 
 
 # ============================================================
@@ -5999,116 +6007,6 @@ def terminal_status():
     return jsonify({"ok": True, "running": running,
                     "port": TTYD_PORT if running else None,
                     "url": f"http://127.0.0.1:{TTYD_PORT}" if running else None})
-
-
-# ============================================================
-# AI 插件生成（server/ai_generator/）
-# ============================================================
-@app.route("/api/ai/generate", methods=["GET"])
-def ai_generate():
-    """AI 生成插件配置。SSE 流式输出。
-
-    Query: prompt=<用户需求描述>
-    """
-    prompt = (request.args.get("prompt") or "").strip()
-    if not prompt:
-        return jsonify({"ok": False, "error": "缺少 prompt 参数"}), 400
-    model = (request.args.get("model") or "").strip()
-    level = (request.args.get("level") or "").strip()
-
-    def generate():
-        from ai_generator.generator import generate_plugin
-        for chunk in generate_plugin(prompt, PROJECT_ROOT, preferred_model=model, level=level):
-            # SSE data: 行不能含换行符，多行内容需逐行发送
-            for line in chunk.split("\n"):
-                yield f"data: {line}\n\n"
-
-    return Response(stream_with_context(generate()),
-                    mimetype="text/event-stream")
-
-
-@app.route("/api/ai/save", methods=["POST"])
-def ai_save():
-    """保存 AI 生成的插件配置。Body: {content: <yaml字符串>}"""
-    body = request.get_json(force=True)
-    content = (body.get("content") or "").strip()
-    if not content:
-        return jsonify({"ok": False, "error": "缺少 content"}), 400
-    try:
-        data = yaml.safe_load(content)
-        if not isinstance(data, dict) or not data.get("name"):
-            return jsonify({"ok": False, "error": "无效的 plugin.yaml（缺少 name）"}), 400
-        safe_name = "".join(c for c in data["name"] if c.isalnum() or c in ("-", "_"))
-        out_path = CONFIG_PLUGINS_DIR / f"{safe_name}.plugin.yaml"
-        CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(content, encoding="utf-8")
-        return jsonify({"ok": True, "path": str(out_path.relative_to(PROJECT_ROOT)),
-                        "name": data["name"]})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@app.route("/api/ai/chat", methods=["POST"])
-def ai_chat():
-    """AI 多轮对话生成插件。SSE 流式输出。
-
-    Body: {session_id?, message, level?, model?}
-    - 首次对话不传 session_id，后端创建新会话
-    - 后续对话传 session_id 继续会话
-    """
-    body = request.get_json(force=True)
-    message = (body.get("message") or "").strip()
-    if not message:
-        return jsonify({"ok": False, "error": "缺少 message"}), 400
-
-    session_id = (body.get("session_id") or "").strip()
-    level = (body.get("level") or "").strip()
-    model = (body.get("model") or "").strip() or "glm-5-2-260617"
-
-    from ai_generator.generator import (
-        create_session, generate_plugin_chat, clear_session, get_session_config
-    )
-
-    # 创建或复用会话
-    if not session_id or not get_session_config and session_id:
-        session_id = create_session(level=level)
-    else:
-        # 检查会话是否存在
-        from ai_generator.generator import get_session
-        if not get_session(session_id):
-            session_id = create_session(level=level)
-
-    def generate():
-        for chunk in generate_plugin_chat(session_id, message, PROJECT_ROOT, preferred_model=model):
-            for line in chunk.split("\n"):
-                yield f"data: {line}\n\n"
-
-    # 在第一个 data 之前发送 session_id
-    def generate_with_session():
-        yield f"data: [SESSION] {session_id}\n\n"
-        yield from generate()
-
-    return Response(stream_with_context(generate_with_session()),
-                    mimetype="text/event-stream")
-
-
-@app.route("/api/ai/session/<session_id>/config", methods=["GET"])
-def ai_session_config(session_id: str):
-    """获取会话中最新的生成配置。"""
-    from ai_generator.generator import get_session_config
-    config = get_session_config(session_id)
-    if config:
-        return jsonify({"ok": True, "content": config})
-    return jsonify({"ok": False, "error": "会话中暂无配置"}), 404
-
-
-@app.route("/api/ai/session/<session_id>", methods=["DELETE"])
-def ai_session_clear(session_id: str):
-    """清除会话。"""
-    from ai_generator.generator import clear_session
-    if clear_session(session_id):
-        return jsonify({"ok": True})
-    return jsonify({"ok": False, "error": "会话不存在"}), 404
 
 
 if __name__ == "__main__":

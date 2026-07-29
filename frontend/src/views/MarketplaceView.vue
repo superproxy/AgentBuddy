@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { usePluginStore } from '../stores/plugin'
+import { serverApi } from '../api/client'
 
 const mkt = useMarketplaceStore()
 const { items, loading, searchQuery, installing, isMock } = storeToRefs(mkt)
@@ -310,7 +311,7 @@ onMounted(() => {
               <a
                 v-if="!isMock"
                 class="mkt-btn mkt-btn-ghost"
-                :href="'/api/marketplace/download?id=' + encodeURIComponent(item.id)"
+                :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(item.id))"
               >下载</a>
               <button
                 v-else

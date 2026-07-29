@@ -1,39 +1,23 @@
 """插件市场 API 路由（Flask Blueprint）。
 
-通过 create_marketplace_bp() 创建并注入依赖，挂载到 /api/marketplace/*。
-
-依赖注入的回调函数（来自 config_server.py）：
-    resolve_plugin_path(fname) -> Path | None
-    load_env_config_file(path) -> dict
-    collect_plugin_skill_dirs(cfg) -> list[tuple[str, Path]]
-    add_plugin_extras_to_zip(zf, cfg, seen) -> None
-    import_plugin_zip(buf, overwrite) -> tuple
+独立部署模式：不依赖 config_server.py 的辅助函数。
+publish 接收客户端打包好的 zip 文件上传。
 """
 import io
-import json
-import shutil
 import zipfile
 from pathlib import Path
 
+import yaml
 from flask import Blueprint, jsonify, request, send_file
 
 from .storage import load_index, save_index, now_iso
 
 
-def create_marketplace_bp(
-    marketplace_dir: Path,
-    resolve_plugin_path,      # callable: fname -> Path | None
-    load_env_config_file,     # callable: Path -> dict
-    collect_plugin_skill_dirs,  # callable: dict -> list[tuple[str, Path]]
-    add_plugin_extras_to_zip,  # callable: ZipFile, dict, set|None -> None
-    import_plugin_zip,         # callable: BytesIO, bool -> tuple
-    add_dir_to_zip,            # callable: ZipFile, Path, str -> None
-):
-    """创建市场 Blueprint，注入 config_server 的依赖函数。
+def create_marketplace_bp(marketplace_dir: Path):
+    """创建市场 Blueprint。
 
     Args:
-        marketplace_dir: config/marketplace/ 路径
-        其他参数为 config_server.py 中的辅助函数引用
+        marketplace_dir: marketplace 数据目录（index.json + packages/）
     """
     packages_dir = marketplace_dir / "packages"
     index_file = marketplace_dir / "index.json"
@@ -63,32 +47,51 @@ def create_marketplace_bp(
     def marketplace_publish():
         """发布插件到市场。
 
-        Body: {file: "xxx.plugin.yaml", tags: ["dev", "backend"]}
+        接收客户端打包好的 zip 文件上传（multipart/form-data）。
+        从 zip 中的 plugin.yaml 提取元数据。
+
+        Form fields:
+            file: zip 文件
+            tags: JSON 数组字符串（可选）
         """
-        body = request.get_json(force=True)
-        fname = (body.get("file") or "").strip()
-        tags = body.get("tags") or []
-        if not fname:
-            return jsonify({"ok": False, "error": "缺少 file 参数"}), 400
-        path = resolve_plugin_path(fname)
-        if path is None:
-            return jsonify({"ok": False, "error": "插件文件不存在"}), 404
+        uploaded = request.files.get("file")
+        if not uploaded:
+            return jsonify({"ok": False, "error": "缺少 file 文件"}), 400
+
+        tags_str = request.form.get("tags", "[]")
+        try:
+            import json
+            tags = json.loads(tags_str) if tags_str else []
+        except (json.JSONDecodeError, ValueError):
+            tags = []
 
         try:
-            cfg = load_env_config_file(path)
-            plugin_name = cfg.get("name", path.stem)
-            version = cfg.get("version", "1.0.0").strip() or "1.0.0"
-            description = cfg.get("description", "").strip()
-            author = cfg.get("author", "AgentBuddy").strip() or "AgentBuddy"
-            skill_dirs = collect_plugin_skill_dirs(cfg)
+            zip_bytes = uploaded.read()
+            buf = io.BytesIO(zip_bytes)
 
-            # 生成完整智能体 zip
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.write(path, arcname=fname)
-                for skill_name, skill_dir in skill_dirs:
-                    add_dir_to_zip(zf, skill_dir, arc_prefix=f"skills/{skill_name}")
-                add_plugin_extras_to_zip(zf, cfg)
+            # 从 zip 中提取 plugin.yaml 元数据
+            plugin_name = uploaded.filename or "plugin"
+            version = "1.0.0"
+            description = ""
+            author = "AgentBuddy"
+
+            with zipfile.ZipFile(buf, "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    name = info.filename
+                    if name.endswith(".plugin.yaml") or name.endswith(".plugin.yml"):
+                        try:
+                            data = yaml.safe_load(zf.read(name).decode("utf-8"))
+                            if isinstance(data, dict):
+                                plugin_name = data.get("name", Path(name).stem)
+                                version = str(data.get("version", "1.0.0")).strip() or "1.0.0"
+                                description = data.get("description", "").strip()
+                                author = data.get("author", "AgentBuddy").strip() or "AgentBuddy"
+                        except Exception:
+                            pass
+                        break
+
             buf.seek(0)
 
             # 保存到 marketplace/packages/
@@ -146,7 +149,7 @@ def create_marketplace_bp(
 
     @bp.route("/install", methods=["GET"])
     def marketplace_install():
-        """从市场安装插件。Query: id=xxx"""
+        """从市场安装插件（返回 zip，客户端自行导入）。Query: id=xxx"""
         item_id = (request.args.get("id") or "").strip()
         if not item_id:
             return jsonify({"ok": False, "error": "缺少 id 参数"}), 400
@@ -157,11 +160,14 @@ def create_marketplace_bp(
         pkg_path = marketplace_dir / entry["file"]
         if not pkg_path.exists():
             return jsonify({"ok": False, "error": "包文件丢失"}), 404
-        try:
-            buf = io.BytesIO(pkg_path.read_bytes())
-            return import_plugin_zip(buf, overwrite=True)
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
+        # 增加下载计数
+        entry["downloads"] = entry.get("downloads", 0) + 1
+        save_index(marketplace_dir, items)
+        buf = io.BytesIO(pkg_path.read_bytes())
+        buf.seek(0)
+        return send_file(buf, as_attachment=True,
+                         download_name=Path(entry["file"]).name,
+                         mimetype="application/zip")
 
     @bp.route("/remove", methods=["DELETE"])
     def marketplace_remove():

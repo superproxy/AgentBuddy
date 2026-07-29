@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api } from '../api/client'
+import { api, serverApi, getServerUrl } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { usePluginStore } from './plugin'
@@ -33,14 +33,24 @@ export const useAiGenerateStore = defineStore('aiGenerate', () => {
       ui.toast('请输入需求描述', 'warn')
       return
     }
+    const serverUrl = getServerUrl()
+    if (!serverUrl) {
+      ui.toast('请先在设置中配置 Server 地址', 'err')
+      return
+    }
     generating.value = true
     output.value = ''
     generatedConfig.value = ''
     ui.clearLog()
 
-    const url = '/api/ai/generate?prompt=' + encodeURIComponent(prompt.value.trim())
+    const url = serverApi('/api/ai/generate?prompt=' + encodeURIComponent(prompt.value.trim())
       + '&model=glm-5-2-260617'
-      + (level.value ? '&level=' + level.value : '')
+      + (level.value ? '&level=' + level.value : ''))
+    if (!url) {
+      ui.toast('请先在设置中配置 Server 地址', 'err')
+      generating.value = false
+      return
+    }
     await runSse(url, (line) => {
       output.value += line + '\n'
       ui.appendLog(line)
@@ -85,16 +95,23 @@ export const useAiGenerateStore = defineStore('aiGenerate', () => {
       ui.toast('没有可保存的配置', 'warn')
       return
     }
-    const r = await api<{ ok: boolean; path?: string; name?: string; error?: string }>(
-      '/api/ai/save',
-      { method: 'POST', body: JSON.stringify({ content: generatedConfig.value }) }
-    )
-    if (r.ok) {
-      ui.toast(`已保存: ${r.name}`)
-      plugin.refreshPluginList()
-      closeDialog()
-    } else {
-      ui.toast('保存失败: ' + (r.error || ''), 'err')
+    // 保存到本地（通过本地 config_server）
+    try {
+      const data = JSON.stringify({ content: generatedConfig.value })
+      const r = await api<{ ok: boolean; path?: string; name?: string; error?: string }>(
+        '/api/plugin/save-ai',
+        { method: 'POST', body: data }
+      )
+      if (r.ok) {
+        ui.toast(`已保存: ${r.name}`)
+        plugin.refreshPluginList()
+        closeDialog()
+      } else {
+        ui.toast('保存失败: ' + (r.error || ''), 'err')
+      }
+    } catch {
+      // fallback: 直接用 yaml 内容创建插件
+      ui.toast('保存失败，请手动复制 YAML 内容', 'err')
     }
   }
 

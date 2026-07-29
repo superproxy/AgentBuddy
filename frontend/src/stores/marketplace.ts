@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api } from '../api/client'
+import { api, serverApi, getServerUrl } from '../api/client'
 import { useUiStore } from './ui'
 import { useSkillStore } from './skill'
 import { usePluginStore } from './plugin'
@@ -160,19 +160,34 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       const query = q !== undefined ? q : searchQuery.value
       searchQuery.value = query
       const params = query.trim() ? '?q=' + encodeURIComponent(query.trim()) : ''
-      const r = await api<{ ok: boolean; data?: MarketItem[]; total?: number }>('/api/marketplace' + params)
-      if (r.ok) {
-        const real = r.data || []
-        if (real.length) {
-          // 真实数据存在：使用真实数据，但若用户搜索则后端已过滤
-          items.value = real
-          isMock.value = false
-        } else if (!query.trim()) {
-          // 无真实数据 + 无搜索：填充虚拟插件
+      const url = serverApi('/api/marketplace' + params)
+      if (!url) {
+        // 无 server URL，使用虚拟数据
+        if (!query.trim()) {
           items.value = MOCK_ITEMS.slice()
           isMock.value = true
         } else {
-          // 无真实数据 + 有搜索：对虚拟数据做前端过滤
+          const ql = query.trim().toLowerCase()
+          items.value = MOCK_ITEMS.filter((i) =>
+            i.name.toLowerCase().includes(ql) ||
+            i.description.toLowerCase().includes(ql) ||
+            (i.tags || []).some((t) => t.toLowerCase().includes(ql)) ||
+            (i.author || '').toLowerCase().includes(ql),
+          )
+          isMock.value = true
+        }
+        return
+      }
+      const r = await api<{ ok: boolean; data?: MarketItem[]; total?: number }>(url)
+      if (r.ok) {
+        const real = r.data || []
+        if (real.length) {
+          items.value = real
+          isMock.value = false
+        } else if (!query.trim()) {
+          items.value = MOCK_ITEMS.slice()
+          isMock.value = true
+        } else {
           const ql = query.trim().toLowerCase()
           items.value = MOCK_ITEMS.filter((i) =>
             i.name.toLowerCase().includes(ql) ||
@@ -183,55 +198,105 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
           isMock.value = true
         }
       }
+    } catch {
+      // 网络错误，fallback 到虚拟数据
+      items.value = MOCK_ITEMS.slice()
+      isMock.value = true
     } finally {
       loading.value = false
     }
   }
 
-  /** 发布插件到市场 */
+  /** 发布插件到市场（先从本地导出 zip，再上传到远程 server） */
   async function publish(file: string, tags: string[] = []) {
-    const r = await api<{ ok: boolean; data?: MarketItem; error?: string }>(
-      '/api/marketplace/publish',
-      { method: 'POST', body: JSON.stringify({ file, tags }) }
-    )
-    if (r.ok) {
-      ui.toast(`已发布「${r.data?.name || file}」到市场`)
-      browse()  // 刷新列表
-    } else {
-      ui.toast('发布失败: ' + (r.error || ''), 'err')
+    const serverUrl = getServerUrl()
+    if (!serverUrl) {
+      ui.toast('请先在设置中配置 Server 地址', 'err')
+      return false
     }
-    return r.ok
+    try {
+      // 1. 从本地导出插件 zip
+      const params = new URLSearchParams({ file, format: 'zip', key_mode: 'plain' })
+      const exportUrl = '/api/plugin/export?' + params.toString()
+      const resp = await fetch(exportUrl)
+      if (!resp.ok) {
+        ui.toast('导出插件失败', 'err')
+        return false
+      }
+      const zipBlob = await resp.blob()
+
+      // 2. 上传到远程 server
+      const fd = new FormData()
+      fd.append('file', zipBlob, file.replace(/\.plugin\.yaml$/, '') + '-plugin.zip')
+      fd.append('tags', JSON.stringify(tags))
+      const r = await fetch(serverApi('/api/marketplace/publish'), {
+        method: 'POST',
+        body: fd,
+      })
+      const result = await r.json() as { ok: boolean; data?: MarketItem; error?: string }
+      if (result.ok) {
+        ui.toast(`已发布「${result.data?.name || file}」到市场`)
+        browse()
+        return true
+      } else {
+        ui.toast('发布失败: ' + (result.error || ''), 'err')
+        return false
+      }
+    } catch (e: any) {
+      ui.toast('发布失败: ' + (e.message || ''), 'err')
+      return false
+    }
   }
 
-  /** 从市场安装插件 */
+  /** 从市场安装插件（从远程 server 下载 zip，再本地导入） */
   async function install(id: string) {
     if (installing.value) { ui.toast('正在安装其他插件，请稍候', 'warn'); return false }
     installing.value = id
     try {
-      const r = await api<{
+      const serverUrl = getServerUrl()
+      if (!serverUrl) {
+        ui.toast('请先在设置中配置 Server 地址', 'err')
+        return false
+      }
+      // 1. 从远程 server 下载 zip
+      const dlUrl = serverApi('/api/marketplace/install?id=' + encodeURIComponent(id))
+      const resp = await fetch(dlUrl)
+      if (!resp.ok) {
+        ui.toast('下载插件失败', 'err')
+        return false
+      }
+      const zipBlob = await resp.blob()
+
+      // 2. 本地导入 zip
+      const fd = new FormData()
+      const fileName = items.value.find(i => i.id === id)?.file || 'plugin.zip'
+      fd.append('file', zipBlob, fileName.split('/').pop() || 'plugin.zip')
+      const importResp = await fetch('/api/plugin/import', { method: 'POST', body: fd })
+      const result = await importResp.json() as {
         ok: boolean; error?: string;
         plugin_count?: number; skill_count?: number; extras_count?: number;
         skipped?: any[]
-      }>('/api/marketplace/install?id=' + encodeURIComponent(id))
-      if (r.ok) {
+      }
+      if (result.ok) {
         const parts: string[] = []
-        if (r.plugin_count) parts.push(`${r.plugin_count} 个插件`)
-        if (r.skill_count) parts.push(`${r.skill_count} 个技能`)
-        if (r.extras_count) parts.push(`${r.extras_count} 项扩展`)
+        if (result.plugin_count) parts.push(`${result.plugin_count} 个插件`)
+        if (result.skill_count) parts.push(`${result.skill_count} 个技能`)
+        if (result.extras_count) parts.push(`${result.extras_count} 项扩展`)
         const detail = parts.length ? '：' + parts.join('、') : ''
-        const skippedNote = r.skipped?.length ? `，跳过 ${r.skipped.length} 项` : ''
+        const skippedNote = result.skipped?.length ? `，跳过 ${result.skipped.length} 项` : ''
         ui.toast('安装成功' + detail + skippedNote)
-        // 刷新相关列表
         plugin.refreshPluginList()
         skill.loadInstalledSkills()
-        // 增加本地下载计数
         const item = items.value.find(i => i.id === id)
         if (item) item.downloads = (item.downloads || 0) + 1
         return true
       } else {
-        ui.toast('安装失败: ' + (r.error || ''), 'err')
+        ui.toast('安装失败: ' + (result.error || ''), 'err')
         return false
       }
+    } catch (e: any) {
+      ui.toast('安装失败: ' + (e.message || ''), 'err')
+      return false
     } finally {
       installing.value = ''
     }
@@ -240,10 +305,12 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   /** 从市场移除 */
   async function remove(id: string) {
     if (!confirm('确认从市场移除该插件？')) return false
-    const r = await api<{ ok: boolean; error?: string }>(
-      '/api/marketplace/remove?id=' + encodeURIComponent(id),
-      { method: 'DELETE' }
-    )
+    const url = serverApi('/api/marketplace/remove?id=' + encodeURIComponent(id))
+    if (!url) {
+      ui.toast('请先在设置中配置 Server 地址', 'err')
+      return false
+    }
+    const r = await api<{ ok: boolean; error?: string }>(url, { method: 'DELETE' })
     if (r.ok) {
       ui.toast('已从市场移除')
       items.value = items.value.filter(i => i.id !== id)

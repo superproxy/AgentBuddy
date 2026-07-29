@@ -6,6 +6,7 @@ import { useNavOrderStore } from '../stores/navOrder'
 import SyncBar from './SyncBar.vue'
 import { useUiStore } from '../stores/ui'
 import { runSse } from '../api/sse'
+import { getServerUrl, setServerUrl } from '../api/client'
 
 interface TabItem {
   key: string
@@ -25,6 +26,8 @@ const upgrade = useUpgradeStore()
 const upgradeOpen = ref(false)
 const ui = useUiStore()
 const silentUpgrading = ref(false)
+const serverSettingsOpen = ref(false)
+const serverUrlInput = ref('')
 
 const nav = useNavOrderStore()
 
@@ -222,6 +225,20 @@ function onGlobalClick(e: MouseEvent) {
   if (!target.closest('.more-wrap')) {
     moreOpen.value = false
   }
+}
+
+function openServerSettings() {
+  serverUrlInput.value = getServerUrl()
+  serverSettingsOpen.value = true
+}
+
+function closeServerSettings() {
+  serverSettingsOpen.value = false
+}
+
+function saveServerSettings() {
+  setServerUrl(serverUrlInput.value)
+  closeServerSettings()
 }
 
 async function openUpgrade() {
@@ -474,6 +491,18 @@ onBeforeUnmount(() => {
         <div class="actions flex items-center justify-end gap-2 max-[1100px]:col-start-2 max-[1100px]:row-start-1">
           <!-- 同步控件（内联） -->
           <SyncBar :tab="tab" />
+          <!-- Server 设置按钮 -->
+          <button
+            class="theme-toggle"
+            type="button"
+            title="Server 设置"
+            aria-label="Server 设置"
+            @click="openServerSettings"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
           <!-- 主题切换按钮 -->
           <button
             class="theme-toggle"
@@ -627,6 +656,42 @@ onBeforeUnmount(() => {
               {{ silentUpgrading ? '升级中...' : '静默升级' }}
             </button>
             <button type="button" class="btn-primary" @click="closeUpgrade">关闭</button>
+          </footer>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- Server 设置弹层 -->
+  <Teleport to="body">
+    <Transition name="upgrade-modal">
+      <div v-if="serverSettingsOpen" class="upgrade-mask" @click.self="closeServerSettings">
+        <div class="upgrade-panel" role="dialog" aria-modal="true" aria-labelledby="server-settings-title" style="max-width: 480px">
+          <header class="upgrade-head">
+            <h3 id="server-settings-title">Server 设置</h3>
+            <button type="button" class="upgrade-close" aria-label="关闭" @click="closeServerSettings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </header>
+          <div class="upgrade-body">
+            <div style="padding: 16px 0">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-primary)">远程 Server 地址</label>
+              <input
+                v-model="serverUrlInput"
+                type="text"
+                placeholder="https://your-server.com:5001"
+                style="width:100%;padding:10px 12px;border:1px solid var(--border-base);border-radius:8px;font-size:14px;background:var(--bg-base);color:var(--text-primary)"
+              />
+              <p style="margin-top:8px;font-size:12px;color:var(--text-tertiary)">
+                插件市场和 AI 生成服务地址。留空则使用本地内置数据。
+              </p>
+            </div>
+          </div>
+          <footer class="upgrade-foot">
+            <button type="button" class="btn-ghost" @click="closeServerSettings">取消</button>
+            <button type="button" class="btn-primary" @click="saveServerSettings">保存</button>
           </footer>
         </div>
       </div>
