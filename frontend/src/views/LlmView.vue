@@ -77,6 +77,31 @@ function availableModelsFor(pn: string, proto: string): string[] {
   return Object.keys(models)
 }
 
+async function syncToIde() {
+  ui.clearLog()
+  ui.toast('正在同步到 IDE...')
+  try {
+    const resp = await fetch('/api/init-ide?ide=All&scope=llm,mcp', { method: 'GET', headers: { Accept: 'text/event-stream' } })
+    if (!resp.ok) { ui.toast('同步失败', 'err'); return }
+    const reader = resp.body!.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() || ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) ui.appendLog(line.slice(6))
+      }
+    }
+    ui.toast('LLM 配置已同步到所有 IDE')
+  } catch (e) {
+    ui.toast('同步失败: ' + String(e), 'err')
+  }
+}
+
 async function toggleProxyRun() {
   if (proxyRunning.value) {
     await stopProxyServer()
@@ -346,6 +371,14 @@ function clearEnvRef() {
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
           保存
+        </button>
+        <button
+          type="button"
+          @click="syncToIde"
+          class="inline-flex items-center gap-1.5 h-9 px-3.5 text-[12.5px] font-semibold rounded-[10px] bg-white text-ink-700 border border-ink-300 hover:bg-ink-100 transition"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9m0 18c2.5-2.5 3.5-5.5 3.5-9s-1-6.5-3.5-9"/></svg>
+          同步到 IDE
         </button>
         <button
           type="button"
