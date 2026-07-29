@@ -460,14 +460,26 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
 def _check_litellm_installed() -> tuple[bool, str]:
     """检查 litellm 包是否已安装。
 
-    Returns:
-        (installed, info) — installed=True 时 info=版本号；installed=False 时 info=安装提示。
+    打包模式：直接在当前进程 import（litellm 已打包在 _internal 中）。
+    开发模式：用子进程检测。
     """
+    if getattr(sys, "frozen", False):
+        # 打包模式：直接在当前进程 import
+        try:
+            import litellm  # noqa: F401
+            try:
+                from litellm._version import version as ver
+            except Exception:
+                ver = "unknown"
+            return True, ver
+        except ImportError:
+            return False, "litellm 未打包进 bundle"
+    # 开发模式：用子进程检测
     py = _get_python()
     try:
         r = subprocess.run(
-            [py, "-c", "import litellm; print(litellm.__version__)"],
-            capture_output=True, text=True, timeout=5,
+            [py, "-c", "import litellm; from litellm._version import version; print(version)"],
+            capture_output=True, text=True, timeout=30,
         )
         if r.returncode == 0:
             ver = r.stdout.strip()
@@ -481,15 +493,20 @@ def _resolve_litellm_cmd() -> str:
     """解析 litellm 启动命令。
 
     优先级：
-    1. shutil.which 找 PATH 中的 litellm
-    2. Python Scripts/bin 目录中找 litellm CLI
-    3. fallback: 直接用 litellm
+    1. 打包模式：用内嵌 python -m litellm.proxy.proxy_server
+    2. shutil.which 找 PATH 中的 litellm
+    3. Python Scripts/bin 目录中找 litellm CLI
+    4. fallback: python -m litellm.proxy.proxy_server
     """
     import shutil
-    # 1. 先检查 PATH 中是否有 litellm
+    # 1. 打包模式：用内嵌 python 运行 litellm 模块
+    if getattr(sys, "frozen", False):
+        py = _get_python()
+        return f'{_shell_quote(py)} -m litellm.proxy.proxy_server'
+    # 2. 先检查 PATH 中是否有 litellm
     if shutil.which("litellm"):
         return "litellm"
-    # 2. 在 Python 的 Scripts/bin 目录中找 litellm CLI
+    # 3. 在 Python 的 Scripts/bin 目录中找 litellm CLI
     py = _get_python()
     py_dir = Path(py).parent
     candidates = []
@@ -505,8 +522,8 @@ def _resolve_litellm_cmd() -> str:
     for c in candidates:
         if c.exists():
             return _shell_quote(str(c))
-    # 3. fallback: 直接用 litellm，让 shell 报错
-    return "litellm"
+    # 4. fallback: python -m litellm.proxy.proxy_server
+    return f'{_shell_quote(py)} -m litellm.proxy.proxy_server'
 
 
 def _get_python() -> str:
