@@ -3,949 +3,376 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AgentBuddy 插件市场 — 公共空间 / 私有空间交互方案</title>
+<title>AgentBuddy 插件市场 — 三套交互方案</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --bg-card: #161b22;
-    --bg-hover: #1c2128;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --text-dim: #6e7681;
-    --brand: #58a6ff;
-    --brand-dim: #1f6feb;
-    --green: #3fb950;
-    --orange: #d29922;
-    --red: #f85149;
-    --purple: #bc8cff;
-    --radius: 10px;
+    --color-brand-50: #eef4ff; --color-brand-100: #d9e6ff;
+    --color-brand-500: #165dff; --color-brand-600: #0e42d2; --color-brand-700: #0a2e9c;
+    --color-ink-100: #f7f8fa; --color-ink-200: #e5e6eb; --color-ink-300: #c9cdd4;
+    --color-ink-500: #86909c; --color-ink-700: #4e5969; --color-ink-900: #1f2329;
+    --bg-elevated: #fff; --bg-base: #f7f8fa;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
+    --color-orange: #ff7d00; --color-green: #00b42a; --color-red: #f53f3f;
+    --color-purple: #722ed1;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; background: var(--bg-base); color: var(--color-ink-900); }
 
-  /* === Header === */
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 32px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
+  /* === 方案切换器 === */
+  .scheme-switcher {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 8px 16px; background: var(--color-ink-900); color: #fff;
   }
-  .header-brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+  .scheme-switcher span { font-size: 12px; font-weight: 600; opacity: .7; }
+  .scheme-btn {
+    padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,.2); background: transparent; color: #fff; cursor: pointer;
   }
-  .header-brand svg { color: var(--brand); }
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  .scheme-btn.active { background: var(--color-brand-500); border-color: var(--color-brand-500); }
+  .scheme-btn:hover:not(.active) { background: rgba(255,255,255,.1); }
+
+  .scheme { display: none; padding-top: 44px; }
+  .scheme.active { display: block; }
+
+  /* === 公共组件 === */
   .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    border-radius: var(--radius);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    color: var(--text);
-    transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid transparent; background: var(--bg-elevated); color: var(--color-ink-700);
+    transition: all .15s;
   }
-  .btn:hover { background: var(--bg-hover); border-color: var(--text-dim); }
-  .btn-primary { background: var(--brand-dim); border-color: var(--brand-dim); color: #fff; }
-  .btn-primary:hover { background: var(--brand); }
-  .btn-ghost { background: transparent; }
-  .btn-danger { color: var(--red); border-color: var(--red); }
-  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn:hover { background: var(--color-ink-100); }
+  .btn-primary { background: var(--color-brand-500); color: #fff; }
+  .btn-primary:hover { background: var(--color-brand-600); }
+  .btn-ghost { border-color: var(--color-ink-300); }
+  .btn-ghost:hover { border-color: var(--color-brand-500); color: var(--color-brand-600); }
+  .btn-sm { height: 28px; padding: 0 10px; font-size: 11px; }
+  .btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-  /* === Space Tabs === */
-  .space-tabs {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    padding: 0 32px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--color-ink-200); background: var(--bg-elevated);
   }
-  .space-tab {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
-  }
-  .space-tab:hover { color: var(--text); }
-  .space-tab.active {
-    color: var(--brand);
-    border-bottom-color: var(--brand);
-  }
-  .space-tab .badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 20px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 700;
-    background: var(--border);
-    color: var(--text-muted);
-  }
-  .space-tab.active .badge { background: var(--brand-dim); color: #fff; }
+  .header-brand { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700; }
+  .header-brand svg { color: var(--color-brand-500); }
 
-  /* === Main Content === */
-  .main {
-    padding: 24px 32px;
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  /* === Space Section === */
-  .space-section { display: none; }
-  .space-section.active { display: block; }
-
-  /* === Space Cards (Private) === */
-  .space-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .space-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-  }
-  .space-card:hover {
-    border-color: var(--brand);
-    background: var(--bg-hover);
-  }
-  .space-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-  }
-  .space-card-title {
-    font-size: 16px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .space-icon-private { color: var(--orange); }
-  .space-icon-public { color: var(--green); }
-  .space-card-meta {
-    font-size: 12px;
-    color: var(--text-dim);
-    display: flex;
-    gap: 12px;
-  }
-  .space-card-meta span { display: flex; align-items: center; gap: 4px; }
-  .space-card-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
-    line-height: 1.5;
-  }
-  .space-card-members {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .member-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--brand-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
-    color: #fff;
-    border: 2px solid var(--bg-card);
-  }
-  .member-avatar:nth-child(2) { background: var(--purple); }
-  .member-avatar:nth-child(3) { background: var(--green); }
-  .member-avatar:nth-child(4) { background: var(--orange); }
-  .member-more {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-left: 4px;
-  }
-  .space-card-role {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-  }
-  .role-owner { background: rgba(88,166,255,0.15); color: var(--brand); }
-  .role-member { background: rgba(139,148,158,0.15); color: var(--text-muted); }
-
-  /* === Plugin Grid === */
-  .plugin-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 16px;
-  }
-  .plugin-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    transition: all 0.15s;
-  }
-  .plugin-card:hover { border-color: var(--text-dim); background: var(--bg-hover); }
-  .plugin-card-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-  .plugin-name { font-size: 15px; font-weight: 700; }
-  .plugin-version {
-    font-size: 11px;
-    color: var(--text-dim);
-    background: var(--border);
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-  .plugin-desc {
-    font-size: 13px;
-    color: var(--text-muted);
-    line-height: 1.5;
-    margin-bottom: 12px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .plugin-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 12px;
-  }
-  .plugin-tag {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(88,166,255,0.1);
-    color: var(--brand);
-  }
-  .plugin-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .plugin-stats {
-    font-size: 12px;
-    color: var(--text-dim);
-    display: flex;
-    gap: 10px;
-  }
-  .plugin-stats span { display: flex; align-items: center; gap: 3px; }
-  .plugin-actions { display: flex; gap: 6px; }
-
-  /* === Space Badge on Plugin === */
   .space-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-bottom: 8px;
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+    padding: 3px 8px; border-radius: 6px; margin-bottom: 8px;
   }
-  .badge-public { background: rgba(63,185,80,0.12); color: var(--green); }
-  .badge-private { background: rgba(210,153,34,0.12); color: var(--orange); }
+  .badge-public { background: rgba(0,180,42,.1); color: var(--color-green); }
+  .badge-private { background: rgba(255,125,0,.1); color: var(--color-orange); }
+  .space-badge svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
 
-  /* === Search Bar === */
-  .search-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
+  .plugin-card {
+    display: flex; flex-direction: column; gap: 12px; background: var(--bg-elevated);
+    border: 1px solid var(--color-ink-200); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-card);
+    transition: border-color .2s, transform .2s, box-shadow .2s;
   }
-  .search-input {
-    flex: 1;
-    padding: 10px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-card);
-    color: var(--text);
-    font-size: 14px;
+  .plugin-card:hover { border-color: var(--color-brand-100); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(22,93,255,.08); }
+  .plugin-card-top { display: flex; gap: 12px; align-items: flex-start; }
+  .plugin-avatar {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 11px;
+    background: linear-gradient(145deg, var(--color-brand-100), var(--color-brand-50));
+    color: var(--color-brand-600); display: grid; place-items: center; font-weight: 800; font-size: 14px;
   }
-  .search-input:focus { outline: none; border-color: var(--brand); }
+  .plugin-card h3 { margin: 0; font-size: 14px; font-weight: 700; }
+  .plugin-ver { font-size: 11px; color: var(--color-ink-500); font-weight: 500; margin-left: 6px; }
+  .plugin-desc {
+    margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--color-ink-700);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .plugin-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .plugin-tag { font-size: 11px; font-weight: 600; color: var(--color-brand-600); background: var(--color-brand-50); padding: 3px 8px; border-radius: 6px; }
+  .plugin-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 11px; color: var(--color-ink-500); }
+  .plugin-meta span { display: inline-flex; align-items: center; gap: 4px; }
+  .plugin-meta svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .plugin-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; align-items: center; }
 
-  /* === Create Space Dialog === */
-  .modal-mask {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
+  .member-avatar {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff; border: 2px solid var(--bg-elevated);
   }
-  .modal-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    width: 480px;
-    max-width: 90vw;
-    overflow: hidden;
+  .member-avatar:nth-child(1) { background: var(--color-brand-500); }
+  .member-avatar:nth-child(2) { background: var(--color-purple); }
+  .member-avatar:nth-child(3) { background: var(--color-green); }
+  .member-avatar:nth-child(4) { background: var(--color-orange); }
+
+  .space-card-role { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .role-owner { background: var(--color-brand-50); color: var(--color-brand-600); }
+  .role-member { background: var(--color-ink-100); color: var(--color-ink-500); }
+
+  /* === 搜索栏 === */
+  .mkt-hero { text-align: center; padding: 4px; margin-bottom: 16px; }
+  .mkt-search { position: relative; max-width: 560px; margin: 0 auto; }
+  .mkt-search input {
+    width: 100%; height: 44px; padding: 0 100px 0 44px; border: 1.5px solid var(--color-ink-300);
+    border-radius: 14px; background: var(--bg-elevated); font-size: 14px; font-weight: 500;
+    color: var(--color-ink-900); box-shadow: var(--shadow-card);
   }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
+  .mkt-search input:focus { outline: none; border-color: var(--color-brand-500); box-shadow: 0 0 0 3px rgba(22,93,255,.15); }
+  .mkt-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--color-ink-500); }
+  .mkt-search-icon svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 2; }
+  .mkt-search-go {
+    position: absolute; right: 7px; top: 50%; transform: translateY(-50%); height: 30px; padding: 0 14px;
+    border: 0; border-radius: 10px; background: var(--color-brand-500); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  .modal-header h3 { font-size: 16px; font-weight: 700; }
+
+  /* === Modal === */
+  .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal-panel { background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 16px; width: 480px; max-width: 90vw; box-shadow: 0 12px 40px rgba(0,0,0,.12); overflow: hidden; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--color-ink-200); }
+  .modal-header h3 { font-size: 15px; font-weight: 700; }
   .modal-body { padding: 20px; }
-  .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 16px 20px;
-    border-top: 1px solid var(--border);
-  }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; border-top: 1px solid var(--color-ink-200); }
   .form-group { margin-bottom: 16px; }
-  .form-label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  .form-input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-  }
-  .form-input:focus { outline: none; border-color: var(--brand); }
-  .form-hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .form-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--color-ink-300); border-radius: 8px; background: var(--bg-base); color: var(--color-ink-900); font-size: 14px; }
+  .form-input:focus { outline: none; border-color: var(--color-brand-500); }
+  .form-hint { font-size: 12px; color: var(--color-ink-500); margin-top: 4px; }
+  .invite-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid var(--color-ink-300); border-radius: 8px; min-height: 44px; background: var(--bg-base); }
+  .invite-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 6px; background: var(--color-brand-500); color: #fff; font-size: 12px; font-weight: 600; }
+  .invite-chip svg { cursor: pointer; width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .invite-input { border: none; background: transparent; color: var(--color-ink-900); font-size: 14px; outline: none; flex: 1; min-width: 120px; }
+  .radio-group { display: flex; gap: 12px; }
+  .radio-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; color: var(--color-ink-700); }
 
-  /* === Invite Members === */
-  .invite-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 8px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    min-height: 44px;
-    background: var(--bg);
-  }
-  .invite-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    background: var(--brand-dim);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .invite-chip svg { cursor: pointer; }
-  .invite-input {
-    border: none;
-    background: transparent;
-    color: var(--text);
-    font-size: 14px;
-    outline: none;
-    flex: 1;
-    min-width: 120px;
-  }
+  /* === 方案 A: Tab 切换 === */
+  .scheme-a .space-tabs { display: flex; padding: 0 24px; border-bottom: 1px solid var(--color-ink-200); background: var(--bg-elevated); }
+  .scheme-a .space-tab { display: flex; align-items: center; gap: 8px; padding: 12px 20px; font-size: 13px; font-weight: 600; color: var(--color-ink-500); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+  .scheme-a .space-tab:hover { color: var(--color-ink-900); }
+  .scheme-a .space-tab.active { color: var(--color-brand-500); border-bottom-color: var(--color-brand-500); }
+  .scheme-a .space-tab svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .scheme-a .space-tab .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; font-size: 11px; font-weight: 700; background: var(--color-ink-200); color: var(--color-ink-500); }
+  .scheme-a .space-tab.active .badge { background: var(--color-brand-500); color: #fff; }
+  .scheme-a .main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+  .scheme-a .plugin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .scheme-a .space-section { display: none; }
+  .scheme-a .space-section.active { display: block; }
+  .scheme-a .space-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .scheme-a .space-card { background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 14px; padding: 20px; cursor: pointer; position: relative; box-shadow: var(--shadow-card); transition: all .2s; }
+  .scheme-a .space-card:hover { border-color: var(--color-brand-500); transform: translateY(-2px); }
+  .scheme-a .space-card-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .scheme-a .space-card-title svg { width: 20px; height: 20px; stroke: var(--color-orange); fill: none; stroke-width: 2; }
+  .scheme-a .space-card-desc { font-size: 13px; color: var(--color-ink-700); margin-bottom: 12px; line-height: 1.5; }
+  .scheme-a .space-card-meta { font-size: 12px; color: var(--color-ink-500); display: flex; gap: 12px; }
+  .scheme-a .space-card-meta span { display: flex; align-items: center; gap: 4px; }
+  .scheme-a .space-card-meta svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .scheme-a .space-card-members { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+  .scheme-a .space-card-role { position: absolute; top: 16px; right: 16px; }
 
-  /* === Empty State === */
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-dim);
-  }
-  .empty-state svg { margin-bottom: 16px; opacity: 0.5; }
-  .empty-state h3 { font-size: 16px; margin-bottom: 8px; color: var(--text-muted); }
-  .empty-state p { font-size: 13px; margin-bottom: 20px; }
+  /* === 方案 B: 侧边栏 === */
+  .scheme-b .layout { display: flex; min-height: calc(100vh - 44px); }
+  .scheme-b .sidebar { width: 260px; border-right: 1px solid var(--color-ink-200); background: var(--bg-elevated); padding: 16px 0; flex-shrink: 0; }
+  .scheme-b .sidebar-section { margin-bottom: 20px; }
+  .scheme-b .sidebar-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--color-ink-500); padding: 0 16px; margin-bottom: 8px; }
+  .scheme-b .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--color-ink-700); cursor: pointer; transition: all .15s; border-left: 3px solid transparent; }
+  .scheme-b .sidebar-item:hover { background: var(--color-ink-100); }
+  .scheme-b .sidebar-item.active { background: var(--color-brand-50); color: var(--color-brand-600); border-left-color: var(--color-brand-500); }
+  .scheme-b .sidebar-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+  .scheme-b .sidebar-item .count { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--color-ink-500); background: var(--color-ink-100); padding: 2px 6px; border-radius: 4px; }
+  .scheme-b .sidebar-item.active .count { background: var(--color-brand-500); color: #fff; }
+  .scheme-b .sidebar-divider { height: 1px; background: var(--color-ink-200); margin: 12px 16px; }
+  .scheme-b .sidebar-add { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--color-brand-500); cursor: pointer; }
+  .scheme-b .sidebar-add:hover { background: var(--color-brand-50); }
+  .scheme-b .sidebar-add svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .scheme-b .content { flex: 1; padding: 20px 24px; overflow-y: auto; }
+  .scheme-b .content-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .scheme-b .content-title { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .scheme-b .content-title svg { width: 22px; height: 22px; stroke: var(--color-orange); fill: none; stroke-width: 2; }
+  .scheme-b .content-title .public-icon { stroke: var(--color-green); }
+  .scheme-b .plugin-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .scheme-b .members-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 12px; margin-bottom: 16px; }
+  .scheme-b .members-bar .label { font-size: 12px; font-weight: 600; color: var(--color-ink-500); }
+  .scheme-b .members-bar .avatars { display: flex; }
+  .scheme-b .members-bar .member-avatar { width: 24px; height: 24px; font-size: 10px; margin-left: -6px; }
+  .scheme-b .members-bar .member-avatar:first-child { margin-left: 0; }
 
-  /* === Space Detail View === */
-  .space-detail-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    padding: 20px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-  .space-detail-info { display: flex; align-items: center; gap: 16px; }
-  .space-detail-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(210,153,34,0.12);
-  }
-  .space-detail-icon.public { background: rgba(63,185,80,0.12); }
-  .space-detail-name { font-size: 20px; font-weight: 700; }
-  .space-detail-meta { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
-  .back-btn { cursor: pointer; color: var(--brand); font-size: 13px; font-weight: 600; margin-bottom: 16px; display: inline-flex; align-items: center; gap: 4px; }
-
-  /* === Members Panel === */
-  .members-panel {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 20px;
-  }
-  .members-panel h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
-  .members-list { display: flex; flex-direction: column; gap: 8px; }
-  .member-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .member-row:last-child { border-bottom: none; }
-  .member-info { display: flex; align-items: center; gap: 10px; }
-  .member-name { font-size: 13px; font-weight: 600; }
-  .member-email { font-size: 12px; color: var(--text-dim); }
+  /* === 方案 C: 卡片分区 === */
+  .scheme-c .main { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+  .scheme-c .section-block { margin-bottom: 32px; }
+  .scheme-c .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .scheme-c .section-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .scheme-c .section-title svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .scheme-c .section-title .icon-public { color: var(--color-green); }
+  .scheme-c .section-title .icon-private { color: var(--color-orange); }
+  .scheme-c .section-title .count { font-size: 13px; font-weight: 500; color: var(--color-ink-500); }
+  .scheme-c .section-actions { display: flex; gap: 8px; }
+  .scheme-c .plugin-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .scheme-c .space-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+  .scheme-c .space-card { min-width: 280px; flex-shrink: 0; background: var(--bg-elevated); border: 1px solid var(--color-ink-200); border-radius: 14px; padding: 16px; cursor: pointer; position: relative; box-shadow: var(--shadow-card); transition: all .2s; }
+  .scheme-c .space-card:hover { border-color: var(--color-brand-500); transform: translateY(-2px); }
+  .scheme-c .space-card-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .scheme-c .space-card-title svg { width: 18px; height: 18px; stroke: var(--color-orange); fill: none; stroke-width: 2; }
+  .scheme-c .space-card-desc { font-size: 12px; color: var(--color-ink-700); margin-bottom: 10px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .scheme-c .space-card-meta { font-size: 11px; color: var(--color-ink-500); display: flex; gap: 10px; }
+  .scheme-c .space-card-meta span { display: flex; align-items: center; gap: 3px; }
+  .scheme-c .space-card-meta svg { width: 11px; height: 11px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .scheme-c .space-card-members { display: flex; align-items: center; gap: 4px; margin-top: 10px; }
+  .scheme-c .space-card-members .member-avatar { width: 22px; height: 22px; font-size: 9px; margin-left: -4px; }
+  .scheme-c .space-card-members .member-avatar:first-child { margin-left: 0; }
+  .scheme-c .space-card-role { position: absolute; top: 12px; right: 12px; }
+  .scheme-c .divider { height: 1px; background: var(--color-ink-200); margin: 24px 0; }
 </style>
 </head>
 <body>
 
-<!-- Header -->
-<div class="header">
-  <div class="header-brand">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 2 L12 22" />
-      <path d="M12 6 C 9 4, 5 5, 2 8 C 5 9, 9 9, 11 8" />
-      <path d="M12 6 C 15 4, 19 5, 22 8 C 19 9, 15 9, 13 8" />
-      <path d="M12 13 C 9 11, 6 12, 3 15 C 6 16, 9 16, 11 15" />
-      <path d="M12 13 C 15 11, 18 12, 21 15 C 18 16, 15 16, 13 15" />
-    </svg>
-    飞翼 AgentBuddy
-  </div>
-  <div class="header-actions">
-    <button class="btn btn-ghost btn-sm" onclick="alert('Server: https://api.agentbuddy.com:5001')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Server
-    </button>
-  </div>
+<!-- 方案切换器 -->
+<div class="scheme-switcher">
+  <span>选择方案：</span>
+  <button class="scheme-btn active" onclick="switchScheme('a')">A: Tab 切换</button>
+  <button class="scheme-btn" onclick="switchScheme('b')">B: 侧边栏</button>
+  <button class="scheme-btn" onclick="switchScheme('c')">C: 卡片分区</button>
 </div>
 
-<!-- Space Tabs -->
-<div class="space-tabs">
-  <div class="space-tab active" onclick="switchSpace('public')" id="tab-public">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-    公共空间
-    <span class="badge">128</span>
+<!-- ==================== 方案 A: Tab 切换 ==================== -->
+<div class="scheme scheme-a active" id="scheme-a">
+  <div class="header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L12 22"/><path d="M12 6 C 9 4, 5 5, 2 8 C 5 9, 9 9, 11 8"/><path d="M12 6 C 15 4, 19 5, 22 8 C 19 9, 15 9, 13 8"/><path d="M12 13 C 9 11, 6 12, 3 15 C 6 16, 9 16, 11 15"/><path d="M12 13 C 15 11, 18 12, 21 15 C 18 16, 15 16, 13 15"/></svg>
+      飞翼 AgentBuddy
+    </div>
   </div>
-  <div class="space-tab" onclick="switchSpace('private')" id="tab-private">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-    私有空间
-    <span class="badge">3</span>
+  <div class="space-tabs">
+    <div class="space-tab active" onclick="switchTabA('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="badge">128</span></div>
+    <div class="space-tab" onclick="switchTabA('private')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>私有空间<span class="badge">3</span></div>
   </div>
-</div>
-
-<!-- Main Content -->
-<div class="main">
-
-<!-- === Public Space === -->
-<div class="space-section active" id="section-public">
-  <div class="search-bar">
-    <input class="search-input" placeholder="搜索公共空间插件..." />
-    <button class="btn btn-primary" onclick="showPublishDialog()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      发布插件
-    </button>
-  </div>
-
-  <div class="plugin-grid">
-    <!-- Plugin Card 1 -->
-    <div class="plugin-card">
-      <div class="space-badge badge-public">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
-        公共
-      </div>
-      <div class="plugin-card-header">
-        <span class="plugin-name">SpringBoot 后端工程师</span>
-        <span class="plugin-version">v1.4.2</span>
-      </div>
-      <p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体，自带 JPA、缓存、定时任务与 SQL 调优技能。</p>
-      <div class="plugin-tags">
-        <span class="plugin-tag">Java</span>
-        <span class="plugin-tag">后端</span>
-        <span class="plugin-tag">Spring</span>
-      </div>
-      <div class="plugin-footer">
-        <div class="plugin-stats">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>1284</span>
-          <span>agentbuddy</span>
-        </div>
-        <div class="plugin-actions">
-          <button class="btn btn-sm btn-primary">安装</button>
-          <button class="btn btn-sm btn-ghost">下载</button>
-        </div>
+  <div class="main">
+    <div class="space-section active" id="a-public">
+      <header class="mkt-hero"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索插件名称、描述、标签…"><button class="mkt-search-go">搜索</button></div></header>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-primary" onclick="showModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>发布插件</button></div>
+      <div class="plugin-grid">
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">SB</div><div><h3>SpringBoot 后端工程师<span class="plugin-ver">v1.4.2</span></h3><p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体，自带 JPA、缓存、定时任务与 SQL 调优技能。</p></div></div><div class="plugin-tags"><span class="plugin-tag">Java</span><span class="plugin-tag">后端</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>agentbuddy</span><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1284</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button><button class="btn btn-ghost btn-sm">下载</button></div></article>
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">VU</div><div><h3>Vue 前端架构师<span class="plugin-ver">v2.1.0</span></h3><p class="plugin-desc">Vue 3 + TypeScript + Vite 工程化专家，内置组件设计、Pinia 状态管理、Composition API 最佳实践。</p></div></div><div class="plugin-tags"><span class="plugin-tag">前端</span><span class="plugin-tag">Vue</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>fe-collective</span><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>968</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button><button class="btn btn-ghost btn-sm">下载</button></div></article>
       </div>
     </div>
-
-    <!-- Plugin Card 2 -->
-    <div class="plugin-card">
-      <div class="space-badge badge-public">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
-        公共
-      </div>
-      <div class="plugin-card-header">
-        <span class="plugin-name">Vue 前端架构师</span>
-        <span class="plugin-version">v2.1.0</span>
-      </div>
-      <p class="plugin-desc">Vue 3 + TypeScript + Vite 工程化专家，内置组件设计、Pinia 状态管理、Composition API 最佳实践。</p>
-      <div class="plugin-tags">
-        <span class="plugin-tag">前端</span>
-        <span class="plugin-tag">Vue</span>
-        <span class="plugin-tag">TypeScript</span>
-      </div>
-      <div class="plugin-footer">
-        <div class="plugin-stats">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>968</span>
-          <span>fe-collective</span>
-        </div>
-        <div class="plugin-actions">
-          <button class="btn btn-sm btn-primary">安装</button>
-          <button class="btn btn-sm btn-ghost">下载</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Plugin Card 3 -->
-    <div class="plugin-card">
-      <div class="space-badge badge-public">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
-        公共
-      </div>
-      <div class="plugin-card-header">
-        <span class="plugin-name">DevOps 工程师</span>
-        <span class="plugin-version">v1.2.0</span>
-      </div>
-      <p class="plugin-desc">Docker / Kubernetes / CI-CD 流水线专家，支持 GitHub Actions、ArgoCD、Helm 与可观测性栈。</p>
-      <div class="plugin-tags">
-        <span class="plugin-tag">运维</span>
-        <span class="plugin-tag">Docker</span>
-        <span class="plugin-tag">K8s</span>
-      </div>
-      <div class="plugin-footer">
-        <div class="plugin-stats">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>1102</span>
-          <span>platform-team</span>
-        </div>
-        <div class="plugin-actions">
-          <button class="btn btn-sm btn-primary">安装</button>
-          <button class="btn btn-sm btn-ghost">下载</button>
-        </div>
+    <div class="space-section" id="a-private">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><header class="mkt-hero" style="flex:1"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索私有空间…"><button class="mkt-search-go">搜索</button></div></header><button class="btn btn-primary" onclick="showModal('create-space-dialog')" style="margin-left:12px"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建私有空间</button></div>
+      <div class="space-grid">
+        <div class="space-card"><div class="space-card-role role-owner">Owner</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组</div><p class="space-card-desc">团队内部使用的后端架构插件集合，包含微服务、消息队列、数据库设计等专用智能体。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 12 个插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5 成员</span></div><div class="space-card-members"><div class="member-avatar">张</div><div class="member-avatar">李</div><div class="member-avatar">王</div><span style="font-size:12px;color:var(--color-ink-500);margin-left:4px">+2</span></div></div>
+        <div class="space-card"><div class="space-card-role role-member">Member</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>前端工程化</div><p class="space-card-desc">前端团队私有插件空间，包含组件库设计、性能优化、自动化测试等内部智能体。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 8 个插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 3 成员</span></div><div class="space-card-members"><div class="member-avatar">赵</div><div class="member-avatar">钱</div><div class="member-avatar">孙</div></div></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- === Private Space === -->
-<div class="space-section" id="section-private">
-  <!-- Private Space List View -->
-  <div id="private-list-view">
-    <div class="search-bar">
-      <input class="search-input" placeholder="搜索私有空间..." />
-      <button class="btn btn-primary" onclick="showCreateSpaceDialog()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        创建私有空间
-      </button>
-    </div>
-
-    <div class="space-grid">
-      <!-- Space Card 1 -->
-      <div class="space-card" onclick="openSpaceDetail('backend-team')">
-        <div class="space-card-role role-owner">Owner</div>
-        <div class="space-card-header">
-          <div class="space-card-title">
-            <svg class="space-icon-private" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            后端架构组
-          </div>
-        </div>
-        <p class="space-card-desc">团队内部使用的后端架构插件集合，包含微服务、消息队列、数据库设计等专用智能体。</p>
-        <div class="space-card-meta">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 12 个插件</span>
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 5 成员</span>
-        </div>
-        <div class="space-card-members" style="margin-top: 12px;">
-          <div class="member-avatar">张</div>
-          <div class="member-avatar">李</div>
-          <div class="member-avatar">王</div>
-          <span class="member-more">+2</span>
-        </div>
-      </div>
-
-      <!-- Space Card 2 -->
-      <div class="space-card" onclick="openSpaceDetail('frontend-team')">
-        <div class="space-card-role role-member">Member</div>
-        <div class="space-card-header">
-          <div class="space-card-title">
-            <svg class="space-icon-private" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            前端工程化
-          </div>
-        </div>
-        <p class="space-card-desc">前端团队私有插件空间，包含组件库设计、性能优化、自动化测试等内部智能体。</p>
-        <div class="space-card-meta">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 8 个插件</span>
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 3 成员</span>
-        </div>
-        <div class="space-card-members" style="margin-top: 12px;">
-          <div class="member-avatar">赵</div>
-          <div class="member-avatar">钱</div>
-          <div class="member-avatar">孙</div>
-        </div>
-      </div>
-
-      <!-- Space Card 3 -->
-      <div class="space-card" onclick="openSpaceDetail('ai-lab')">
-        <div class="space-card-role role-owner">Owner</div>
-        <div class="space-card-header">
-          <div class="space-card-title">
-            <svg class="space-icon-private" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            AI 实验室
-          </div>
-        </div>
-        <p class="space-card-desc">AI/ML 相关插件空间，包含模型训练、数据处理、推理优化等专用智能体配置。</p>
-        <div class="space-card-meta">
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 5 个插件</span>
-          <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> 2 成员</span>
-        </div>
-        <div class="space-card-members" style="margin-top: 12px;">
-          <div class="member-avatar">周</div>
-          <div class="member-avatar">吴</div>
-        </div>
-      </div>
+<!-- ==================== 方案 B: 侧边栏 ==================== -->
+<div class="scheme scheme-b" id="scheme-b">
+  <div class="header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L12 22"/><path d="M12 6 C 9 4, 5 5, 2 8 C 5 9, 9 9, 11 8"/><path d="M12 6 C 15 4, 19 5, 22 8 C 19 9, 15 9, 13 8"/><path d="M12 13 C 9 11, 6 12, 3 15 C 6 16, 9 16, 11 15"/><path d="M12 13 C 15 11, 18 12, 21 15 C 18 16, 15 16, 13 15"/></svg>
+      飞翼 AgentBuddy
     </div>
   </div>
-
-  <!-- Private Space Detail View -->
-  <div id="private-detail-view" style="display:none">
-    <div class="back-btn" onclick="backToSpaceList()">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      返回空间列表
-    </div>
-
-    <div class="space-detail-header">
-      <div class="space-detail-info">
-        <div class="space-detail-icon">
-          <svg class="space-icon-private" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </div>
-        <div>
-          <div class="space-detail-name">后端架构组</div>
-          <div class="space-detail-meta">12 个插件 · 5 名成员 · 创建于 2026-06-15</div>
-        </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">公共</div>
+        <div class="sidebar-item active" onclick="switchSidebarB('public')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="count">128</span></div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="showInviteDialog()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-          邀请成员
-        </button>
-        <button class="btn btn-primary btn-sm" onclick="showPublishDialog()">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          发布插件
-        </button>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">私有</div>
+        <div class="sidebar-item" onclick="switchSidebarB('backend')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组<span class="count">12</span></div>
+        <div class="sidebar-item" onclick="switchSidebarB('frontend')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>前端工程化<span class="count">8</span></div>
+        <div class="sidebar-item" onclick="switchSidebarB('ai')"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>AI 实验室<span class="count">5</span></div>
+        <div class="sidebar-add" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建私有空间</div>
       </div>
-    </div>
-
-    <!-- Members Panel -->
-    <div class="members-panel">
-      <h3>成员管理</h3>
-      <div class="members-list">
-        <div class="member-row">
-          <div class="member-info">
-            <div class="member-avatar">张</div>
-            <div>
-              <div class="member-name">张三</div>
-              <div class="member-email">zhangsan@company.com</div>
-            </div>
-          </div>
-          <span class="space-card-role role-owner">Owner</span>
-        </div>
-        <div class="member-row">
-          <div class="member-info">
-            <div class="member-avatar">李</div>
-            <div>
-              <div class="member-name">李四</div>
-              <div class="member-email">lisi@company.com</div>
-            </div>
-          </div>
-          <span class="space-card-role role-member">Member</span>
-        </div>
-        <div class="member-row">
-          <div class="member-info">
-            <div class="member-avatar">王</div>
-            <div>
-              <div class="member-name">王五</div>
-              <div class="member-email">wangwu@company.com</div>
-            </div>
-          </div>
-          <span class="space-card-role role-member">Member</span>
-        </div>
+    </aside>
+    <div class="content">
+      <div class="content-header">
+        <div class="content-title" id="b-title"><svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间</div>
+        <button class="btn btn-primary btn-sm" onclick="showModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>发布插件</button>
       </div>
-    </div>
-
-    <!-- Plugins in Space -->
-    <div class="plugin-grid">
-      <div class="plugin-card">
-        <div class="space-badge badge-private">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          后端架构组
-        </div>
-        <div class="plugin-card-header">
-          <span class="plugin-name">微服务网关设计</span>
-          <span class="plugin-version">v0.3.1</span>
-        </div>
-        <p class="plugin-desc">内部微服务 API 网关设计智能体，包含路由、限流、熔断、认证等完整设计方案。</p>
-        <div class="plugin-tags">
-          <span class="plugin-tag">微服务</span>
-          <span class="plugin-tag">网关</span>
-          <span class="plugin-tag">内部</span>
-        </div>
-        <div class="plugin-footer">
-          <div class="plugin-stats">
-            <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>42</span>
-            <span>张三</span>
-          </div>
-          <div class="plugin-actions">
-            <button class="btn btn-sm btn-primary">安装</button>
-            <button class="btn btn-sm btn-ghost">下载</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="plugin-card">
-        <div class="space-badge badge-private">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          后端架构组
-        </div>
-        <div class="plugin-card-header">
-          <span class="plugin-name">MySQL 分库分表</span>
-          <span class="plugin-version">v0.8.0</span>
-        </div>
-        <p class="plugin-desc">MySQL 分库分表方案设计智能体，支持 ShardingSphere、Vitess 等中间件方案评估。</p>
-        <div class="plugin-tags">
-          <span class="plugin-tag">MySQL</span>
-          <span class="plugin-tag">分库分表</span>
-          <span class="plugin-tag">内部</span>
-        </div>
-        <div class="plugin-footer">
-          <div class="plugin-stats">
-            <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>28</span>
-            <span>李四</span>
-          </div>
-          <div class="plugin-actions">
-            <button class="btn btn-sm btn-primary">安装</button>
-            <button class="btn btn-sm btn-ghost">下载</button>
-          </div>
-        </div>
+      <div class="mkt-search" style="margin-bottom:16px"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索插件…" style="height:40px"></div>
+      <div id="b-members-bar" class="members-bar" style="display:none"><span class="label">成员：</span><div class="avatars"><div class="member-avatar">张</div><div class="member-avatar">李</div><div class="member-avatar">王</div></div><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="showModal('invite-dialog')"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>邀请</button></div>
+      <div class="plugin-grid" id="b-grid">
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">SB</div><div><h3>SpringBoot 后端工程师<span class="plugin-ver">v1.4.2</span></h3><p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体，自带 JPA、缓存、定时任务与 SQL 调优技能。</p></div></div><div class="plugin-tags"><span class="plugin-tag">Java</span><span class="plugin-tag">后端</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>agentbuddy</span><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1284</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button><button class="btn btn-ghost btn-sm">下载</button></div></article>
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">VU</div><div><h3>Vue 前端架构师<span class="plugin-ver">v2.1.0</span></h3><p class="plugin-desc">Vue 3 + TypeScript + Vite 工程化专家，内置组件设计、Pinia 状态管理、Composition API 最佳实践。</p></div></div><div class="plugin-tags"><span class="plugin-tag">前端</span><span class="plugin-tag">Vue</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>fe-collective</span><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>968</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button><button class="btn btn-ghost btn-sm">下载</button></div></article>
       </div>
     </div>
   </div>
 </div>
 
-</div><!-- /main -->
+<!-- ==================== 方案 C: 卡片分区 ==================== -->
+<div class="scheme scheme-c" id="scheme-c">
+  <div class="header">
+    <div class="header-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 L12 22"/><path d="M12 6 C 9 4, 5 5, 2 8 C 5 9, 9 9, 11 8"/><path d="M12 6 C 15 4, 19 5, 22 8 C 19 9, 15 9, 13 8"/><path d="M12 13 C 9 11, 6 12, 3 15 C 6 16, 9 16, 11 15"/><path d="M12 13 C 15 11, 18 12, 21 15 C 18 16, 15 16, 13 15"/></svg>
+      飞翼 AgentBuddy
+    </div>
+  </div>
+  <div class="main">
+    <header class="mkt-hero"><div class="mkt-search"><span class="mkt-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg></span><input type="search" placeholder="搜索所有空间的插件…"><button class="mkt-search-go">搜索</button></div></header>
 
-<!-- === Create Space Dialog === -->
-<div class="modal-mask" id="create-space-dialog" style="display:none">
-  <div class="modal-panel">
-    <div class="modal-header">
-      <h3>创建私有空间</h3>
-      <button class="btn btn-ghost btn-sm" onclick="closeDialog('create-space-dialog')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">空间名称</label>
-        <input class="form-input" placeholder="如：后端架构组" />
-        <p class="form-hint">创建后名称不可修改</p>
+    <!-- 公共空间区 -->
+    <div class="section-block">
+      <div class="section-header">
+        <div class="section-title"><svg class="icon-public" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间<span class="count">· 128 个插件</span></div>
+        <div class="section-actions"><button class="btn btn-ghost btn-sm">查看全部</button><button class="btn btn-primary btn-sm" onclick="showModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>发布</button></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">描述</label>
-        <input class="form-input" placeholder="简要描述空间用途" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">邀请成员（可选）</label>
-        <div class="invite-list">
-          <span class="invite-chip">lisi@company.com <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
-          <input class="invite-input" placeholder="输入邮箱，回车邀请..." />
-        </div>
-        <p class="form-hint">被邀请的用户将收到邮件通知，加入后可查看和安装空间内插件</p>
+      <div class="plugin-grid">
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">SB</div><div><h3>SpringBoot 后端工程师<span class="plugin-ver">v1.4.2</span></h3><p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体。</p></div></div><div class="plugin-tags"><span class="plugin-tag">Java</span><span class="plugin-tag">后端</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1284</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">VU</div><div><h3>Vue 前端架构师<span class="plugin-ver">v2.1.0</span></h3><p class="plugin-desc">Vue 3 + TypeScript + Vite 工程化专家。</p></div></div><div class="plugin-tags"><span class="plugin-tag">前端</span><span class="plugin-tag">Vue</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>968</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>
+        <article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">DO</div><div><h3>DevOps 工程师<span class="plugin-ver">v1.2.0</span></h3><p class="plugin-desc">Docker / Kubernetes / CI-CD 流水线专家。</p></div></div><div class="plugin-tags"><span class="plugin-tag">运维</span><span class="plugin-tag">K8s</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1102</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeDialog('create-space-dialog')">取消</button>
-      <button class="btn btn-primary" onclick="closeDialog('create-space-dialog')">创建空间</button>
+
+    <div class="divider"></div>
+
+    <!-- 私有空间区 -->
+    <div class="section-block">
+      <div class="section-header">
+        <div class="section-title"><svg class="icon-private" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>私有空间<span class="count">· 3 个空间</span></div>
+        <div class="section-actions"><button class="btn btn-primary btn-sm" onclick="showModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>创建空间</button></div>
+      </div>
+      <div class="space-row">
+        <div class="space-card"><div class="space-card-role role-owner">Owner</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>后端架构组</div><p class="space-card-desc">团队内部使用的后端架构插件集合，包含微服务、消息队列等。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 12 插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 5 成员</span></div><div class="space-card-members"><div class="member-avatar">张</div><div class="member-avatar">李</div><div class="member-avatar">王</div></div></div>
+        <div class="space-card"><div class="space-card-role role-member">Member</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>前端工程化</div><p class="space-card-desc">前端团队私有插件空间，包含组件库设计、性能优化等。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 8 插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 3 成员</span></div><div class="space-card-members"><div class="member-avatar">赵</div><div class="member-avatar">钱</div><div class="member-avatar">孙</div></div></div>
+        <div class="space-card"><div class="space-card-role role-owner">Owner</div><div class="space-card-title"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>AI 实验室</div><p class="space-card-desc">AI/ML 相关插件空间，包含模型训练、推理优化等。</p><div class="space-card-meta"><span><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> 5 插件</span><span><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> 2 成员</span></div><div class="space-card-members"><div class="member-avatar">周</div><div class="member-avatar">吴</div></div></div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- === Invite Members Dialog === -->
-<div class="modal-mask" id="invite-dialog" style="display:none">
-  <div class="modal-panel">
-    <div class="modal-header">
-      <h3>邀请成员加入「后端架构组」</h3>
-      <button class="btn btn-ghost btn-sm" onclick="closeDialog('invite-dialog')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">邮箱地址</label>
-        <div class="invite-list">
-          <span class="invite-chip">newuser@company.com <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
-          <span class="invite-chip">another@company.com <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
-          <input class="invite-input" placeholder="输入邮箱，回车添加..." />
-        </div>
-        <p class="form-hint">可同时邀请多位用户，被邀请者将收到邮件通知</p>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeDialog('invite-dialog')">取消</button>
-      <button class="btn btn-primary" onclick="closeDialog('invite-dialog')">发送邀请</button>
-    </div>
-  </div>
-</div>
-
-<!-- === Publish Plugin Dialog === -->
-<div class="modal-mask" id="publish-dialog" style="display:none">
-  <div class="modal-panel">
-    <div class="modal-header">
-      <h3>发布插件到市场</h3>
-      <button class="btn btn-ghost btn-sm" onclick="closeDialog('publish-dialog')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group">
-        <label class="form-label">选择插件</label>
-        <select class="form-input">
-          <option>SpringBoot 后端工程师 v1.4.2</option>
-          <option>Vue 前端架构师 v2.1.0</option>
-          <option>DevOps 工程师 v1.2.0</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">发布到</label>
-        <div style="display:flex;gap:12px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
-            <input type="radio" name="target-space" value="public" checked> 公共空间
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
-            <input type="radio" name="target-space" value="private"> 私有空间
-          </label>
-        </div>
-        <p class="form-hint">公共空间：所有人可见可安装。私有空间：仅空间成员可见。</p>
-      </div>
-      <div class="form-group" id="private-space-select" style="display:none">
-        <label class="form-label">选择私有空间</label>
-        <select class="form-input">
-          <option>后端架构组</option>
-          <option>前端工程化</option>
-          <option>AI 实验室</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">标签（逗号分隔）</label>
-        <input class="form-input" placeholder="如：Java, 后端, Spring" />
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeDialog('publish-dialog')">取消</button>
-      <button class="btn btn-primary" onclick="closeDialog('publish-dialog')">发布</button>
-    </div>
-  </div>
-</div>
+<!-- === 公共弹窗 === -->
+<div class="modal-mask" id="create-space-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>创建私有空间</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('create-space-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">空间名称</label><input class="form-input" placeholder="如：后端架构组"><p class="form-hint">创建后名称不可修改</p></div><div class="form-group"><label class="form-label">描述</label><input class="form-input" placeholder="简要描述空间用途"></div><div class="form-group"><label class="form-label">邀请成员（可选）</label><div class="invite-list"><span class="invite-chip">lisi@company.com <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><input class="invite-input" placeholder="输入邮箱，回车邀请…"></div><p class="form-hint">被邀请的用户将收到邮件通知</p></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('create-space-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('create-space-dialog')">创建空间</button></div></div></div>
+<div class="modal-mask" id="invite-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>邀请成员</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('invite-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">邮箱地址</label><div class="invite-list"><span class="invite-chip">newuser@company.com <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><input class="invite-input" placeholder="输入邮箱，回车添加…"></div></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('invite-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('invite-dialog')">发送邀请</button></div></div></div>
+<div class="modal-mask" id="publish-dialog" style="display:none"><div class="modal-panel"><div class="modal-header"><h3>发布插件到市场</h3><button class="btn btn-ghost btn-sm" onclick="hideModal('publish-dialog')"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="modal-body"><div class="form-group"><label class="form-label">选择插件</label><select class="form-input"><option>SpringBoot 后端工程师 v1.4.2</option></select></div><div class="form-group"><label class="form-label">发布到</label><div class="radio-group"><label class="radio-label"><input type="radio" name="target" checked> 公共空间</label><label class="radio-label"><input type="radio" name="target"> 私有空间</label></div><p class="form-hint">公共空间：所有人可见。私有空间：仅成员可见。</p></div><div class="form-group"><label class="form-label">标签</label><input class="form-input" placeholder="如：Java, 后端"></div></div><div class="modal-footer"><button class="btn btn-ghost" onclick="hideModal('publish-dialog')">取消</button><button class="btn btn-primary" onclick="hideModal('publish-dialog')">发布</button></div></div></div>
 
 <script>
-function switchSpace(type) {
-  document.querySelectorAll('.space-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + type).classList.add('active');
-  document.querySelectorAll('.space-section').forEach(s => s.classList.remove('active'));
-  document.getElementById('section-' + type).classList.add('active');
+function switchScheme(s) {
+  document.querySelectorAll('.scheme').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.scheme-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('scheme-' + s).classList.add('active');
+  event.target.classList.add('active');
 }
-
-function openSpaceDetail(id) {
-  document.getElementById('private-list-view').style.display = 'none';
-  document.getElementById('private-detail-view').style.display = 'block';
+function switchTabA(tab) {
+  document.querySelectorAll('.scheme-a .space-tab').forEach(t => t.classList.remove('active'));
+  event.target.closest('.space-tab').classList.add('active');
+  document.querySelectorAll('.scheme-a .space-section').forEach(s => s.classList.remove('active'));
+  document.getElementById('a-' + tab).classList.add('active');
 }
-
-function backToSpaceList() {
-  document.getElementById('private-detail-view').style.display = 'none';
-  document.getElementById('private-list-view').style.display = 'block';
+function switchSidebarB(space) {
+  document.querySelectorAll('.scheme-b .sidebar-item').forEach(i => i.classList.remove('active'));
+  event.target.closest('.sidebar-item').classList.add('active');
+  const title = document.getElementById('b-title');
+  const membersBar = document.getElementById('b-members-bar');
+  const grid = document.getElementById('b-grid');
+  if (space === 'public') {
+    title.innerHTML = '<svg class="public-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>公共空间';
+    membersBar.style.display = 'none';
+    grid.innerHTML = '<article class="plugin-card"><div class="space-badge badge-public"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>公共</div><div class="plugin-card-top"><div class="plugin-avatar">SB</div><div><h3>SpringBoot 后端工程师<span class="plugin-ver">v1.4.2</span></h3><p class="plugin-desc">精通 Spring Boot / MyBatis / MySQL 的 Java 后端开发智能体。</p></div></div><div class="plugin-tags"><span class="plugin-tag">Java</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>1284</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>';
+  } else {
+    const names = { backend: '后端架构组', frontend: '前端工程化', ai: 'AI 实验室' };
+    title.innerHTML = '<svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' + names[space];
+    membersBar.style.display = 'flex';
+    grid.innerHTML = '<article class="plugin-card"><div class="space-badge badge-private"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' + names[space] + '</div><div class="plugin-card-top"><div class="plugin-avatar">MS</div><div><h3>微服务网关设计<span class="plugin-ver">v0.3.1</span></h3><p class="plugin-desc">内部微服务 API 网关设计智能体。</p></div></div><div class="plugin-tags"><span class="plugin-tag">微服务</span></div><div class="plugin-meta"><span><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>42</span></div><div class="plugin-actions"><button class="btn btn-primary btn-sm">安装</button></div></article>';
+  }
 }
-
-function showCreateSpaceDialog() {
-  document.getElementById('create-space-dialog').style.display = 'flex';
-}
-
-function showInviteDialog() {
-  document.getElementById('invite-dialog').style.display = 'flex';
-}
-
-function showPublishDialog() {
-  document.getElementById('publish-dialog').style.display = 'flex';
-}
-
-function closeDialog(id) {
-  document.getElementById(id).style.display = 'none';
-}
-
-// 发布到公共/私有切换
-document.querySelectorAll('input[name="target-space"]').forEach(r => {
-  r.addEventListener('change', (e) => {
-    document.getElementById('private-space-select').style.display = e.target.value === 'private' ? 'block' : 'none';
-  });
-});
+function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+function hideModal(id) { document.getElementById(id).style.display = 'none'; }
 </script>
-
 </body>
 </html>
