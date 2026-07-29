@@ -18,7 +18,7 @@ HOST="${AGENTBUDDY_SERVER_HOST:-0.0.0.0}"
 PORT="${AGENTBUDDY_SERVER_PORT:-5001}"
 
 # Gitee 镜像地址（国内服务器优先使用）
-GITEE_URL="https://gitee.com/superproxy/AgentBuddy.git"
+GITEE_URL="https://gitee.com/x-jiang/AgentBuddy.git"
 
 # === 颜色 ===
 RED='\033[0;31m'

@@ -6,7 +6,7 @@
 
 ```bash
 # 1. 拉代码（国内服务器推荐从 Gitee 拉取）
-git clone https://gitee.com/superproxy/AgentBuddy.git
+git clone https://gitee.com/x-jiang/AgentBuddy.git
 cd AgentBuddy/server
 
 # 2. 赋予执行权限（首次）
