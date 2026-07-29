@@ -70,7 +70,7 @@ app = create_app()
 
 if __name__ == "__main__":
     host = os.environ.get("AGENTBUDDY_SERVER_HOST", "0.0.0.0")
-    port = int(os.environ.get("AGENTBUDDY_SERVER_PORT", "80"))
+    port = int(os.environ.get("AGENTBUDDY_SERVER_PORT", "5001"))
     print(f"AgentBuddy Server starting on {host}:{port}")
     print(f"  Data dir: {DATA_DIR}")
     print(f"  LLM config: {LLM_CONFIG_PATH}")

@@ -681,7 +681,7 @@ onBeforeUnmount(() => {
               <input
                 v-model="serverUrlInput"
                 type="text"
-                placeholder="https://your-server.com:5001"
+                placeholder="http://192.168.0.155:5001"
                 style="width:100%;padding:10px 12px;border:1px solid var(--border-base);border-radius:8px;font-size:14px;background:var(--bg-base);color:var(--text-primary)"
               />
               <p style="margin-top:8px;font-size:12px;color:var(--text-tertiary)">

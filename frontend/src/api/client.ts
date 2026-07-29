@@ -9,10 +9,11 @@
  */
 
 const SERVER_URL_KEY = 'agentbuddy-server-url'
+const DEFAULT_SERVER_URL = 'http://192.168.0.155:5001'
 
 /** 获取远程 server 地址（marketplace + AI 生成服务） */
 export function getServerUrl(): string {
-  return localStorage.getItem(SERVER_URL_KEY) || ''
+  return localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER_URL
 }
 
 /** 设置远程 server 地址 */
