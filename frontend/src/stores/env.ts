@@ -255,16 +255,6 @@ export const useEnvStore = defineStore('env', () => {
     const t = proto.trim().toLowerCase()
     envData.llm[pn][t] = { models: {} }
   }
-  function toggleProtocol(pn: string, proto: string) {
-    if (envData.llm[pn]?.[proto]) {
-      delete envData.llm[pn][proto]
-    } else {
-      envData.llm[pn][proto] = { base_url: '', api_key: '', models: {} }
-    }
-  }
-  function hasProtocol(pn: string, proto: string): boolean {
-    return !!envData.llm[pn]?.[proto]
-  }
   async function deleteProtocol(pn: string, proto: string) {
     const ok = await ui.askConfirm({
       title: '删除协议',
@@ -646,7 +636,7 @@ export const useEnvStore = defineStore('env', () => {
     smartFlow, smartPicker, smartBusy,
     envVars, envVarsBusy, fetchEnvVars, setApiKeyFromEnv,
     loadEnv, selectProvider, updateEnvDataSection, addProvider, deleteProvider, setActiveProvider,
-    addProtocol, deleteProtocol, toggleProtocol, hasProtocol, addModel, deleteModel, renameModel, saveEnv,
+    addProtocol, deleteProtocol, addModel, deleteModel, renameModel, saveEnv,
     isModelEnabled, toggleModelEnabled, setAllModelsEnabled, syncModelsToAllProtocols,
     generateProxyConfig, startProxyServer, verifyLlm, addSmartProvider,
     cancelSmartPicker, confirmSmartPicker, confirmSmartCustomUrl,
