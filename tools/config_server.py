@@ -118,6 +118,9 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # 全局：litellm 网关进程引用（供 /api/proxy/stop 使用）
 _proxy_proc = None
+# 全局：litellm 进程内线程引用（打包模式）
+_proxy_thread = None
+_proxy_stop_event = None
 
 
 def _script_run_cmd(script_name: str, args: list) -> list:
@@ -490,35 +493,14 @@ def _check_litellm_installed() -> tuple[bool, str]:
 
 
 def _resolve_litellm_cmd() -> str:
-    """解析 litellm 启动命令。
+    """解析 litellm 启动命令（仅开发模式使用）。
 
-    优先级：
-    1. 打包模式：查找内嵌的 litellm CLI（litellm.exe / litellm），fallback 到 python -c
-    2. shutil.which 找 PATH 中的 litellm
-    3. Python Scripts/bin 目录中找 litellm CLI
-    4. fallback: python -c "from litellm import run_server; run_server()"
+    打包模式返回空字符串，由 _start_litellm_inproc 在进程内启动。
     """
     import shutil
-    # 1. 打包模式：查找内嵌的 litellm CLI
-    if getattr(sys, "frozen", False):
-        base = Path(sys.executable).parent
-        candidates = []
-        if sys.platform == "win32":
-            candidates.append(base / "litellm.exe")
-            candidates.append(base / "Scripts" / "litellm.exe")
-        else:
-            candidates.append(base / "litellm")
-            candidates.append(base / "bin" / "litellm")
-        for c in candidates:
-            if c.exists():
-                return _shell_quote(str(c))
-        # fallback: 用内嵌 python 调用 litellm 的 click 入口
-        py = _get_python()
-        return f'{_shell_quote(py)} -c "from litellm import run_server; run_server()"'
-    # 2. 先检查 PATH 中是否有 litellm
+    # 开发模式：查找 PATH 或 Scripts 目录中的 litellm CLI
     if shutil.which("litellm"):
         return "litellm"
-    # 3. 在 Python 的 Scripts/bin 目录中找 litellm CLI
     py = _get_python()
     py_dir = Path(py).parent
     candidates = []
@@ -528,13 +510,12 @@ def _resolve_litellm_cmd() -> str:
     else:
         candidates.append(py_dir / "litellm")
         candidates.append(py_dir / "bin" / "litellm")
-        # Mac Homebrew Python
         candidates.append(Path("/opt/homebrew/bin/litellm"))
         candidates.append(Path("/usr/local/bin/litellm"))
     for c in candidates:
         if c.exists():
             return _shell_quote(str(c))
-    # 4. fallback: python -c 调用 click 入口
+    # fallback: python -c 调用 click 入口
     return f'{_shell_quote(py)} -c "from litellm import run_server; run_server()"'
 
 
@@ -4352,6 +4333,11 @@ def start_proxy_sse():
     litellm_cmd = _resolve_litellm_cmd()
     # 用相对路径，配合 cwd=PROJECT_ROOT
     rel_config = config_path.relative_to(PROJECT_ROOT)
+
+    # 打包模式：直接在子线程中启动 litellm proxy（无独立 CLI / Python 解释器）
+    if getattr(sys, "frozen", False):
+        return _start_litellm_inproc(str(config_path), host, port)
+
     cmd = f"{litellm_cmd} --config {rel_config} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出
     def _proxy_stream():
@@ -4393,7 +4379,15 @@ def start_proxy_sse():
 @app.route("/api/proxy/stop", methods=["GET"])
 def stop_proxy():
     """停止 LLM 网关（litellm）进程。"""
-    global _proxy_proc
+    global _proxy_proc, _proxy_thread, _proxy_stop_event
+    # 打包模式：停止进程内线程
+    if _proxy_thread is not None and _proxy_stop_event is not None:
+        _proxy_stop_event.set()
+        _proxy_thread.join(timeout=5)
+        _proxy_thread = None
+        _proxy_stop_event = None
+        return jsonify({"ok": True, "msg": "网关已停止"})
+    # 开发模式：终止子进程
     if _proxy_proc is None:
         return jsonify({"ok": True, "msg": "网关未运行"})
     try:
@@ -4407,6 +4401,82 @@ def stop_proxy():
         return jsonify({"ok": True, "msg": "网关已停止"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _start_litellm_inproc(config_path: str, host: str, port: int):
+    """打包模式：在子线程中启动 litellm proxy，通过队列捕获日志。"""
+    global _proxy_thread, _proxy_stop_event
+    import threading
+    import queue as queue_mod
+
+    log_queue: queue_mod.Queue = queue_mod.Queue()
+    _proxy_stop_event = threading.Event()
+
+    def _run_litellm():
+        """在子线程中运行 litellm proxy。"""
+        try:
+            from litellm import run_server
+            # click Command，用 standalone_mode=False 避免调用 sys.exit()
+            # 通过 ctx.obj 传递日志队列
+            import io, contextlib
+
+            class QueueWriter:
+                def __init__(self, q):
+                    self.q = q
+                def write(self, s):
+                    if s.strip():
+                        self.q.put(s.rstrip())
+                def flush(self):
+                    pass
+
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = QueueWriter(log_queue)
+            sys.stderr = QueueWriter(log_queue)
+            try:
+                run_server(
+                    ['--config', config_path, '--host', host, '--port', str(port)],
+                    standalone_mode=False,
+                )
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+        except SystemExit:
+            pass
+        except Exception as e:
+            log_queue.put(f"[ERROR] {e}")
+        finally:
+            log_queue.put("[EXIT]")
+
+    _proxy_thread = threading.Thread(target=_run_litellm, daemon=True)
+    _proxy_thread.start()
+
+    def _inproc_stream():
+        global _proxy_thread, _proxy_stop_event
+        yield f"data: [CMD] litellm (inproc) --config {config_path} --host {host} --port {port}\n\n"
+        while True:
+            try:
+                line = log_queue.get(timeout=1)
+            except Exception:
+                if _proxy_stop_event and _proxy_stop_event.is_set():
+                    yield "data: [EXIT] stopped by user\n\n"
+                    break
+                if not _proxy_thread.is_alive():
+                    yield "data: [EXIT] thread ended\n\n"
+                    break
+                continue
+            if line == "[EXIT]":
+                yield "data: [EXIT]\n\n"
+                break
+            yield f"data: {line}\n\n"
+        _proxy_thread = None
+        _proxy_stop_event = None
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        stream_with_context(_inproc_stream()),
+        mimetype="text/event-stream",
+    )
 
 
 # ============================================================
