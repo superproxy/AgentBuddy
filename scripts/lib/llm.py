@@ -410,7 +410,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         flat["LLM_ACTIVE_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_BASE_URL"] = listener_url
         flat["LLM_CODEX_API_KEY"] = gateway_api_key
-        flat["LLM_CODEX_WIRE_API"] = "chat"
+        flat["LLM_CODEX_WIRE_API"] = "responses"
         flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
         # 网关模型：优先匹配 _active_model 在路由 gateway_model 中，否则取第一条启用路由
         routes = gateway_config.get("routes", [])
@@ -470,7 +470,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
                 # provider 不支持 responses 协议，回退到 chat completions
                 flat["LLM_CODEX_BASE_URL"] = flat.get("LLM_ACTIVE_BASE_URL", "")
                 flat["LLM_CODEX_API_KEY"] = flat.get("LLM_ACTIVE_API_KEY", "")
-                flat["LLM_CODEX_WIRE_API"] = "chat"
+                flat["LLM_CODEX_WIRE_API"] = "responses"
         else:
             flat["LLM_ACTIVE_BASE_URL"] = ""
             flat["LLM_ACTIVE_API_KEY"] = ""
