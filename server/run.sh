@@ -42,43 +42,21 @@ check_python() {
     info "Python: $PYTHON ($version)"
 }
 
-# === 安装依赖（优先 venv，失败则全局安装） ===
+# === 安装依赖 ===
 setup_deps() {
-    # 尝试创建虚拟环境
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
-        info "创建虚拟环境 $VENV_DIR ..."
-        $PYTHON -m venv "$VENV_DIR" 2>/dev/null
-    fi
+    PIP="$PYTHON -m pip"
 
-    if [ -f "$VENV_DIR/bin/activate" ]; then
-        # venv 可用
-        source "$VENV_DIR/bin/activate"
-        PYTHON=python
-        PIP="pip"
-    else
-        # venv 不可用，尝试安装 python3-venv
-        local py_ver=$($PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        warn "venv 创建失败，尝试安装 python${py_ver}-venv ..."
+    # 确保 pip 可用
+    if ! $PIP --version 2>/dev/null; then
+        info "安装 pip..."
         apt-get update -qq 2>/dev/null
-        apt-get install -y -qq "python${py_ver}-venv" 2>/dev/null || apt-get install -y -qq python3-venv 2>/dev/null || true
-
-        # 再次尝试
-        $PYTHON -m venv "$VENV_DIR" 2>/dev/null
-        if [ -f "$VENV_DIR/bin/activate" ]; then
-            source "$VENV_DIR/bin/activate"
-            PYTHON=python
-            PIP="pip"
-        else
-            # 仍然失败，使用全局安装
-            warn "venv 不可用，使用全局安装"
-            PIP="$PYTHON -m pip"
-        fi
+        apt-get install -y -qq python3-pip 2>/dev/null || true
     fi
 
     # 检查依赖是否已安装
     if ! $PYTHON -c "import flask" 2>/dev/null; then
         info "安装依赖..."
-        $PIP install --upgrade pip -q
+        $PIP install --upgrade pip -q 2>/dev/null
         $PIP install -r requirements.txt -q
         info "依赖安装完成"
     else
