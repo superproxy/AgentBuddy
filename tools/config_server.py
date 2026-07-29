@@ -4249,9 +4249,10 @@ def install_plugin_sse():
 # ============================================================
 @app.route("/api/init-env", methods=["POST"])
 def trigger_init_env():
-    """触发 agentctl generate（原 init-env.py -a Generate）"""
+    """触发 agentctl generate + sync（生成配置并同步到 IDE）"""
     try:
-        result = subprocess.run(
+        # 1. generate：生成 codex config.toml / auth.json / claude settings / proxy config 等
+        gen_result = subprocess.run(
             _script_run_cmd("agentctl", ["generate"]),
             cwd=str(PROJECT_ROOT),
             capture_output=True,
@@ -4260,11 +4261,27 @@ def trigger_init_env():
             errors="ignore",
             timeout=60,
         )
+        if gen_result.returncode != 0:
+            return jsonify({
+                "ok": False,
+                "error": "generate 失败",
+                "stderr": gen_result.stderr[-1000:],
+            })
+
+        # 2. sync：同步到所有 IDE（~/.codex/ ~/.claude/ ~/.cursor/ 等）
+        sync_result = subprocess.run(
+            _script_run_cmd("agentctl", ["sync", "--ide", "All", "--force", "--scope", "llm,mcp"]),
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=60,
+        )
         return jsonify({
-            "ok": result.returncode == 0,
-            "returncode": result.returncode,
-            "stdout": result.stdout[-2000:],
-            "stderr": result.stderr[-2000:],
+            "ok": sync_result.returncode == 0,
+            "stdout": sync_result.stdout[-2000:],
+            "stderr": sync_result.stderr[-1000:],
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
