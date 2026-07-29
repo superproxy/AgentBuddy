@@ -695,17 +695,6 @@ def _read_version() -> tuple[str, str]:
                     return data.get("version") or "dev", data.get("build_time") or ""
             except Exception:
                 pass
-    # 开发模式：version.json 不存在时从 git tag 推断版本号
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0"],
-            cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=3,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return result.stdout.strip().lstrip("v"), ""
-    except Exception:
-        pass
     return "dev", ""
 
 

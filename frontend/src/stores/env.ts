@@ -211,7 +211,7 @@ export const useEnvStore = defineStore('env', () => {
     })
     if (!name) return
     const t = name.trim()
-    envData.llm[t] = { _base: { api_key: '', base_url: '' }, openaiv1: { models: {} } }
+    envData.llm[t] = { openaiv1: { base_url: '', api_key: '', models: {} } }
     if (!envData.llm._active_provider) envData.llm._active_provider = t
     selectProvider(t)
     ui.toast('已添加 Provider: ' + t)
