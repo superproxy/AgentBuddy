@@ -32,7 +32,11 @@ export function serverApi(path: string): string {
 }
 
 export async function api<T = any>(url: string, opts?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {}
+  // FormData 时让浏览器自动设置 Content-Type（含 boundary），不手动覆盖
+  if (!(opts?.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
   // 合并调用方传入的 headers（如需覆盖）
   if (opts?.headers) Object.assign(headers, opts.headers)
   const r = await fetch(url, { ...opts, headers })
