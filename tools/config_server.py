@@ -4312,7 +4312,9 @@ def start_proxy_sse():
         )
 
     litellm_cmd = _resolve_litellm_cmd()
-    cmd = f"{litellm_cmd} --config {config_path} --host {host} --port {port}"
+    # 用相对路径，配合 cwd=PROJECT_ROOT
+    rel_config = config_path.relative_to(PROJECT_ROOT)
+    cmd = f"{litellm_cmd} --config {rel_config} --host {host} --port {port}"
     # 代理服务是长期运行进程，直接流式输出直到用户中断或进程退出
     return Response(
         stream_with_context(_stream_process(cmd, cwd=PROJECT_ROOT)),
