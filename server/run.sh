@@ -6,22 +6,24 @@
 #   ./run.sh stop     # 停止后台进程
 #   ./run.sh restart  # 重启
 #   ./run.sh status   # 查看状态
-set -e
+#   ./run.sh update   # 更新代码并重启
+#   ./run.sh log      # 查看日志
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-VENV_DIR=".venv"
 PID_FILE=".server.pid"
 LOG_FILE="server.log"
 HOST="${AGENTBUDDY_SERVER_HOST:-0.0.0.0}"
 PORT="${AGENTBUDDY_SERVER_PORT:-5001}"
 
+# Gitee 镜像地址（国内服务器优先使用）
+GITEE_URL="https://gitee.com/superproxy/AgentBuddy.git"
+
 # === 颜色 ===
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -57,8 +59,14 @@ setup_deps() {
     # 检查依赖是否已安装
     if ! $PYTHON -c "import flask" 2>/dev/null; then
         info "安装依赖（使用阿里云镜像）..."
-        $PIP install --upgrade pip -q 2>/dev/null $PIP_MIRROR
-        $PIP install -r requirements.txt -q $PIP_MIRROR
+        if ! $PIP install --upgrade pip $PIP_MIRROR 2>&1; then
+            warn "pip 升级失败，继续安装依赖..."
+        fi
+        if ! $PIP install -r requirements.txt $PIP_MIRROR 2>&1; then
+            error "依赖安装失败！请手动执行："
+            error "  $PIP install -r requirements.txt $PIP_MIRROR"
+            exit 1
+        fi
         info "依赖安装完成"
     else
         info "依赖已就绪"
@@ -75,7 +83,7 @@ start() {
     info "  数据目录: ${AGENTBUDDY_DATA_DIR:-$SCRIPT_DIR/data}"
     info "  LLM 配置: ${AGENTBUDDY_LLM_CONFIG:-$SCRIPT_DIR/config/llm/llm.yaml}"
 
-    $PYTHON app.py
+    exec $PYTHON app.py
 }
 
 # === 后台启动 ===
@@ -101,13 +109,14 @@ start_daemon() {
     local pid=$!
     echo "$pid" > "$PID_FILE"
 
-    sleep 2
+    sleep 3
     if kill -0 "$pid" 2>/dev/null; then
         info "Server 已启动 (PID: $pid)"
         info "  查看日志: tail -f $LOG_FILE"
         info "  健康检查: curl http://$HOST:$PORT/api/health"
     else
-        error "Server 启动失败，查看日志: cat $LOG_FILE"
+        error "Server 启动失败！日志内容："
+        cat "$LOG_FILE"
         rm -f "$PID_FILE"
         exit 1
     fi
@@ -117,7 +126,7 @@ start_daemon() {
 stop() {
     if [ ! -f "$PID_FILE" ]; then
         warn "Server 未在运行"
-        exit 0
+        return 0
     fi
     local pid=$(cat "$PID_FILE")
     if kill -0 "$pid" 2>/dev/null; then
@@ -149,21 +158,43 @@ status() {
 
 # === 更新代码 ===
 update() {
-    info "拉取最新代码（使用 GitHub 代理）..."
-    # 临时配置 git 使用代理
-    git config url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null
-    git pull || {
-        warn "代理拉取失败，尝试直连..."
-        git config --unset url."https://ghproxy.com/https://github.com/".insteadOf 2>/dev/null
-        git pull || {
-            error "git pull 失败，请检查网络"
-            exit 1
-        }
-    }
+    # 检测当前 remote 是否是 Gitee
+    local remote_url=$(git remote get-url origin 2>/dev/null)
+
+    if echo "$remote_url" | grep -q "gitee.com"; then
+        info "从 Gitee 拉取代码..."
+        git pull || { error "git pull 失败"; exit 1; }
+    else
+        # 尝试切换到 Gitee
+        info "尝试从 Gitee 拉取代码..."
+        git pull origin main 2>/dev/null
+        if [ $? -ne 0 ]; then
+            warn "当前 remote 非 Gitee，尝试添加 Gitee remote..."
+            git remote add gitee "$GITEE_URL" 2>/dev/null || true
+            info "从 Gitee 拉取..."
+            if ! git pull gitee main 2>/dev/null; then
+                warn "Gitee 拉取失败，尝试直连 GitHub..."
+                if ! git pull origin main 2>/dev/null; then
+                    error "所有拉取方式均失败，请手动检查网络"
+                    exit 1
+                fi
+            fi
+        fi
+    fi
+
     info "代码更新完成，正在重启服务..."
-    stop 2>/dev/null
+    stop
     sleep 1
     start_daemon
+}
+
+# === 查看日志 ===
+show_log() {
+    if [ -f "$LOG_FILE" ]; then
+        tail -f "$LOG_FILE"
+    else
+        warn "日志文件不存在: $LOG_FILE"
+    fi
 }
 
 # === 主逻辑 ===
@@ -184,6 +215,9 @@ case "${1:-}" in
         ;;
     update)
         update
+        ;;
+    log)
+        show_log
         ;;
     *)
         start

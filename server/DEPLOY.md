@@ -5,12 +5,9 @@
 ### Linux / macOS
 
 ```bash
-# 1. 拉代码（国内服务器使用 GitHub 代理加速）
-git clone https://ghproxy.com/https://github.com/superproxy/AgentBuddy.git
+# 1. 拉代码（国内服务器推荐从 Gitee 拉取）
+git clone https://gitee.com/superproxy/AgentBuddy.git
 cd AgentBuddy/server
-
-# 或直接 clone（网络通畅时）
-# git clone https://github.com/superproxy/AgentBuddy.git
 
 # 2. 赋予执行权限（首次）
 chmod +x run.sh
@@ -25,7 +22,8 @@ chmod +x run.sh
 ./run.sh status    # 查看状态
 ./run.sh stop      # 停止
 ./run.sh restart   # 重启
-./run.sh update    # git pull 更新代码（自动使用 GitHub 代理）
+./run.sh update    # 更新代码并重启（自动从 Gitee 拉取）
+./run.sh log       # 查看实时日志
 ```
 
 ### Windows
