@@ -309,7 +309,10 @@ def cmd_sync(args):
     source_agents_md = PROJECT_ROOT / "AGENTS.md"
 
     for t in targets:
-        t.run(source_rules, source_mcp, source_skills, source_agents_md)
+        try:
+            t.run(source_rules, source_mcp, source_skills, source_agents_md)
+        except Exception as e:
+            print(f"{COLOR_RED}[ERROR] {t.name} sync failed: {e}{COLOR_RESET}")
 
     print(f"\n{COLOR_GREEN}[DONE] Synced to {len(targets)} IDE(s){COLOR_RESET}")
 

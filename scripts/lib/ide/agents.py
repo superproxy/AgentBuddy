@@ -107,8 +107,12 @@ class AgentsTarget(IdeTarget):
 
         # 统计 .agents/skills/ 下的 skill 数（含安装落地 + 其他源同步进来的）
         if agents_skills_dir.exists():
-            skill_count = sum(1 for d in agents_skills_dir.iterdir()
-                              if d.is_dir() and not d.is_symlink())
+            def _safe_is_dir(d):
+                try:
+                    return d.is_dir() and not d.is_symlink()
+                except OSError:
+                    return False
+            skill_count = sum(1 for d in agents_skills_dir.iterdir() if _safe_is_dir(d))
             print(f"{COLOR_GREEN}[OK] {skill_count} skills available in .agents/skills/{COLOR_RESET}")
 
     def init_manifest(self, source_agents_md: Path):

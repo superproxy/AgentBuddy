@@ -400,6 +400,8 @@ export const useSkillStore = defineStore('skill', () => {
   }
   async function syncToIde() {
     ui.clearLog()
+    // 先 generate 再 sync（确保最新配置同步到 IDE）
+    await api('/api/init-env', { method: 'POST' }).catch(() => {})
     await runSse('/api/init-ide?ide=All&scope=skill', (line) => ui.appendLog(line))
   }
   async function onToggleSkill(s: InstalledSkill, enabled: boolean) {
