@@ -56,6 +56,54 @@ def _resolve_project_root() -> Path:
 PROJECT_ROOT = _resolve_project_root()
 
 
+def _append_codex_candidate_providers(config_path, env_config, active_provider):
+    """在 codex config.toml 末尾追加其他启用的 provider 作为候选 model_providers。
+
+    active provider 已在模板中生成，这里只追加非 active 的启用 provider。
+    每个 provider 优先用 responses 协议，回退到 openaiv1。
+    """
+    from lib.llm import _merge_base, _is_flat_provider
+
+    llm = env_config.get("llm", {})
+    if not isinstance(llm, dict):
+        return
+
+    lines = []
+    for provider_name, provider_value in llm.items():
+        if provider_name.startswith("_") or provider_name == "proxy":
+            continue
+        if not isinstance(provider_value, dict):
+            continue
+        if provider_value.get("_enabled") is False:
+            continue
+        if provider_name == active_provider:
+            continue  # active provider 已在模板中
+
+        merged = _merge_base(provider_value)
+        # 优先 responses 协议，回退 openaiv1
+        proto_config = None
+        if isinstance(merged, dict):
+            proto_config = merged.get("responses") or merged.get("openaiv1") or merged.get("openai")
+        if not isinstance(proto_config, dict):
+            continue
+
+        base_url = proto_config.get("base_url", "")
+        api_key = proto_config.get("api_key", "")
+        if not base_url:
+            continue
+
+        lines.append(f"\n[model_providers.{provider_name}]")
+        lines.append(f'name = "{provider_name}"')
+        lines.append(f'base_url = "{base_url}"')
+        lines.append('wire_api = "responses"')
+        lines.append("requires_openai_auth = true")
+
+    if lines:
+        with open(config_path, "a", encoding="utf-8") as f:
+            f.write("\n# --- 候选 providers（启用的非默认 provider）---\n")
+            f.write("\n".join(lines) + "\n")
+
+
 # ============================================================
 # 子命令实现
 # ============================================================
@@ -123,6 +171,8 @@ def cmd_generate(args):
     if codex_config_template.exists():
         codex_config_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
+        # 追加其他启用的 provider 作为候选 model_providers
+        _append_codex_candidate_providers(codex_config_output, env_config, active_provider)
 
     # 4. 生成 claude settings.json（从模板）→ config/ide/claude/
     claude_template = PROJECT_ROOT / "template" / "ide" / "claude" / "settings.template.json"
@@ -264,6 +314,7 @@ def cmd_sync(args):
             if codex_config_template.exists():
                 codex_config_output.parent.mkdir(parents=True, exist_ok=True)
                 mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
+                _append_codex_candidate_providers(codex_config_output, env_config, active_provider)
             codex_auth_template = PROJECT_ROOT / "template" / "ide" / "codex" / "auth.template.json"
             codex_auth_output = PROJECT_ROOT / "config" / "ide" / "codex" / "auth.json"
             if codex_auth_template.exists():

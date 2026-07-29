@@ -23,26 +23,47 @@ class CodexTarget(IdeTarget):
             print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
     def init_mcp(self, source_mcp_file: Path):
+        """同步 MCP 配置到 .codex/config.toml 和 ~/.codex/config.toml。
+
+        config.toml 同时包含 LLM 配置（model_provider / model_providers），
+        所以 MCP 和 LLM 同步都需要调用 convert_to_codex_mcp。
+        """
+        self._sync_codex_config(source_mcp_file)
+
+    def init_llm(self, source_rules_dirs):
+        """同步 LLM 配置（config.toml + auth.json）。
+
+        scope=llm 时也需同步 config.toml（含 model_provider）和 auth.json。
+        """
+        source_mcp_file = self.root / "config" / "mcp" / "mcp.json"
+        if source_mcp_file.exists():
+            self._sync_codex_config(source_mcp_file)
+        self._sync_codex_auth()
+
+    def _sync_codex_config(self, source_mcp_file: Path):
+        """生成 Codex config.toml（合并 LLM 配置 + MCP 配置）。"""
         codex_dir = self.root / ".codex"
         codex_dir.mkdir(parents=True, exist_ok=True)
 
-        # Codex 生成产物在 config/ide/codex/（由 agentctl generate 生成）
         source_dir = self.root
         codex_template = source_dir / "config" / "ide" / "codex" / "config.toml"
 
-        # 项目级 .codex/config.toml：用项目生成产物作为 base（含 model_provider 等）
+        # 项目级 .codex/config.toml
         convert_to_codex_mcp(source_mcp_file, codex_dir / "config.toml",
                              self.force, codex_template)
 
-        # 全局 ~/.codex/config.toml：target 自身作为 base（保留用户全局的 model/auth 配置），
-        # 仅在 target 不存在时回退到项目模板
+        # 全局 ~/.codex/config.toml
         global_codex_dir = Path.home() / ".codex"
         global_codex_dir.mkdir(parents=True, exist_ok=True)
         convert_to_codex_mcp(source_mcp_file, global_codex_dir / "config.toml",
                              self.force, codex_template)
 
-        # 复制 auth.json（从 config/ide/codex/ 生成产物）到项目级和全局
+    def _sync_codex_auth(self):
+        """复制 auth.json 到项目级和全局。"""
+        source_dir = self.root
         codex_auth_src = source_dir / "config" / "ide" / "codex" / "auth.json"
+        codex_dir = self.root / ".codex"
+        global_codex_dir = Path.home() / ".codex"
         copy_file_safe(codex_auth_src, codex_dir / "auth.json",
                        ".codex/auth.json", self.force)
         copy_file_safe(codex_auth_src, global_codex_dir / "auth.json",
