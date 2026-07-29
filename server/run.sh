@@ -147,6 +147,25 @@ status() {
     exit 1
 }
 
+# === 更新代码 ===
+update() {
+    info "拉取最新代码（使用 GitHub 代理）..."
+    # 临时配置 git 使用代理
+    git config url."https://ghproxy.com/https://github.com/".insteadOf "https://github.com/" 2>/dev/null
+    git pull || {
+        warn "代理拉取失败，尝试直连..."
+        git config --unset url."https://ghproxy.com/https://github.com/".insteadOf 2>/dev/null
+        git pull || {
+            error "git pull 失败，请检查网络"
+            exit 1
+        }
+    }
+    info "代码更新完成，正在重启服务..."
+    stop 2>/dev/null
+    sleep 1
+    start_daemon
+}
+
 # === 主逻辑 ===
 case "${1:-}" in
     -d|--daemon)
@@ -162,6 +181,9 @@ case "${1:-}" in
         ;;
     status)
         status
+        ;;
+    update)
+        update
         ;;
     *)
         start
