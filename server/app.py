@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
 # server 目录加入 sys.path，使 marketplace / ai_generator 可 import
@@ -73,6 +73,21 @@ def create_app() -> Flask:
     @app.route("/api/health", methods=["GET"])
     def health():
         return jsonify({"ok": True, "service": "AgentBuddy Server"})
+
+    # === Web 前端（插件市场官网） ===
+    WEB_DIR = SERVER_DIR / "web"
+
+    @app.route("/")
+    def web_index():
+        return send_from_directory(str(WEB_DIR), "index.html")
+
+    @app.route("/<path:path>")
+    def web_static(path):
+        full = WEB_DIR / path
+        if full.exists():
+            return send_from_directory(str(WEB_DIR), path)
+        # 未匹配的路径返回首页（SPA fallback）
+        return send_from_directory(str(WEB_DIR), "index.html")
 
     return app
 

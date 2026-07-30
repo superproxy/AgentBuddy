@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentBuddy 插件市场</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236366f1'/><text x='50' y='68' font-size='52' font-weight='bold' fill='white' text-anchor='middle' font-family='sans-serif'>飞</text></svg>">
+<style>
+  :root {
+    --bg: #f9fafb;
+    --surface: #ffffff;
+    --surface-hover: #f3f4f6;
+    --border: #e5e7eb;
+    --border-strong: #d1d5db;
+    --text-primary: #111827;
+    --text-secondary: #4b5563;
+    --text-tertiary: #9ca3af;
+    --brand-50: #eef2ff;
+    --brand-100: #e0e7ff;
+    --brand-500: #6366f1;
+    --brand-600: #4f46e5;
+    --brand-700: #4338ca;
+    --green: #10b981;
+    --red: #ef4444;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+  [v-cloak] { display: none; }
+
+  /* Header */
+  .site-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .header-inner {
+    max-width: 1200px; margin: 0 auto;
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none; color: var(--text-primary);
+  }
+  .logo-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: bold; font-size: 16px;
+  }
+  .logo-name { font-size: 18px; font-weight: 700; }
+  .header-nav { display: flex; gap: 4px; }
+  .nav-link {
+    font-size: 14px; font-weight: 500;
+    padding: 7px 14px; border-radius: 8px;
+    text-decoration: none; color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .nav-link:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .nav-link.active { background: var(--brand-500); color: white; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .header-btn {
+    font-size: 13px; font-weight: 500;
+    padding: 7px 16px; border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--text-secondary);
+    cursor: pointer; text-decoration: none;
+    transition: all 0.15s;
+  }
+  .header-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
+  .header-btn-primary {
+    background: var(--brand-500); color: white; border-color: var(--brand-500);
+  }
+  .header-btn-primary:hover { background: var(--brand-600); }
+
+  /* Hero */
+  .hero {
+    max-width: 1200px; margin: 0 auto;
+    padding: 48px 24px 32px;
+    text-align: center;
+  }
+  .hero-title {
+    font-size: 32px; font-weight: 800;
+    background: linear-gradient(135deg, var(--brand-600), var(--brand-500));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .hero-sub {
+    font-size: 15px; color: var(--text-tertiary);
+    margin-bottom: 24px;
+  }
+  .search-wrap {
+    max-width: 520px; margin: 0 auto;
+    position: relative;
+  }
+  .search-input {
+    width: 100%; padding: 12px 16px 12px 44px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px; font-size: 15px;
+    background: var(--surface); color: var(--text-primary);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--brand-500);
+    box-shadow: 0 0 0 3px var(--brand-50);
+  }
+  .search-icon {
+    position: absolute; left: 14px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+  }
+
+  /* Tags */
+  .tag-bar {
+    max-width: 1200px; margin: 0 auto;
+    padding: 0 24px 16px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+    justify-content: center;
+  }
+  .tag-chip {
+    font-size: 12px; font-weight: 500;
+    padding: 5px 12px; border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .tag-chip:hover { border-color: var(--brand-500); color: var(--brand-500); }
+  .tag-chip.active {
+    background: var(--brand-500); color: white; border-color: var(--brand-500);
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    max-width: 1200px; margin: 0 auto;
+    padding: 0 24px 20px;
+    display: flex; gap: 24px; justify-content: center;
+    font-size: 13px; color: var(--text-tertiary);
+  }
+  .stat-item { display: flex; align-items: center; gap: 6px; }
+  .stat-num { font-weight: 700; color: var(--text-primary); font-size: 16px; }
+
+  /* Grid */
+  .plugin-grid {
+    max-width: 1200px; margin: 0 auto;
+    padding: 0 24px 48px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .plugin-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  .plugin-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    border-color: var(--border-strong);
+  }
+  .card-head {
+    display: flex; align-items: flex-start; gap: 12px;
+    margin-bottom: 12px;
+  }
+  .card-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; color: white;
+    flex-shrink: 0;
+  }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name {
+    font-size: 15px; font-weight: 600;
+    color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .card-ver {
+    font-size: 12px; color: var(--text-tertiary);
+    font-weight: 400;
+  }
+  .card-desc {
+    font-size: 13px; color: var(--text-secondary);
+    line-height: 1.5; margin-bottom: 14px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 39px;
+  }
+  .card-meta {
+    display: flex; gap: 12px; align-items: center;
+    font-size: 12px; color: var(--text-tertiary);
+    margin-bottom: 14px;
+  }
+  .meta-item { display: flex; align-items: center; gap: 3px; }
+  .card-author {
+    font-size: 12px; color: var(--text-tertiary);
+    margin-bottom: 14px;
+  }
+  .card-tags {
+    display: flex; gap: 4px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .card-tag {
+    font-size: 11px; padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--brand-50); color: var(--brand-600);
+  }
+  .card-actions { display: flex; gap: 8px; }
+  .card-btn {
+    flex: 1;
+    font-size: 13px; font-weight: 600;
+    padding: 8px 16px; border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--text-secondary);
+    cursor: pointer; text-decoration: none;
+    text-align: center;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .card-btn:hover { color: var(--text-primary); }
+  .card-btn-primary {
+    background: var(--brand-500); color: white;
+    border-color: var(--brand-500);
+  }
+  .card-btn-primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
+
+  /* Loading / Empty */
+  .loading, .empty {
+    max-width: 1200px; margin: 0 auto;
+    padding: 60px 24px; text-align: center;
+    color: var(--text-tertiary); font-size: 14px;
+  }
+  .loading-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--brand-500);
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Footer */
+  .site-footer {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px;
+    text-align: center;
+    font-size: 13px; color: var(--text-tertiary);
+  }
+  .footer-link { color: var(--brand-500); text-decoration: none; }
+
+  /* Auth bar */
+  .auth-bar {
+    max-width: 1200px; margin: 0 auto;
+    padding: 12px 24px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .auth-bar-info {
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .auth-bar-info b { color: var(--text-primary); }
+  .auth-bar-btn {
+    font-size: 12px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--text-secondary);
+    cursor: pointer; text-decoration: none;
+  }
+  .auth-bar-btn:hover { color: var(--red); }
+
+  @media (max-width: 640px) {
+    .plugin-grid { grid-template-columns: 1fr; }
+    .hero-title { font-size: 24px; }
+    .header-nav { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="/">
+        <div class="logo-mark">飞</div>
+        <span class="logo-name">AgentBuddy</span>
+      </a>
+      <nav class="header-nav">
+        <a class="nav-link active" href="/">插件市场</a>
+      </nav>
+      <div class="header-actions">
+        <template v-if="user">
+          <span class="auth-bar-info">👋 <b>{{ user.username }}</b></span>
+          <button class="header-btn" @click="logout">退出</button>
+        </template>
+        <template v-else>
+          <button class="header-btn" @click="showLogin = true; loginMode = 'login'">登录</button>
+          <button class="header-btn header-btn-primary" @click="showLogin = true; loginMode = 'register'">注册</button>
+        </template>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <h1 class="hero-title">AgentBuddy 插件市场</h1>
+    <p class="hero-sub">海量 AI 编程插件，一键下载离线安装包</p>
+    <div class="search-wrap">
+      <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input
+        class="search-input"
+        v-model="searchQuery"
+        type="text"
+        placeholder="搜索插件名称、描述、作者..."
+        @input="onSearch"
+      />
+    </div>
+  </section>
+
+  <!-- Tag filter -->
+  <div class="tag-bar" v-if="allTags.length">
+    <button
+      class="tag-chip"
+      :class="{ active: !activeTag }"
+      @click="activeTag = ''; doSearch()"
+    >全部</button>
+    <button
+      v-for="tag in allTags"
+      :key="tag"
+      class="tag-chip"
+      :class="{ active: activeTag === tag }"
+      @click="activeTag = tag; doSearch()"
+    >{{ tag }}</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-item"><span class="stat-num">{{ total }}</span> 个插件</div>
+    <div class="stat-item"><span class="stat-num">{{ totalDownloads }}</span> 次下载</div>
+  </div>
+
+  <!-- Loading -->
+  <div v-if="loading" class="loading">
+    <div class="loading-spinner"></div>
+    加载中...
+  </div>
+
+  <!-- Empty -->
+  <div v-else-if="filteredItems.length === 0" class="empty">
+    <p style="font-size:16px;margin-bottom:4px">未找到匹配的插件</p>
+    <p style="font-size:13px">试试其他关键词</p>
+  </div>
+
+  <!-- Plugin grid -->
+  <div v-else class="plugin-grid">
+    <div v-for="item in filteredItems" :key="item.id" class="plugin-card">
+      <div class="card-head">
+        <div class="card-icon" :style="{ background: colorFor(item.name) }">
+          {{ item.name.charAt(0).toUpperCase() }}
+        </div>
+        <div class="card-info">
+          <div class="card-name">{{ item.name }}</div>
+          <div class="card-ver">v{{ item.version }}</div>
+        </div>
+      </div>
+      <p class="card-desc">{{ item.description || '暂无描述' }}</p>
+      <div class="card-author">发布者：{{ item.author || '管理员' }}</div>
+      <div class="card-meta">
+        <span class="meta-item">⬇ {{ item.downloads || 0 }}</span>
+        <span class="meta-item">❤ {{ item.likes || 0 }}</span>
+        <span class="meta-item" v-if="item.size">{{ formatSize(item.size) }}</span>
+      </div>
+      <div class="card-tags" v-if="item.tags && item.tags.length">
+        <span v-for="tag in item.tags" :key="tag" class="card-tag">{{ tag }}</span>
+      </div>
+      <div class="card-actions">
+        <a
+          class="card-btn card-btn-primary"
+          :href="downloadUrl(item.id)"
+          :download="item.name + '-' + item.version + '.zip'"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          下载离线包
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login dialog -->
+  <div v-if="showLogin" class="login-mask" @click.self="showLogin = false">
+    <div class="login-panel">
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">{{ loginMode === 'login' ? '登录' : '注册' }}</h3>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">登录后可发布插件、管理团队空间</p>
+      <div v-if="loginError" class="login-error">{{ loginError }}</div>
+      <input class="login-input" v-model="loginForm.username" type="text" placeholder="用户名" @keydown.enter="doLogin" />
+      <input class="login-input" v-model="loginForm.password" type="password" :placeholder="loginMode === 'register' ? '密码（至少6位）' : '密码'" @keydown.enter="doLogin" />
+      <input v-if="loginMode === 'register'" class="login-input" v-model="loginForm.email" type="email" placeholder="邮箱（可选）" @keydown.enter="doLogin" />
+      <button class="login-btn" @click="doLogin" :disabled="loginLoading">
+        {{ loginLoading ? '...' : (loginMode === 'login' ? '登录' : '注册') }}
+      </button>
+      <p style="text-align:center;font-size:12px;color:var(--text-tertiary);margin-top:12px">
+        {{ loginMode === 'login' ? '还没有账号？' : '已有账号？' }}
+        <a style="color:var(--brand-500);cursor:pointer" @click="loginMode = loginMode === 'login' ? 'register' : 'login'">
+          {{ loginMode === 'login' ? '立即注册' : '返回登录' }}
+        </a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <p>AgentBuddy · AI 编程助手插件平台</p>
+    <p style="margin-top:4px"><a class="footer-link" href="https://github.com/superproxy/AgentBuddy">GitHub</a></p>
+  </footer>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script>
+const { createApp, ref, computed, onMounted } = Vue
+
+createApp({
+  setup() {
+    const items = ref([])
+    const loading = ref(true)
+    const searchQuery = ref('')
+    const activeTag = ref('')
+    const total = ref(0)
+    const totalDownloads = ref(0)
+    const allTags = ref([])
+
+    // Auth
+    const user = ref(null)
+    const showLogin = ref(false)
+    const loginMode = ref('login')
+    const loginForm = ref({ username: '', password: '', email: '' })
+    const loginError = ref('')
+    const loginLoading = ref(false)
+
+    const filteredItems = computed(() => {
+      if (!activeTag.value) return items.value
+      return items.value.filter(it =>
+        it.tags && it.tags.includes(activeTag.value)
+      )
+    })
+
+    function colorFor(name) {
+      const colors = [
+        'linear-gradient(135deg, #6366f1, #4338ca)',
+        'linear-gradient(135deg, #10b981, #059669)',
+        'linear-gradient(135deg, #f59e0b, #d97706)',
+        'linear-gradient(135deg, #ec4899, #be185d)',
+        'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+        'linear-gradient(135deg, #06b6d4, #0891b2)',
+        'linear-gradient(135deg, #ef4444, #b91c1c)',
+        'linear-gradient(135deg, #14b8a6, #0d9488)',
+      ]
+      let hash = 0
+      for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+      return colors[Math.abs(hash) % colors.length]
+    }
+
+    function formatSize(bytes) {
+      if (!bytes) return ''
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+    }
+
+    function downloadUrl(id) {
+      return '/api/marketplace/download?id=' + encodeURIComponent(id)
+    }
+
+    let searchTimer = null
+    function onSearch() {
+      clearTimeout(searchTimer)
+      searchTimer = setTimeout(doSearch, 300)
+    }
+
+    async function doSearch() {
+      loading.value = true
+      try {
+        const q = searchQuery.value.trim()
+        const url = '/api/marketplace' + (q ? '?q=' + encodeURIComponent(q) + '&scope=public' : '?scope=public')
+        const r = await fetch(url)
+        const d = await r.json()
+        if (d.ok) {
+          items.value = d.data || []
+          total.value = d.total || 0
+          totalDownloads.value = items.value.reduce((s, it) => s + (it.downloads || 0), 0)
+          // 收集所有 tag
+          const tags = new Set()
+          items.value.forEach(it => {
+            if (it.tags) it.tags.forEach(t => tags.add(t))
+          })
+          allTags.value = [...tags].sort()
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        loading.value = false
+      }
+    }
+
+    // Auth functions
+    function getToken() {
+      const s = localStorage.getItem('agentbuddy-token')
+      if (!s) return null
+      try { return JSON.parse(s) } catch { return null }
+    }
+
+    function restoreUser() {
+      const s = localStorage.getItem('agentbuddy-token')
+      if (s) {
+        try { user.value = JSON.parse(s) } catch {}
+      }
+    }
+
+    async function doLogin() {
+      loginError.value = ''
+      if (!loginForm.value.username || !loginForm.value.password) {
+        loginError.value = '用户名和密码不能为空'
+        return
+      }
+      if (loginMode.value === 'register' && loginForm.value.password.length < 6) {
+        loginError.value = '密码至少 6 位'
+        return
+      }
+      loginLoading.value = true
+      try {
+        const url = '/api/auth/' + (loginMode.value === 'login' ? 'login' : 'register')
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: loginForm.value.username.trim(),
+            password: loginForm.value.password,
+            email: loginForm.value.email || undefined,
+          }),
+        })
+        const d = await r.json()
+        if (d.ok && d.data) {
+          user.value = d.data
+          localStorage.setItem('agentbuddy-token', JSON.stringify(d.data))
+          showLogin.value = false
+          loginForm.value = { username: '', password: '', email: '' }
+        } else {
+          loginError.value = d.error || '操作失败'
+        }
+      } catch (e) {
+        loginError.value = '网络错误'
+      } finally {
+        loginLoading.value = false
+      }
+    }
+
+    function logout() {
+      user.value = null
+      localStorage.removeItem('agentbuddy-token')
+    }
+
+    onMounted(() => {
+      restoreUser()
+      doSearch()
+    })
+
+    return {
+      items, loading, searchQuery, activeTag, total, totalDownloads, allTags,
+      filteredItems, colorFor, formatSize, downloadUrl, onSearch, doSearch,
+      user, showLogin, loginMode, loginForm, loginError, loginLoading,
+      doLogin, logout,
+    }
+  }
+}).mount('#app')
+</script>
+
+<style>
+/* Login dialog (追加到末尾) */
+.login-mask {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px);
+}
+.login-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 360px; max-width: 90vw;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+}
+.login-input {
+  display: block; width: 100%;
+  padding: 9px 12px; margin-bottom: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px; font-size: 14px;
+  background: var(--surface); color: var(--text-primary);
+}
+.login-input:focus { outline: none; border-color: var(--brand-500); }
+.login-btn {
+  width: 100%; padding: 10px;
+  border-radius: 8px; border: none;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  background: var(--brand-500); color: white;
+  transition: background 0.15s;
+}
+.login-btn:hover:not(:disabled) { background: var(--brand-600); }
+.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.login-error {
+  font-size: 12px; color: var(--red);
+  background: rgba(239,68,68,0.08);
+  padding: 8px 12px; border-radius: 6px;
+  margin-bottom: 12px;
+}
+</style>
+</body>
+</html>
