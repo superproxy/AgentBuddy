@@ -22,16 +22,24 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin')
   const username = computed(() => user.value?.username || '')
 
-  /** 从 localStorage 恢复登录状态 */
-  function restore() {
-    const stored = localStorage.getItem(TOKEN_KEY)
-    if (stored) {
-      try {
-        user.value = JSON.parse(stored)
-      } catch {
-        localStorage.removeItem(TOKEN_KEY)
+  /** 从 localStorage 恢复登录状态（同步，在 store 创建时立即执行） */
+  function _restore() {
+    try {
+      const stored = localStorage.getItem(TOKEN_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed && parsed.token) {
+          user.value = parsed
+        }
       }
-    }
+    } catch { /* ignore */ }
+  }
+  // 立即执行，不等待 onMounted
+  _restore()
+
+  /** 公开恢复方法（兼容旧调用） */
+  function restore() {
+    _restore()
   }
 
   /** 获取 token（供 api 调用时添加 header） */
