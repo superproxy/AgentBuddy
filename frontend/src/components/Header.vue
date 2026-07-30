@@ -13,8 +13,13 @@ interface TabItem {
   key: string
   label: string
 }
+interface TabGroup {
+  group: string
+  label: string
+  items: TabItem[]
+}
 
-const props = defineProps<{ tab: string; tabs: TabItem[]; defaultFavoriteKeys: string[] }>()
+const props = defineProps<{ tab: string; tabs: TabGroup[]; defaultFavoriteKeys: string[] }>()
 const emit = defineEmits<{
   (e: 'update:tab', v: string): void
 }>()
@@ -28,6 +33,17 @@ const upgradeOpen = ref(false)
 const ui = useUiStore()
 const silentUpgrading = ref(false)
 const userMenuOpen = ref(false)
+
+// ============ 两级菜单 ============
+const openGroupName = ref('')
+
+function openGroup(name: string) {
+  openGroupName.value = name
+}
+
+function toggleGroup(name: string) {
+  openGroupName.value = openGroupName.value === name ? '' : name
+}
 
 const auth = useAuthStore()
 
@@ -319,8 +335,9 @@ onMounted(async () => {
   } catch {
     /* ignore */
   }
-  // 初始化导航排序（方案 D：常用区 + 更多）
-  nav.init(props.tabs, props.defaultFavoriteKeys)
+  // 初始化导航（两级菜单模式）
+  const flatItems = props.tabs.flatMap(g => g.items)
+  nav.init(flatItems, props.defaultFavoriteKeys)
   // 后台异步检查升级（不阻塞 UI）
   upgrade.check().catch(() => { /* 静默失败 */ })
   // 点击更多面板外部时关闭
@@ -476,131 +493,71 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Tabs（方案 D：常用区 + 更多收起） -->
-        <nav
-          class="tab-rail flex justify-center min-w-0 max-[1100px]:col-span-2 max-[1100px]:justify-start"
-          aria-label="配置分区"
-        >
-          <div class="tab-rail-inner flex items-center min-w-0 w-full">
-            <div
-              class="tab-track relative flex items-center gap-0.5 p-1 min-w-0 flex-1 max-w-full"
-              role="tablist"
-              aria-orientation="horizontal"
-              @keydown="onTabKeydown"
-              @wheel="onTabWheel"
-              @dragover="onDragOverFavContainer"
-              @drop="onDropFav"
-            >
-            <div
-              v-for="(t, idx) in nav.favoriteItems"
-              :key="t.key"
-              role="tab"
-              draggable="true"
-              class="tab relative z-[1] cursor-pointer
-                     text-[13px] font-medium tracking-tight whitespace-nowrap
-                     px-3 py-2 rounded-[10px] transition-colors duration-150
-                     fav-item"
+        <!-- 两级菜单 -->
+        <nav class="nav-groups flex items-center gap-0.5 min-w-0" aria-label="配置分区">
+          <div
+            v-for="grp in tabs"
+            :key="grp.group"
+            class="nav-group-wrap relative"
+            @mouseenter="openGroup(grp.group)"
+            @mouseleave="openGroup('')"
+          >
+            <!-- 单项组（无下拉） -->
+            <button
+              v-if="grp.items.length === 1"
+              type="button"
+              class="nav-single appearance-none border-0 cursor-pointer
+                     text-[13px] font-medium whitespace-nowrap
+                     px-3 py-2 rounded-[8px] transition-colors duration-150"
               :class="{
-                'is-active text-white font-semibold': tab === t.key,
-                'hover:text-[var(--text-primary)]': tab !== t.key,
-                'is-dragging': dragKey === t.key,
-                'drop-before': showDropBefore('fav', idx),
-                'drop-after': showDropAfter('fav', idx),
+                'is-active text-[var(--brand-500,#165dff)] font-semibold': tab === grp.items[0].key,
+                'hover:text-[var(--text-primary)]': tab !== grp.items[0].key,
               }"
-              :style="tab !== t.key ? { color: 'var(--text-secondary)' } : {}"
-              :aria-selected="tab === t.key"
-              :tabindex="tab === t.key ? 0 : -1"
-              :title="`拖拽调整顺序 · ${t.label}`"
-              @click="selectTab(t.key)"
-              @dragstart="onDragStartFav($event, t.key)"
-              @dragend="onDragEnd"
-              @dragover="onDragOverFavItem($event, t.key, idx)"
-            >
-              <span class="drag-handle" aria-hidden="true">⠿</span>
-              <span class="tab-label">{{ t.label }}</span>
-              <button
-                v-if="nav.favoriteKeys.length > 1"
-                type="button"
-                class="fav-remove"
-                title="移出常用区"
-                aria-label="移出常用区"
-                @click.prevent.stop="nav.moveToMore(t.key)"
-              >×</button>
-            </div>
-            </div>
+              :style="tab !== grp.items[0].key ? { color: 'var(--text-secondary)' } : {}"
+              @click="selectTab(grp.items[0].key)"
+            >{{ grp.label }}</button>
 
-            <!-- 更多收起区（在 tab-track 外部，不受 overflow 裁剪） -->
-            <div v-if="nav.moreItems.length > 0" class="more-wrap relative flex-shrink-0">
+            <!-- 多项组（有下拉） -->
+            <template v-else>
               <button
                 type="button"
-                class="tab more-trigger appearance-none border-0 bg-transparent cursor-pointer
-                       text-[13px] font-medium tracking-tight whitespace-nowrap
-                       px-3 py-2 rounded-[10px] transition-colors duration-150
-                       flex items-center gap-1"
+                class="nav-group-btn appearance-none border-0 bg-transparent cursor-pointer
+                       flex items-center gap-1
+                       text-[13px] font-medium whitespace-nowrap
+                       px-3 py-2 rounded-[8px] transition-colors duration-150"
                 :class="{
-                  'is-active text-white font-semibold': nav.moreKeys.includes(tab),
-                  'hover:text-[var(--text-primary)]': !nav.moreKeys.includes(tab),
-                  'more-open': moreOpen,
+                  'is-active text-[var(--brand-500,#165dff)] font-semibold': grp.items.some(i => i.key === tab),
+                  'hover:text-[var(--text-primary)]': !grp.items.some(i => i.key === tab),
                 }"
-                :style="!nav.moreKeys.includes(tab) ? { color: 'var(--text-secondary)' } : {}"
-                :aria-expanded="moreOpen"
-                title="更多菜单"
-                @click="toggleMore"
+                :style="!grp.items.some(i => i.key === tab) ? { color: 'var(--text-secondary)' } : {}"
+                @click="toggleGroup(grp.group)"
               >
-                更多 {{ nav.moreKeys.length }}
+                {{ grp.label }}
                 <svg
-                  class="more-chev"
+                  class="nav-chev"
+                  :class="{ 'rotate-180': openGroupName === grp.group }"
                   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-                >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
+                ><path d="M6 9l6 6 6-6" /></svg>
               </button>
 
-              <!-- 更多下拉面板 -->
+              <!-- 二级下拉面板 -->
               <div
-                v-if="moreOpen"
-                class="more-panel"
+                v-if="openGroupName === grp.group"
+                class="nav-dropdown"
                 role="menu"
-                @dragover="onDragOverMoreContainer"
-                @drop="onDropMore"
               >
-                <div class="more-panel-head">
-                  <span>更多菜单（可拖入常用区）</span>
-                  <button type="button" class="more-reset" title="重置为默认顺序" @click="resetNav">
-                    重置
-                  </button>
-                </div>
-                <div
-                  v-for="(t, idx) in nav.moreItems"
-                  :key="t.key"
+                <button
+                  v-for="item in grp.items"
+                  :key="item.key"
+                  type="button"
                   role="menuitem"
-                  draggable="true"
-                  class="more-item"
-                  :class="{
-                    'is-active': tab === t.key,
-                    'is-dragging': dragKey === t.key,
-                    'drop-before': showDropBefore('more', idx),
-                    'drop-after': showDropAfter('more', idx),
-                  }"
-                  :title="`拖拽调整顺序 · ${t.label}`"
-                  @click="selectTab(t.key)"
-                  @dragstart="onDragStartMore($event, t.key)"
-                  @dragend="onDragEnd"
-                  @dragover="onDragOverMoreItem($event, t.key, idx)"
-                >
-                  <span class="drag-handle" aria-hidden="true">⠿</span>
-                  <span class="tab-label">{{ t.label }}</span>
-                  <button
-                    type="button"
-                    class="more-add"
-                    title="加入常用区"
-                    aria-label="加入常用区"
-                    @click.prevent.stop="nav.moveToFavorites(t.key)"
-                  >+</button>
-                </div>
+                  class="nav-dropdown-item"
+                  :class="{ 'is-active': tab === item.key }"
+                  @click="selectTab(item.key)"
+                >{{ item.label }}</button>
               </div>
-            </div>
+            </template>
           </div>
         </nav>
 
@@ -1064,6 +1021,61 @@ onBeforeUnmount(() => {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* 两级菜单 */
+.nav-group-wrap {
+  position: relative;
+}
+.nav-single, .nav-group-btn {
+  background: transparent;
+}
+.nav-single:hover, .nav-group-btn:hover {
+  background: var(--bg-sunken, #f2f3f5);
+}
+.nav-single.is-active, .nav-group-btn.is-active {
+  background: rgba(22, 93, 255, 0.1);
+}
+.nav-chev {
+  width: 14px; height: 14px;
+  transition: transform 0.15s;
+  opacity: 0.6;
+}
+.nav-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-base, #e5e7eb);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  min-width: 140px;
+  z-index: 100;
+}
+.nav-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #4e5969);
+  transition: all 0.15s;
+}
+.nav-dropdown-item:hover {
+  background: var(--bg-sunken, #f2f3f5);
+  color: var(--text-primary, #1f2329);
+}
+.nav-dropdown-item.is-active {
+  background: rgba(22, 93, 255, 0.1);
+  color: var(--brand-500, #165dff);
+  font-weight: 600;
 }
 
 .tab-track {

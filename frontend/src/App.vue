@@ -26,24 +26,43 @@ import { useKeysStore } from './stores/keys'
 import { useAuthStore } from './stores/auth'
 
 const tab = ref('marketplace')
-// 全部菜单定义（顺序仅作为"更多"区默认顺序）
-const tabs = [
-  { key: 'marketplace', label: '插件市场' },
-  { key: 'ide', label: 'AIDE 管理' },
-  { key: 'plugin', label: '插件管理' },
-  { key: 'plugin-build', label: '插件构建' },
-  { key: 'terminal', label: '终端测试' },
-  { key: 'keys', label: '密钥' },
-  { key: 'env', label: 'LLM 配置' },
-  { key: 'mcp', label: 'MCP 配置' },
-  { key: 'skill', label: 'Skills 配置' },
-  { key: 'command', label: '自定义命令' },
-  { key: 'subagent', label: 'Subagent' },
-  { key: 'rules', label: 'Rules' },
-  { key: 'hooks', label: 'Hooks' },
+// 菜单分组定义（两级菜单）
+interface TabItem { key: string; label: string }
+interface TabGroup {
+  group: string
+  label: string
+  items: TabItem[]
+}
+const tabs: TabGroup[] = [
+  {
+    group: 'plugin',
+    label: '插件',
+    items: [
+      { key: 'marketplace', label: '插件市场' },
+      { key: 'plugin', label: '插件管理' },
+      { key: 'plugin-build', label: '插件构建' },
+    ],
+  },
+  { group: 'ide', label: 'AIDE 管理', items: [{ key: 'ide', label: 'AIDE 管理' }] },
+  { group: 'keys', label: '密钥管理', items: [{ key: 'keys', label: '密钥管理' }] },
+  {
+    group: 'agent',
+    label: 'Agent 配置',
+    items: [
+      { key: 'env', label: 'LLM 配置' },
+      { key: 'mcp', label: 'MCP 配置' },
+      { key: 'skill', label: 'Skills 配置' },
+      { key: 'command', label: '自定义命令' },
+      { key: 'subagent', label: 'Subagent' },
+      { key: 'rules', label: 'Rules' },
+      { key: 'hooks', label: 'Hooks' },
+    ],
+  },
+  { group: 'tools', label: '工具', items: [{ key: 'terminal', label: '终端测试' }] },
 ]
-// 方案 D 默认常用区顺序（用户指定）：市场 → AIDE → 密钥 → LLM → MCP → Skills → 插件
-const defaultFavoriteKeys = ['marketplace', 'ide', 'keys', 'env', 'mcp', 'skill', 'plugin']
+// 扁平化（用于查找）
+const flatTabs: TabItem[] = tabs.flatMap(g => g.items)
+const defaultFavoriteKeys = ['marketplace']
 
 const ide = useIdeStore()
 const env = useEnvStore()
