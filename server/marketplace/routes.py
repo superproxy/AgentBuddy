@@ -18,9 +18,9 @@ from flask import Blueprint, jsonify, request, send_file, g
 from auth.models import (
     plugin_list, plugin_get, plugin_save, plugin_delete,
     plugin_increment_downloads, plugin_toggle_like,
-    get_db, now_iso,
+    get_db, now_iso, is_team_member,
 )
-from auth.middleware import require_auth
+from auth.middleware import require_auth, get_current_user
 
 
 def create_marketplace_bp(marketplace_dir: Path):
@@ -35,10 +35,23 @@ def create_marketplace_bp(marketplace_dir: Path):
 
     @bp.route("", methods=["GET"])
     def marketplace_list():
-        """浏览市场。支持 ?q= 搜索，?scope= 过滤。无需登录。"""
+        """浏览市场。支持 ?q= 搜索，?scope= 过滤。无需登录。
+        scope=team 时需要 ?team_id= 并校验团队成员身份。"""
         q = (request.args.get("q") or "").strip().lower()
         scope = (request.args.get("scope") or "").strip()
-        items = plugin_list(q=q, scope=scope)
+        team_id = request.args.get("team_id", type=int)
+
+        # 团队插件需要登录 + 成员校验
+        if scope == "team":
+            user = get_current_user()
+            if not user:
+                return jsonify({"ok": False, "error": "请先登录"}), 401
+            if not team_id:
+                return jsonify({"ok": False, "error": "缺少 team_id"}), 400
+            if not is_team_member(team_id, user["id"]):
+                return jsonify({"ok": False, "error": "无权访问该团队空间"}), 403
+
+        items = plugin_list(q=q, scope=scope, team_id=team_id)
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/publish", methods=["POST"])

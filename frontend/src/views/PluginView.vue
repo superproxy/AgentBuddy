@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { usePluginStore } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
-import { api } from '../api/client'
+import { api, serverApi } from '../api/client'
 
 const emit = defineEmits<{ 'go-tab': [key: string] }>()
 
@@ -41,7 +41,9 @@ const teamSpaces = ref<TeamSpace[]>([])
 async function loadTeams() {
   if (!auth.isLoggedIn) return
   try {
-    const r = await api('/api/teams')
+    const url = serverApi('/api/teams')
+    if (!url) return
+    const r = await api(url)
     if (r.ok) teamSpaces.value = r.data || []
   } catch { /* ignore */ }
 }

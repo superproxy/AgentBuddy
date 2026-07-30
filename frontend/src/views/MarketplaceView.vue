@@ -48,7 +48,7 @@ async function deletePlugin(id: string) {
   } catch { /* ignore */ }
 }
 
-watch(() => activeTab, (tab) => {
+watch(activeTab, (tab) => {
   if (tab === 'mine') loadMyPlugins()
   if (tab === 'team') loadTeams()
 })
@@ -370,6 +370,7 @@ function applySuggest(tag: string) {
 onMounted(() => {
   mkt.browse()
   refreshPluginList()
+  if (auth.isLoggedIn) loadTeams()
 })
 </script>
 

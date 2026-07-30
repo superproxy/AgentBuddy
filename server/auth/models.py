@@ -161,9 +161,20 @@ def _create_default_admin():
     pass
 
 
+def is_team_member(team_id: int, user_id: int) -> bool:
+    """检查用户是否为团队成员。"""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?",
+        (team_id, user_id),
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 # ==================== 插件 CRUD ====================
 
-def plugin_list(q: str = "", scope: str = "") -> list[dict]:
+def plugin_list(q: str = "", scope: str = "", team_id: int | None = None) -> list[dict]:
     """查询插件列表。"""
     conn = get_db()
     sql = "SELECT * FROM plugins"
@@ -173,6 +184,9 @@ def plugin_list(q: str = "", scope: str = "") -> list[dict]:
         conditions.append("scope = 'public'")
     elif scope == "team":
         conditions.append("scope = 'team'")
+    if team_id:
+        conditions.append("team_id = ?")
+        params.append(team_id)
     if q:
         conditions.append("(LOWER(name) LIKE ? OR LOWER(description) LIKE ? OR LOWER(author) LIKE ?)")
         param = f"%{q.lower()}%"
