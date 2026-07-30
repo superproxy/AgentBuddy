@@ -399,7 +399,7 @@ onMounted(() => {
         <div v-else-if="!items.length" class="mkt-empty">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           <h3>市场暂无插件</h3>
-          <p>在「插件配置」页点击「分享到市场」即可发布。</p>
+          <p>在「插件管理」页点击「分享到市场」即可发布。</p>
         </div>
 
         <div v-else-if="!filteredItems.length" class="mkt-empty">
@@ -528,7 +528,7 @@ onMounted(() => {
         </div>
 
         <div class="mkt-filter-hint">
-          可多选标签，与顶部搜索、建议标签联动。没有想要的包？在「插件配置」页分享到市场。
+          可多选标签，与顶部搜索、建议标签联动。没有想要的包？在「插件管理」页分享到市场。
         </div>
       </aside>
     </div>

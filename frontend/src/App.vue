@@ -27,7 +27,7 @@ const tab = ref('ide')
 // 全部菜单定义（顺序仅作为"更多"区默认顺序）
 const tabs = [
   { key: 'ide', label: 'AIDE 管理' },
-  { key: 'plugin', label: '插件配置' },
+  { key: 'plugin', label: '插件管理' },
   { key: 'plugin-build', label: '插件构建' },
   { key: 'marketplace', label: '插件市场' },
   { key: 'terminal', label: '终端测试' },

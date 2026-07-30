@@ -303,7 +303,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   >
     <div class="plugin-head flex flex-wrap items-start justify-between gap-4">
       <div class="min-w-0">
-        <h1 class="text-[15px] font-semibold text-ink-900 m-0">插件配置</h1>
+        <h1 class="text-[15px] font-semibold text-ink-900 m-0">插件管理</h1>
         <p class="text-xs text-ink-500 mt-1 mb-0">集中管理本地智能体插件 · 一键安装 / 导入导出 / 分享到市场 · 打包 LLM+MCP+Skills+Keys 为可分发单元</p>
       </div>
       <div class="btn-cluster">

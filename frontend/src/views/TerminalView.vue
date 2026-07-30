@@ -40,7 +40,7 @@ onBeforeUnmount(() => { /* 保留终端运行，不自动关闭 */ })
         <div class="text-4xl mb-3">🖥️</div>
         <p class="text-sm text-ink-600 mb-2">内嵌 ttyd 终端服务</p>
         <p class="text-[11px] text-ink-500 mb-4 max-w-md">
-          启动后可在页面内运行 opencode、claude 等命令，直接测试插件配置效果。<br>
+          启动后可在页面内运行 opencode、claude 等命令，直接测试插件管理效果。<br>
           终端基于 ttyd，需先安装：<code class="bg-ink-100 px-1 rounded">brew install ttyd</code>（macOS）或 <code class="bg-ink-100 px-1 rounded">winget install ttyd</code>（Windows）
         </p>
         <button @click="terminal.start()" :disabled="loading"
