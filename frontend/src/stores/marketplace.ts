@@ -207,11 +207,18 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     }
   }
 
-  /** 发布插件到市场（先从本地导出 zip，再上传到远程 server） */
-  async function publish(file: string, tags: string[] = []) {
+  /** 发布插件到市场（先从本地导出 zip，再上传到远程 server）
+   *  scope: 'public' 公共市场 | 'team' 团队空间
+   *  teamId: scope=team 时指定团队 ID
+   */
+  async function publish(file: string, tags: string[] = [], scope: 'public' | 'team' = 'public', teamId?: number) {
     const serverUrl = getServerUrl()
     if (!serverUrl) {
-      ui.toast('请先在设置中配置 Server 地址', 'err')
+      ui.toast('请先配置 Server 地址', 'err')
+      return false
+    }
+    if (scope === 'team' && !teamId) {
+      ui.toast('请选择团队空间', 'err')
       return false
     }
     try {
@@ -229,6 +236,8 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       const fd = new FormData()
       fd.append('file', zipBlob, file.replace(/\.plugin\.yaml$/, '') + '-plugin.zip')
       fd.append('tags', JSON.stringify(tags))
+      fd.append('scope', scope)
+      if (scope === 'team' && teamId) fd.append('team_id', String(teamId))
       const headers: Record<string, string> = {}
       const token = getAuthToken()
       if (token) headers['Authorization'] = 'Bearer ' + token
@@ -239,7 +248,8 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       })
       const result = await r.json() as { ok: boolean; data?: MarketItem; error?: string }
       if (result.ok) {
-        ui.toast(`已发布「${result.data?.name || file}」到市场`)
+        const target = scope === 'team' ? '团队空间' : '公共市场'
+        ui.toast(`已发布「${result.data?.name || file}」到${target}`)
         browse()
         return true
       } else {

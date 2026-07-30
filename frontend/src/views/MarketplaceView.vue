@@ -227,6 +227,28 @@ async function deleteTeamPlugin(pluginId: string) {
   } catch { /* ignore */ }
 }
 
+// === 发布对话框 ===
+const publishDialogOpen = ref(false)
+const publishFile = ref('')
+const publishScope = ref<'public' | 'team'>('public')
+const publishTeamId = ref<number | null>(null)
+
+function openPublishDialog(file: string) {
+  publishFile.value = file
+  publishScope.value = 'public'
+  publishTeamId.value = null
+  publishDialogOpen.value = true
+}
+
+async function doPublish() {
+  publishDialogOpen.value = false
+  await publishToMarketplace(publishFile.value, publishScope.value, publishTeamId.value || undefined)
+  // 如果在团队详情页，刷新团队插件
+  if (publishScope.value === 'team' && publishTeamId.value && selectedSpaceId.value === publishTeamId.value) {
+    await loadTeamPlugins(publishTeamId.value)
+  }
+}
+
 // 热门推荐：本地未安装 + 综合能力分数（skills + mcp）前 4 个
 const featuredPlugins = computed(() => {
   return plugins.value
@@ -460,7 +482,7 @@ onMounted(() => {
             </button>
             <div class="mkt-featured-ops">
               <button type="button" class="mkt-btn mkt-btn-ghost" @click="editPlugin(p.file)">编辑</button>
-              <button type="button" class="mkt-btn mkt-btn-ghost" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+              <button type="button" class="mkt-btn mkt-btn-ghost" title="发布插件" @click="openPublishDialog(p.file)">分享</button>
             </div>
           </div>
         </article>
@@ -803,6 +825,54 @@ onMounted(() => {
         </div>
       </div>
     </div><!-- /团队空间 -->
+
+    <!-- === 发布插件弹窗 === -->
+    <Teleport to="body">
+      <Transition name="upgrade-modal">
+        <div v-if="publishDialogOpen" class="upgrade-mask" @click.self="publishDialogOpen = false">
+          <div class="upgrade-panel" role="dialog" aria-modal="true" style="max-width: 480px">
+            <header class="upgrade-head">
+              <h3>发布插件</h3>
+              <button type="button" class="upgrade-close" aria-label="关闭" @click="publishDialogOpen = false">
+                <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </header>
+            <div class="upgrade-body">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:10px">发布到</label>
+              <div style="display:flex;gap:10px;margin-bottom:16px">
+                <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;cursor:pointer" :style="{ borderColor: publishScope === 'public' ? 'var(--brand-500,#6366f1)' : '' }">
+                  <input type="radio" v-model="publishScope" value="public" style="accent-color:var(--brand-500,#6366f1)" />
+                  <div>
+                    <div style="font-size:14px;font-weight:600">公共市场</div>
+                    <div style="font-size:12px;color:var(--text-tertiary)">所有人可见可下载</div>
+                  </div>
+                </label>
+                <label v-if="auth.isLoggedIn && teamSpaces.length > 0" style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;cursor:pointer" :style="{ borderColor: publishScope === 'team' ? 'var(--brand-500,#6366f1)' : '' }">
+                  <input type="radio" v-model="publishScope" value="team" style="accent-color:var(--brand-500,#6366f1)" />
+                  <div>
+                    <div style="font-size:14px;font-weight:600">团队空间</div>
+                    <div style="font-size:12px;color:var(--text-tertiary)">仅团队成员可见</div>
+                  </div>
+                </label>
+              </div>
+              <!-- 选择团队 -->
+              <div v-if="publishScope === 'team' && teamSpaces.length > 0" style="margin-bottom:16px">
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">选择团队</label>
+                <select v-model="publishTeamId" style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)">
+                  <option :value="null" disabled>请选择团队空间</option>
+                  <option v-for="t in teamSpaces" :key="t.id" :value="t.id">{{ t.name }}（{{ t.role === 'owner' ? 'Owner' : 'Member' }}）</option>
+                </select>
+              </div>
+              <p v-if="publishScope === 'team' && teamSpaces.length === 0" style="font-size:13px;color:var(--text-tertiary)">你还没有加入任何团队，请先创建团队空间</p>
+            </div>
+            <footer class="upgrade-foot">
+              <button type="button" class="mkt-btn mkt-btn-ghost" @click="publishDialogOpen = false">取消</button>
+              <button type="button" class="mkt-btn mkt-btn-primary" :disabled="publishScope === 'team' && !publishTeamId" @click="doPublish">发布</button>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- === 创建团队空间弹窗 === -->
     <Teleport to="body">
