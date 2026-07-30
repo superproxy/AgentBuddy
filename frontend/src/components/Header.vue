@@ -481,15 +481,16 @@ onBeforeUnmount(() => {
           class="tab-rail flex justify-center min-w-0 max-[1100px]:col-span-2 max-[1100px]:justify-start"
           aria-label="配置分区"
         >
-          <div
-            class="tab-track relative flex items-center gap-0.5 p-1 w-full max-w-full"
-            role="tablist"
-            aria-orientation="horizontal"
-            @keydown="onTabKeydown"
-            @wheel="onTabWheel"
-            @dragover="onDragOverFavContainer"
-            @drop="onDropFav"
-          >
+          <div class="tab-rail-inner flex items-center min-w-0 w-full">
+            <div
+              class="tab-track relative flex items-center gap-0.5 p-1 min-w-0 flex-1 max-w-full"
+              role="tablist"
+              aria-orientation="horizontal"
+              @keydown="onTabKeydown"
+              @wheel="onTabWheel"
+              @dragover="onDragOverFavContainer"
+              @drop="onDropFav"
+            >
             <div
               v-for="(t, idx) in nav.favoriteItems"
               :key="t.key"
@@ -526,9 +527,10 @@ onBeforeUnmount(() => {
                 @click.prevent.stop="nav.moveToMore(t.key)"
               >×</button>
             </div>
+            </div>
 
-            <!-- 更多收起区 -->
-            <div v-if="nav.moreItems.length > 0" class="more-wrap relative">
+            <!-- 更多收起区（在 tab-track 外部，不受 overflow 裁剪） -->
+            <div v-if="nav.moreItems.length > 0" class="more-wrap relative flex-shrink-0">
               <button
                 type="button"
                 class="tab more-trigger appearance-none border-0 bg-transparent cursor-pointer
