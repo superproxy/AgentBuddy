@@ -27,8 +27,8 @@ async function submit() {
   }
 
   if (auth.dialogMode === 'register') {
-    if (password.value.length < 6) {
-      errorMsg.value = '密码至少 6 位'
+    if (password.value.length < 8) {
+      errorMsg.value = '密码至少 8 位'
       return
     }
     const r = await auth.register(username.value.trim(), password.value, email.value.trim() || undefined)

@@ -42,6 +42,50 @@ function handleLogout() {
   closeUserMenu()
 }
 
+// ============ 修改密码 ============
+const pwdDialogOpen = ref(false)
+const pwdForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const pwdError = ref('')
+const pwdLoading = ref(false)
+
+function openPwdDialog() {
+  pwdForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+  pwdError.value = ''
+  pwdDialogOpen.value = true
+  closeUserMenu()
+}
+
+async function submitChangePassword() {
+  pwdError.value = ''
+  const { oldPassword, newPassword, confirmPassword } = pwdForm.value
+  if (!oldPassword || !newPassword) {
+    pwdError.value = '请填写旧密码和新密码'
+    return
+  }
+  if (newPassword.length < 8) {
+    pwdError.value = '新密码至少 8 位'
+    return
+  }
+  if (newPassword !== confirmPassword) {
+    pwdError.value = '两次输入的新密码不一致'
+    return
+  }
+  pwdLoading.value = true
+  try {
+    const r = await auth.changePassword(oldPassword, newPassword)
+    if (!r.ok) {
+      pwdError.value = r.error || '修改失败'
+      return
+    }
+    pwdDialogOpen.value = false
+    ui.toast('密码修改成功', 'ok')
+  } catch {
+    pwdError.value = '网络错误'
+  } finally {
+    pwdLoading.value = false
+  }
+}
+
 const nav = useNavOrderStore()
 
 // ============ 拖拽状态 ============
@@ -659,6 +703,7 @@ onBeforeUnmount(() => {
                   <div class="user-menu-email">{{ auth.user?.email }}</div>
                 </div>
                 <div class="user-menu-item" @click="emit('update:tab', 'marketplace'); closeUserMenu()">插件市场</div>
+                <div class="user-menu-item" @click="openPwdDialog">修改密码</div>
                 <div class="user-menu-item danger" @click="handleLogout">退出登录</div>
               </div>
             </Transition>
@@ -667,6 +712,35 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </header>
+
+  <!-- 修改密码弹窗 -->
+  <Teleport to="body">
+    <Transition name="auth-dialog">
+      <div v-if="pwdDialogOpen" class="pwd-mask" @click.self="pwdDialogOpen = false">
+        <div class="pwd-panel" role="dialog" aria-modal="true">
+          <div class="pwd-title">修改密码</div>
+          <div class="pwd-sub">新密码至少 8 位</div>
+          <div v-if="pwdError" class="pwd-error">{{ pwdError }}</div>
+          <div class="pwd-field">
+            <label class="pwd-label">旧密码</label>
+            <input v-model="pwdForm.oldPassword" class="pwd-input" type="password" placeholder="输入当前密码" @keydown.enter="submitChangePassword" />
+          </div>
+          <div class="pwd-field">
+            <label class="pwd-label">新密码</label>
+            <input v-model="pwdForm.newPassword" class="pwd-input" type="password" placeholder="至少 8 位" @keydown.enter="submitChangePassword" />
+          </div>
+          <div class="pwd-field">
+            <label class="pwd-label">确认新密码</label>
+            <input v-model="pwdForm.confirmPassword" class="pwd-input" type="password" placeholder="再次输入新密码" @keydown.enter="submitChangePassword" />
+          </div>
+          <div class="pwd-actions">
+            <button class="pwd-btn pwd-btn-cancel" @click="pwdDialogOpen = false">取消</button>
+            <button class="pwd-btn pwd-btn-submit" :disabled="pwdLoading" @click="submitChangePassword">{{ pwdLoading ? '...' : '确认修改' }}</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 
   <!-- 升级检查弹层 -->
   <Teleport to="body">
@@ -1225,6 +1299,71 @@ onBeforeUnmount(() => {
 }
 
 /* 升级弹层 */
+/* 修改密码弹窗 */
+.pwd-mask {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(2px);
+}
+.pwd-panel {
+  background: var(--bg-base, #fff);
+  border: 1px solid var(--border-base, #e5e7eb);
+  border-radius: 16px;
+  padding: 28px;
+  width: 360px; max-width: 90vw;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+}
+.pwd-title {
+  font-size: 18px; font-weight: 700;
+  color: var(--text-primary, #111827);
+  margin-bottom: 4px;
+}
+.pwd-sub {
+  font-size: 13px; color: var(--text-tertiary, #9ca3af);
+  margin-bottom: 20px;
+}
+.pwd-error {
+  font-size: 12px; color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  padding: 8px 12px; border-radius: 6px;
+  margin-bottom: 12px;
+}
+.pwd-field { margin-bottom: 14px; }
+.pwd-label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-secondary, #4b5563);
+  margin-bottom: 4px;
+}
+.pwd-input {
+  width: 100%; padding: 9px 12px;
+  border: 1px solid var(--border-strong, #d1d5db);
+  border-radius: 8px; font-size: 14px;
+  background: var(--bg-base, #fff);
+  color: var(--text-primary, #111827);
+  transition: border-color 0.15s;
+}
+.pwd-input:focus { outline: none; border-color: var(--brand-500, #6366f1); }
+.pwd-actions { display: flex; gap: 8px; margin-top: 6px; }
+.pwd-btn {
+  flex: 1; padding: 10px;
+  border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+}
+.pwd-btn-cancel {
+  border: 1px solid var(--border-strong, #d1d5db);
+  background: var(--bg-base, #fff);
+  color: var(--text-secondary, #4b5563);
+}
+.pwd-btn-cancel:hover { color: var(--text-primary, #111827); border-color: var(--text-tertiary, #9ca3af); }
+.pwd-btn-submit {
+  border: none;
+  background: var(--brand-500, #6366f1);
+  color: white;
+}
+.pwd-btn-submit:hover:not(:disabled) { background: var(--brand-600, #4f46e5); }
+.pwd-btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .upgrade-mask {
   position: fixed;
   inset: 0;

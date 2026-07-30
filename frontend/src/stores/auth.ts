@@ -99,6 +99,22 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem(TOKEN_KEY)
   }
 
+  /** 修改密码 */
+  async function changePassword(oldPassword: string, newPassword: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const url = serverApi('/api/auth/change-password')
+      if (!url) return { ok: false, error: '未配置 Server 地址' }
+      const r = await api<{ ok: boolean; error?: string }>(url, {
+        method: 'POST',
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      })
+      if (!r.ok) return { ok: false, error: r.error || '修改失败' }
+      return { ok: true }
+    } catch (e: any) {
+      return { ok: false, error: e.message || '网络错误' }
+    }
+  }
+
   /** 打开登录弹窗 */
   function openLogin() {
     dialogMode.value = 'login'
@@ -119,7 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     user, loading, dialogOpen, dialogMode,
     isLoggedIn, isAdmin, username,
-    restore, getToken, login, register, logout,
+    restore, getToken, login, register, logout, changePassword,
     openLogin, openRegister, closeDialog,
   }
 })

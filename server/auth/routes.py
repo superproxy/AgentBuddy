@@ -36,8 +36,8 @@ def create_auth_bp() -> Blueprint:
 
         if not username:
             return jsonify({"ok": False, "error": "用户名不能为空"}), 400
-        if len(password) < 6:
-            return jsonify({"ok": False, "error": "密码至少 6 位"}), 400
+        if len(password) < 8:
+            return jsonify({"ok": False, "error": "密码至少 8 位"}), 400
 
         conn = get_db()
         # 检查用户名是否已存在
@@ -89,6 +89,32 @@ def create_auth_bp() -> Blueprint:
     def me():
         """获取当前用户信息。"""
         return jsonify({"ok": True, "data": g.current_user})
+
+    @bp.route("/auth/change-password", methods=["POST"])
+    @require_auth
+    def change_password():
+        """修改密码。Body: { old_password, new_password }"""
+        data = request.get_json(force=True, silent=True) or {}
+        old_password = data.get("old_password") or ""
+        new_password = data.get("new_password") or ""
+
+        if not old_password or not new_password:
+            return jsonify({"ok": False, "error": "旧密码和新密码不能为空"}), 400
+        if len(new_password) < 8:
+            return jsonify({"ok": False, "error": "新密码至少 8 位"}), 400
+
+        uid = g.current_user["id"]
+        conn = get_db()
+        row = conn.execute("SELECT password FROM users WHERE id = ?", (uid,)).fetchone()
+        if not row or not bcrypt.checkpw(old_password.encode("utf-8"), row["password"].encode("utf-8")):
+            conn.close()
+            return jsonify({"ok": False, "error": "旧密码错误"}), 401
+
+        hashed = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        conn.execute("UPDATE users SET password = ? WHERE id = ?", (hashed, uid))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True})
 
     # ==================== 团队空间 ====================
 

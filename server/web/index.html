@@ -334,6 +334,7 @@
             </div>
           </div>
           <span class="auth-bar-info">👋 <b>{{ user.username }}</b></span>
+          <button class="header-btn" @click="openChangePwd">修改密码</button>
           <button class="header-btn" @click="logout">退出</button>
         </template>
         <template v-else>
@@ -573,6 +574,19 @@
       <button class="login-btn" @click="doInvite" :disabled="inviteLoading">{{ inviteLoading ? '...' : '邀请' }}</button>
     </div>
   </div>
+
+  <!-- 修改密码弹窗 -->
+  <div v-if="showChangePwd" class="login-mask" @click.self="showChangePwd = false">
+    <div class="login-panel">
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">修改密码</h3>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">新密码至少 8 位</p>
+      <div v-if="changePwdError" class="login-error">{{ changePwdError }}</div>
+      <input class="login-input" v-model="changePwdForm.old_password" type="password" placeholder="旧密码" />
+      <input class="login-input" v-model="changePwdForm.new_password" type="password" placeholder="新密码（至少 8 位）" />
+      <input class="login-input" v-model="changePwdForm.confirm_password" type="password" placeholder="确认新密码" @keydown.enter="doChangePassword" />
+      <button class="login-btn" @click="doChangePassword" :disabled="changePwdLoading">{{ changePwdLoading ? '...' : '确认修改' }}</button>
+    </div>
+  </div>
   <footer class="site-footer">
     <p>AgentBuddy · AI 编程助手插件平台</p>
     <p style="margin-top:4px"><a class="footer-link" href="https://github.com/superproxy/AgentBuddy">GitHub</a></p>
@@ -626,6 +640,12 @@ createApp({
     const invPanelOpen = ref(false)
     const invLoading = ref(false)
     let invTimer = null
+
+    // === 修改密码 ===
+    const showChangePwd = ref(false)
+    const changePwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
+    const changePwdError = ref('')
+    const changePwdLoading = ref(false)
 
     function authHeaders() {
       const token = user.value?.token
@@ -778,6 +798,48 @@ createApp({
       }
     }
 
+    // === 修改密码 ===
+    function openChangePwd() {
+      changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
+      changePwdError.value = ''
+      showChangePwd.value = true
+    }
+
+    async function doChangePassword() {
+      changePwdError.value = ''
+      const f = changePwdForm.value
+      if (!f.old_password || !f.new_password) {
+        changePwdError.value = '请填写旧密码和新密码'
+        return
+      }
+      if (f.new_password.length < 8) {
+        changePwdError.value = '新密码至少 8 位'
+        return
+      }
+      if (f.new_password !== f.confirm_password) {
+        changePwdError.value = '两次输入的新密码不一致'
+        return
+      }
+      changePwdLoading.value = true
+      try {
+        const r = await fetch('/api/auth/change-password', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ old_password: f.old_password, new_password: f.new_password }),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          showChangePwd.value = false
+          alert('密码修改成功')
+        } else {
+          changePwdError.value = d.error || '修改失败'
+        }
+      } catch (e) {
+        changePwdError.value = '网络错误'
+      } finally {
+        changePwdLoading.value = false
+      }
+    }
+
     const filteredItems = computed(() => {
       if (!activeTag.value) return items.value
       return items.value.filter(it =>
@@ -863,8 +925,8 @@ createApp({
         loginError.value = '用户名和密码不能为空'
         return
       }
-      if (loginMode.value === 'register' && loginForm.value.password.length < 6) {
-        loginError.value = '密码至少 6 位'
+      if (loginMode.value === 'register' && loginForm.value.password.length < 8) {
+        loginError.value = '密码至少 8 位'
         return
       }
       loginLoading.value = true
@@ -929,6 +991,7 @@ createApp({
       loadTeams, openTeam, doCreateTeam, doInvite, removeMember, deleteTeam,
       teamPlugins, teamPluginsLoading,
       invitations, invPanelOpen, invLoading, loadInvitations, respondInvitation,
+      showChangePwd, changePwdForm, changePwdError, changePwdLoading, openChangePwd, doChangePassword,
     }
   }
 }).mount('#app')
