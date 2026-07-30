@@ -215,6 +215,17 @@ function onTabKeydown(e: KeyboardEvent) {
   selectTab(keys[next])
 }
 
+// 鼠标滚轮横向滚动 tab-track
+function onTabWheel(e: WheelEvent) {
+  const track = e.currentTarget as HTMLElement
+  if (!track) return
+  // 垂直滚轮 → 横向滚动
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    e.preventDefault()
+    track.scrollLeft += e.deltaY
+  }
+}
+
 onMounted(async () => {
   try {
     const r = await fetch('/api/version')
@@ -377,10 +388,11 @@ onBeforeUnmount(() => {
           aria-label="配置分区"
         >
           <div
-            class="tab-track relative flex items-center gap-0.5 p-1 max-w-full"
+            class="tab-track relative flex items-center gap-0.5 p-1 w-full max-w-full"
             role="tablist"
             aria-orientation="horizontal"
             @keydown="onTabKeydown"
+            @wheel="onTabWheel"
             @dragover="onDragOverFavContainer"
             @drop="onDropFav"
           >
@@ -892,6 +904,9 @@ onBeforeUnmount(() => {
   background: var(--bg-sunken);
   border: 1px solid var(--border-base);
   border-radius: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
   scrollbar-width: none;
 }
 
@@ -920,6 +935,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 .drag-handle {
   font-size: 12px;
@@ -994,6 +1010,7 @@ onBeforeUnmount(() => {
 /* 更多按钮 */
 .more-wrap {
   margin-left: 4px;
+  flex-shrink: 0;
 }
 .more-trigger .more-chev {
   width: 11px;
