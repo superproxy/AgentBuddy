@@ -490,6 +490,31 @@
             >移除</button>
           </div>
         </div>
+
+        <!-- 团队插件 -->
+        <h3 style="font-size:14px;font-weight:600;margin:24px 0 12px;color:var(--text-secondary)">团队插件</h3>
+        <div v-if="teamPluginsLoading" class="loading"><div class="loading-spinner"></div>加载中...</div>
+        <div v-else-if="teamPlugins.length === 0" class="empty" style="padding:24px;text-align:center">
+          <p style="font-size:14px;color:var(--text-tertiary)">暂无插件</p>
+          <p style="font-size:12px;color:var(--text-quaternary);margin-top:4px">在客户端发布插件时选择此团队空间</p>
+        </div>
+        <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+          <div v-for="p in teamPlugins" :key="p.id" class="plugin-card" style="display:flex;align-items:flex-start;gap:12px;padding:16px">
+            <div class="card-icon" :style="{ background: colorFor(p.name) }">{{ p.name.charAt(0).toUpperCase() }}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:14px;font-weight:600">{{ p.name }}</span>
+                <span style="font-size:11px;color:var(--text-tertiary)">v{{ p.version }}</span>
+              </div>
+              <p style="font-size:12px;color:var(--text-tertiary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.description || '暂无描述' }}</p>
+              <div style="display:flex;gap:8px;margin-top:4px;font-size:11px;color:var(--text-quaternary)">
+                <span>⬇ {{ p.downloads || 0 }}</span>
+                <span>by {{ p.author }}</span>
+              </div>
+            </div>
+            <a class="header-btn" :href="'/api/marketplace/download?id=' + encodeURIComponent(p.id)" style="font-size:12px;padding:6px 12px">下载</a>
+          </div>
+        </div>
       </div>
     </div>
   </template><!-- /团队空间页 -->
@@ -553,6 +578,8 @@ createApp({
     const selectedTeam = ref(null)
     const members = ref([])
     const membersLoading = ref(false)
+    const teamPlugins = ref([])
+    const teamPluginsLoading = ref(false)
     const showCreateTeam = ref(false)
     const createTeamForm = ref({ name: '', description: '' })
     const createTeamError = ref('')
@@ -587,12 +614,20 @@ createApp({
     async function openTeam(t) {
       selectedTeam.value = t
       membersLoading.value = true
+      teamPluginsLoading.value = true
       try {
         const r = await fetch('/api/teams/' + t.id + '/members', { headers: authHeaders() })
         const d = await r.json()
         if (d.ok) members.value = d.data || []
       } catch (e) { console.error(e) } finally {
         membersLoading.value = false
+      }
+      try {
+        const r2 = await fetch('/api/marketplace?scope=team&team_id=' + t.id, { headers: authHeaders() })
+        const d2 = await r2.json()
+        if (d2.ok) teamPlugins.value = d2.data || []
+      } catch (e) { console.error(e) } finally {
+        teamPluginsLoading.value = false
       }
     }
 
@@ -813,6 +848,7 @@ createApp({
       showCreateTeam, createTeamForm, createTeamError, createTeamLoading,
       showInvite, inviteUsername, inviteError, inviteLoading,
       loadTeams, openTeam, doCreateTeam, doInvite, removeMember, deleteTeam,
+      teamPlugins, teamPluginsLoading,
     }
   }
 }).mount('#app')
