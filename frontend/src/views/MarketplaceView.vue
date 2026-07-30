@@ -50,116 +50,181 @@ async function deletePlugin(id: string) {
 
 watch(() => activeTab, (tab) => {
   if (tab === 'mine') loadMyPlugins()
+  if (tab === 'team') loadTeams()
 })
 
-// === 团队空间 mock 数据（后续对接 server API） ===
+// === 团队空间（真实 API） ===
+interface TeamMember {
+  id: number
+  username: string
+  email: string
+  role: 'owner' | 'member'
+  joined_at: string
+}
 interface TeamSpace {
-  id: string
+  id: number
   name: string
   description: string
-  plugin_count: number
-  member_count: number
-  role: 'owner' | 'member'
-  members: { name: string; email: string; avatar: string; role: 'owner' | 'member' }[]
+  owner_id: number
   created_at: string
+  role: string
+  member_count: number
 }
 
-const teamSpaces = ref<TeamSpace[]>([
-  {
-    id: 'backend-team',
-    name: '后端架构组',
-    description: '团队内部使用的后端架构插件集合，包含微服务、消息队列、数据库设计等专用智能体。',
-    plugin_count: 12,
-    member_count: 5,
-    role: 'owner',
-    members: [
-      { name: '张三', email: 'zhangsan@company.com', avatar: '张', role: 'owner' },
-      { name: '李四', email: 'lisi@company.com', avatar: '李', role: 'member' },
-      { name: '王五', email: 'wangwu@company.com', avatar: '王', role: 'member' },
-    ],
-    created_at: '2026-06-15',
-  },
-  {
-    id: 'frontend-team',
-    name: '前端工程化',
-    description: '前端团队私有插件空间，包含组件库设计、性能优化、自动化测试等内部智能体。',
-    plugin_count: 8,
-    member_count: 3,
-    role: 'member',
-    members: [
-      { name: '赵六', email: 'zhaoliu@company.com', avatar: '赵', role: 'owner' },
-      { name: '钱七', email: 'qianqi@company.com', avatar: '钱', role: 'member' },
-    ],
-    created_at: '2026-06-20',
-  },
-])
-
+const teamSpaces = ref<TeamSpace[]>([])
+const teamsLoading = ref(false)
 const teamSearchQuery = ref('')
-const selectedSpaceId = ref('')
+const selectedSpaceId = ref<number | null>(null)
 const createSpaceOpen = ref(false)
 const inviteOpen = ref(false)
 const newSpaceName = ref('')
 const newSpaceDesc = ref('')
-const inviteEmails = ref<string[]>([])
 const inviteInput = ref('')
+const inviteError = ref('')
+const teamMembers = ref<TeamMember[]>([])
+const membersLoading = ref(false)
+const teamPlugins = ref<any[]>([])
+const teamPluginsLoading = ref(false)
 
 const filteredTeamSpaces = computed(() => {
   if (!teamSearchQuery.value.trim()) return teamSpaces.value
   const q = teamSearchQuery.value.trim().toLowerCase()
   return teamSpaces.value.filter(s =>
-    s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q),
+    s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q),
   )
 })
 
 const selectedSpace = computed(() => teamSpaces.value.find(s => s.id === selectedSpaceId.value))
 
-function openSpaceDetail(id: string) {
+async function loadTeams() {
+  if (!auth.isLoggedIn) return
+  teamsLoading.value = true
+  try {
+    const url = serverApi('/api/teams')
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: TeamSpace[] }>(url)
+    if (r.ok) teamSpaces.value = r.data || []
+  } catch { /* ignore */ } finally {
+    teamsLoading.value = false
+  }
+}
+
+async function openSpaceDetail(id: number) {
   selectedSpaceId.value = id
+  await Promise.all([loadTeamMembers(id), loadTeamPlugins(id)])
+}
+
+async function loadTeamMembers(teamId: number) {
+  membersLoading.value = true
+  try {
+    const url = serverApi(`/api/teams/${teamId}/members`)
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: TeamMember[] }>(url)
+    if (r.ok) teamMembers.value = r.data || []
+  } catch { /* ignore */ } finally {
+    membersLoading.value = false
+  }
+}
+
+async function loadTeamPlugins(teamId: number) {
+  teamPluginsLoading.value = true
+  try {
+    const url = serverApi(`/api/marketplace?scope=team&team_id=${teamId}`)
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: any[] }>(url)
+    if (r.ok) {
+      teamPlugins.value = (r.data || []).filter((p: any) => p.team_id === teamId)
+    }
+  } catch { /* ignore */ } finally {
+    teamPluginsLoading.value = false
+  }
 }
 
 function backToSpaceList() {
-  selectedSpaceId.value = ''
+  selectedSpaceId.value = null
+  teamMembers.value = []
+  teamPlugins.value = []
 }
 
 function showCreateSpace() {
   newSpaceName.value = ''
   newSpaceDesc.value = ''
-  inviteEmails.value = []
   createSpaceOpen.value = true
 }
 
-function addInviteEmail() {
-  const email = inviteInput.value.trim()
-  if (email && !inviteEmails.value.includes(email)) {
-    inviteEmails.value.push(email)
-    inviteInput.value = ''
-  }
-}
-
-function removeInviteEmail(email: string) {
-  inviteEmails.value = inviteEmails.value.filter(e => e !== email)
-}
-
-function createSpace() {
+async function createSpace() {
   if (!newSpaceName.value.trim()) {
     ui.toast('请输入空间名称', 'warn')
     return
   }
-  // TODO: 调用 server API 创建团队空间
-  ui.toast(`团队空间「${newSpaceName.value}」创建成功`)
-  createSpaceOpen.value = false
+  try {
+    const url = serverApi('/api/teams')
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: TeamSpace }>(url, {
+      method: 'POST',
+      body: JSON.stringify({ name: newSpaceName.value.trim(), description: newSpaceDesc.value.trim() }),
+    })
+    if (r.ok) {
+      ui.toast(`团队空间「${newSpaceName.value}」创建成功`, 'ok')
+      createSpaceOpen.value = false
+      await loadTeams()
+      if (r.data) openSpaceDetail(r.data.id)
+    } else {
+      ui.toast(r.error || '创建失败', 'err')
+    }
+  } catch { ui.toast('网络错误', 'err') }
 }
 
 function showInvite() {
-  inviteEmails.value = []
   inviteInput.value = ''
+  inviteError.value = ''
   inviteOpen.value = true
 }
 
-function sendInvite() {
-  // TODO: 调用 server API 发送邀请
-  ui.toast(`已发送 ${inviteEmails.value.length} 份邀请`)
-  inviteOpen.value = false
+async function sendInvite() {
+  if (!inviteInput.value.trim()) {
+    inviteError.value = '请输入用户名'
+    return
+  }
+  if (!selectedSpaceId.value) return
+  try {
+    const url = serverApi(`/api/teams/${selectedSpaceId.value}/invite`)
+    if (!url) return
+    const r = await api<{ ok: boolean; error?: string }>(url, {
+      method: 'POST',
+      body: JSON.stringify({ username: inviteInput.value.trim() }),
+    })
+    if (r.ok) {
+      ui.toast(`已邀请 ${inviteInput.value} 加入团队`, 'ok')
+      inviteOpen.value = false
+      await loadTeamMembers(selectedSpaceId.value)
+      await loadTeams()
+    } else {
+      inviteError.value = r.error || '邀请失败'
+    }
+  } catch { inviteError.value = '网络错误' }
+}
+
+async function removeMember(username: string) {
+  if (!selectedSpaceId.value) return
+  if (!confirm(`确定移除 ${username}？`)) return
+  try {
+    const url = serverApi(`/api/teams/${selectedSpaceId.value}/members/${username}`)
+    if (!url) return
+    await fetch(url, { method: 'DELETE', headers: { Authorization: 'Bearer ' + getAuthToken() } })
+    await loadTeamMembers(selectedSpaceId.value)
+    await loadTeams()
+  } catch { /* ignore */ }
+}
+
+async function deleteTeamPlugin(pluginId: string) {
+  if (!confirm('确定删除这个插件？')) return
+  try {
+    const url = serverApi('/api/marketplace/remove?id=' + encodeURIComponent(pluginId))
+    if (!url) return
+    await fetch(url, { method: 'DELETE', headers: { Authorization: 'Bearer ' + getAuthToken() } })
+    teamPlugins.value = teamPlugins.value.filter(p => p.id !== pluginId)
+  } catch { /* ignore */ }
 }
 
 // 热门推荐：本地未安装 + 综合能力分数（skills + mcp）前 4 个
@@ -629,7 +694,8 @@ onMounted(() => {
           </button>
         </div>
 
-        <div v-if="!filteredTeamSpaces.length" class="mkt-empty">
+        <div v-if="teamsLoading" class="mkt-empty">加载中...</div>
+        <div v-else-if="!filteredTeamSpaces.length" class="mkt-empty">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <h3>暂无团队空间</h3>
           <p>创建团队空间，邀请成员协作管理内部插件。</p>
@@ -650,18 +716,9 @@ onMounted(() => {
               <svg class="team-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               <h3>{{ space.name }}</h3>
             </div>
-            <p class="team-card-desc">{{ space.description }}</p>
+            <p class="team-card-desc">{{ space.description || '暂无描述' }}</p>
             <div class="team-card-meta">
-              <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> {{ space.plugin_count }} 个插件</span>
               <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> {{ space.member_count }} 成员</span>
-            </div>
-            <div class="team-card-members">
-              <span
-                v-for="m in space.members.slice(0, 3)"
-                :key="m.email"
-                class="team-avatar"
-              >{{ m.avatar }}</span>
-              <span v-if="space.member_count > 3" class="team-more">+{{ space.member_count - 3 }}</span>
             </div>
           </article>
         </div>
@@ -681,17 +738,13 @@ onMounted(() => {
             </div>
             <div>
               <div class="team-detail-name">{{ selectedSpace.name }}</div>
-              <div class="team-detail-meta">{{ selectedSpace.plugin_count }} 个插件 · {{ selectedSpace.member_count }} 名成员 · 创建于 {{ selectedSpace.created_at }}</div>
+              <div class="team-detail-meta">{{ teamPlugins.length }} 个插件 · {{ teamMembers.length }} 名成员</div>
             </div>
           </div>
           <div class="team-detail-actions">
-            <button type="button" class="mkt-btn mkt-btn-ghost" @click="showInvite">
+            <button v-if="selectedSpace.role === 'owner'" type="button" class="mkt-btn mkt-btn-ghost" @click="showInvite">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
               邀请成员
-            </button>
-            <button type="button" class="mkt-btn mkt-btn-primary" @click="publishToMarketplace('')">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              发布插件
             </button>
           </div>
         </div>
@@ -699,27 +752,54 @@ onMounted(() => {
         <!-- 成员管理 -->
         <div class="team-members-panel">
           <h3>成员管理</h3>
-          <div class="team-members-list">
-            <div v-for="m in selectedSpace.members" :key="m.email" class="team-member-row">
+          <div v-if="membersLoading" class="mkt-empty">加载中...</div>
+          <div v-else class="team-members-list">
+            <div v-for="m in teamMembers" :key="m.id" class="team-member-row">
               <div class="team-member-info">
-                <span class="team-avatar team-avatar-lg">{{ m.avatar }}</span>
+                <span class="team-avatar team-avatar-lg">{{ m.username.charAt(0).toUpperCase() }}</span>
                 <div>
-                  <div class="team-member-name">{{ m.name }}</div>
-                  <div class="team-member-email">{{ m.email }}</div>
+                  <div class="team-member-name">{{ m.username }}</div>
+                  <div class="team-member-email">{{ m.email || '无邮箱' }}</div>
                 </div>
               </div>
               <span class="team-role" :class="m.role === 'owner' ? 'role-owner' : 'role-member'">
                 {{ m.role === 'owner' ? 'Owner' : 'Member' }}
               </span>
+              <button
+                v-if="selectedSpace.role === 'owner' && m.role !== 'owner'"
+                class="mkt-btn-danger"
+                style="font-size:12px;padding:4px 10px"
+                @click="removeMember(m.username)"
+              >移除</button>
             </div>
           </div>
         </div>
 
-        <!-- 空间内插件（占位） -->
-        <div class="mkt-empty" style="margin-top: 16px">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          <h3>暂无插件</h3>
-          <p>点击上方「发布插件」将本地插件分享到此团队空间。</p>
+        <!-- 空间内插件 -->
+        <div style="margin-top:16px">
+          <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text-secondary)">团队插件</h3>
+          <div v-if="teamPluginsLoading" class="mkt-empty">加载中...</div>
+          <div v-else-if="teamPlugins.length === 0" class="mkt-empty">
+            <p>暂无插件</p>
+            <p style="font-size:12px;color:var(--text-tertiary)">在「插件构建」中发布插件时选择此团队空间</p>
+          </div>
+          <div v-else class="mkt-grid">
+            <div v-for="p in teamPlugins" :key="p.id" class="mkt-card">
+              <div class="mkt-card-head">
+                <span class="mkt-card-name">{{ p.name }}</span>
+                <span class="mkt-card-ver">v{{ p.version }}</span>
+              </div>
+              <p class="mkt-card-desc">{{ p.description || '暂无描述' }}</p>
+              <div class="mkt-card-meta">
+                <span>⬇ {{ p.downloads || 0 }}</span>
+                <span>❤ {{ p.likes || 0 }}</span>
+                <span style="color:var(--green)">团队</span>
+              </div>
+              <div class="mkt-card-actions">
+                <button v-if="selectedSpace.role === 'owner' || p.author_id === auth.user?.id" class="mkt-btn-danger" @click="deleteTeamPlugin(p.id)">删除</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div><!-- /团队空间 -->
@@ -744,23 +824,7 @@ onMounted(() => {
                 <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">描述</label>
                 <input v-model="newSpaceDesc" type="text" placeholder="简要描述空间用途" style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)" />
               </div>
-              <div>
-                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">邀请成员（可选）</label>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;min-height:44px;background:var(--bg-base,#f7f8fa)">
-                  <span v-for="email in inviteEmails" :key="email" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--color-brand-500,#165dff);color:#fff;font-size:12px;font-weight:600">
-                    {{ email }}
-                    <svg style="cursor:pointer;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24" @click="removeInviteEmail(email)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </span>
-                  <input
-                    v-model="inviteInput"
-                    type="text"
-                    placeholder="输入邮箱，回车邀请…"
-                    style="border:none;background:transparent;font-size:14px;outline:none;flex:1;min-width:120px"
-                    @keyup.enter="addInviteEmail"
-                  />
-                </div>
-                <p style="margin-top:4px;font-size:12px;color:var(--color-ink-500,#86909c)">被邀请的用户将收到邮件通知，加入后可查看和安装空间内插件</p>
-              </div>
+              <p style="font-size:12px;color:var(--color-ink-500,#86909c)">创建后你将自动成为团队 Owner，可在空间详情中邀请成员</p>
             </div>
             <footer class="upgrade-foot">
               <button type="button" class="mkt-btn mkt-btn-ghost" @click="createSpaceOpen = false">取消</button>
@@ -783,25 +847,20 @@ onMounted(() => {
               </button>
             </header>
             <div class="upgrade-body">
-              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">邮箱地址</label>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;min-height:44px;background:var(--bg-base,#f7f8fa)">
-                <span v-for="email in inviteEmails" :key="email" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;background:var(--color-brand-500,#165dff);color:#fff;font-size:12px;font-weight:600">
-                  {{ email }}
-                  <svg style="cursor:pointer;width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2" viewBox="0 0 24 24" @click="removeInviteEmail(email)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </span>
-                <input
-                  v-model="inviteInput"
-                  type="text"
-                  placeholder="输入邮箱，回车添加…"
-                  style="border:none;background:transparent;font-size:14px;outline:none;flex:1;min-width:120px"
-                  @keyup.enter="addInviteEmail"
-                />
-              </div>
-              <p style="margin-top:4px;font-size:12px;color:var(--color-ink-500,#86909c)">可同时邀请多位用户，被邀请者将收到邮件通知</p>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">用户名</label>
+              <input
+                v-model="inviteInput"
+                type="text"
+                placeholder="输入已注册的用户名"
+                style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)"
+                @keydown.enter="sendInvite"
+              />
+              <div v-if="inviteError" style="margin-top:8px;font-size:12px;color:var(--red,#f53f3f);background:rgba(245,63,63,0.08);padding:8px 12px;border-radius:6px">{{ inviteError }}</div>
+              <p style="margin-top:8px;font-size:12px;color:var(--color-ink-500,#86909c)">用户需先注册才能被邀请</p>
             </div>
             <footer class="upgrade-foot">
               <button type="button" class="mkt-btn mkt-btn-ghost" @click="inviteOpen = false">取消</button>
-              <button type="button" class="mkt-btn mkt-btn-primary" @click="sendInvite">发送邀请</button>
+              <button type="button" class="mkt-btn mkt-btn-primary" @click="sendInvite">邀请</button>
             </footer>
           </div>
         </div>
