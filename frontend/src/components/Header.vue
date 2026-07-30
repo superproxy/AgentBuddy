@@ -5,6 +5,7 @@ import { useUpgradeStore } from '../stores/upgrade'
 import { useNavOrderStore } from '../stores/navOrder'
 import SyncBar from './SyncBar.vue'
 import { useUiStore } from '../stores/ui'
+import { useAuthStore } from '../stores/auth'
 import { runSse } from '../api/sse'
 import { getServerUrl, setServerUrl } from '../api/client'
 
@@ -28,6 +29,20 @@ const ui = useUiStore()
 const silentUpgrading = ref(false)
 const serverSettingsOpen = ref(false)
 const serverUrlInput = ref('')
+const userMenuOpen = ref(false)
+
+const auth = useAuthStore()
+
+function toggleUserMenu() {
+  userMenuOpen.value = !userMenuOpen.value
+}
+function closeUserMenu() {
+  userMenuOpen.value = false
+}
+function handleLogout() {
+  auth.logout()
+  closeUserMenu()
+}
 
 const nav = useNavOrderStore()
 
@@ -224,6 +239,9 @@ function onGlobalClick(e: MouseEvent) {
   const target = e.target as HTMLElement
   if (!target.closest('.more-wrap')) {
     moreOpen.value = false
+  }
+  if (userMenuOpen.value && !target.closest('.user-menu-wrap')) {
+    userMenuOpen.value = false
   }
 }
 
@@ -521,6 +539,37 @@ onBeforeUnmount(() => {
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
+
+          <!-- 未登录：登录/注册按钮 -->
+          <template v-if="!auth.isLoggedIn">
+            <button class="auth-btn auth-btn-secondary" type="button" @click="auth.openLogin()">登录</button>
+            <button class="auth-btn auth-btn-primary" type="button" @click="auth.openRegister()">注册</button>
+          </template>
+
+          <!-- 已登录：头像 + 下拉菜单 -->
+          <div v-else class="user-menu-wrap relative">
+            <button
+              class="user-avatar-btn"
+              type="button"
+              :title="auth.username"
+              @click="toggleUserMenu"
+            >
+              <span class="user-avatar">{{ auth.username.charAt(0).toUpperCase() }}</span>
+            </button>
+            <Transition name="user-menu">
+              <div v-if="userMenuOpen" class="user-menu" role="menu" @click.stop>
+                <div class="user-menu-header">
+                  <div class="user-menu-name">
+                    {{ auth.username }}
+                    <span v-if="auth.isAdmin" class="user-role-tag">管理员</span>
+                  </div>
+                  <div class="user-menu-email">{{ auth.user?.email }}</div>
+                </div>
+                <div class="user-menu-item" @click="emit('update:tab', 'marketplace'); closeUserMenu()">插件市场</div>
+                <div class="user-menu-item danger" @click="handleLogout">退出登录</div>
+              </div>
+            </Transition>
+          </div>
         </div>
       </div>
     </div>
@@ -1578,4 +1627,94 @@ onBeforeUnmount(() => {
 .theme-toggle:hover svg {
   transform: rotate(15deg);
 }
+
+/* === 登录/注册按钮 === */
+.auth-btn {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong, #d1d5db);
+  background: transparent;
+  color: var(--text-secondary, #4b5563);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.auth-btn:hover { color: var(--text-primary, #111827); border-color: var(--text-tertiary, #9ca3af); }
+.auth-btn-primary {
+  background: var(--brand-500, #6366f1);
+  color: white;
+  border-color: var(--brand-500, #6366f1);
+}
+.auth-btn-primary:hover { background: var(--brand-600, #4f46e5); border-color: var(--brand-600, #4f46e5); }
+
+/* === 用户头像 + 下拉菜单 === */
+.user-avatar-btn {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-500, #6366f1), var(--brand-700, #4338ca));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 600; font-size: 13px;
+}
+
+.user-menu {
+  position: absolute;
+  right: 0; top: 42px;
+  background: var(--bg-base, #fff);
+  border: 1px solid var(--border-base, #e5e7eb);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  padding: 6px;
+  min-width: 180px;
+  z-index: 100;
+}
+.user-menu-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-base, #e5e7eb);
+  margin-bottom: 4px;
+}
+.user-menu-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  display: flex; align-items: center; gap: 4px;
+}
+.user-menu-email {
+  font-size: 11px;
+  color: var(--text-tertiary, #9ca3af);
+  margin-top: 2px;
+}
+.user-role-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(99,102,241,0.1);
+  color: var(--brand-500, #6366f1);
+}
+.user-menu-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary, #4b5563);
+  transition: background 0.1s;
+}
+.user-menu-item:hover { background: var(--bg-hover, #f3f4f6); }
+.user-menu-item.danger { color: #ef4444; }
+.user-menu-item.danger:hover { background: rgba(239,68,68,0.08); }
+
+/* Transition */
+.user-menu-enter-active, .user-menu-leave-active { transition: opacity 0.15s, transform 0.15s; }
+.user-menu-enter-from, .user-menu-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

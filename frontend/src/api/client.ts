@@ -9,7 +9,8 @@
  */
 
 const SERVER_URL_KEY = 'agentbuddy-server-url'
-const DEFAULT_SERVER_URL = 'http://123.60.75.27:5001'
+const DEFAULT_SERVER_URL = 'http://123.60.75.27'
+const TOKEN_KEY = 'agentbuddy-token'
 
 /** 获取远程 server 地址（marketplace + AI 生成服务） */
 export function getServerUrl(): string {
@@ -32,11 +33,29 @@ export function serverApi(path: string): string {
   return base.replace(/\/+$/, '') + path
 }
 
+/** 获取登录 token */
+export function getAuthToken(): string | null {
+  const stored = localStorage.getItem(TOKEN_KEY)
+  if (stored) {
+    try {
+      return JSON.parse(stored).token || null
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
 export async function api<T = any>(url: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {}
   // FormData 时让浏览器自动设置 Content-Type（含 boundary），不手动覆盖
   if (!(opts?.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
+  }
+  // 添加登录 token
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token
   }
   // 合并调用方传入的 headers（如需覆盖）
   if (opts?.headers) Object.assign(headers, opts.headers)

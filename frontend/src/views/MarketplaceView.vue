@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { usePluginStore } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
-import { serverApi } from '../api/client'
+import { useAuthStore } from '../stores/auth'
+import { serverApi, api, getAuthToken } from '../api/client'
 
 const mkt = useMarketplaceStore()
 const { items, loading, searchQuery, installing, isMock } = storeToRefs(mkt)
@@ -14,10 +15,42 @@ const { plugins, installingPlugin } = storeToRefs(pluginStore)
 const { refreshPluginList, onTogglePlugin, editPlugin, publishToMarketplace } = pluginStore
 
 const ui = useUiStore()
+const auth = useAuthStore()
 
 // === Tab 切换 ===
-type TabKey = 'market' | 'team'
+type TabKey = 'market' | 'mine' | 'team'
 const activeTab = ref<TabKey>('market')
+
+// === 我的发布 ===
+const myPlugins = ref<any[]>([])
+const myLoading = ref(false)
+
+async function loadMyPlugins() {
+  if (!auth.isLoggedIn) return
+  myLoading.value = true
+  try {
+    const url = serverApi('/api/marketplace/mine')
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: any[] }>(url)
+    if (r.ok) myPlugins.value = r.data || []
+  } catch { /* ignore */ } finally {
+    myLoading.value = false
+  }
+}
+
+async function deletePlugin(id: string) {
+  if (!confirm('确定删除这个插件？')) return
+  try {
+    const url = serverApi('/api/marketplace/remove?id=' + encodeURIComponent(id))
+    if (!url) return
+    await fetch(url, { method: 'DELETE', headers: { Authorization: 'Bearer ' + getAuthToken() } })
+    myPlugins.value = myPlugins.value.filter((p: any) => p.id !== id)
+  } catch { /* ignore */ }
+}
+
+watch(() => activeTab, (tab) => {
+  if (tab === 'mine') loadMyPlugins()
+})
 
 // === 团队空间 mock 数据（后续对接 server API） ===
 interface TeamSpace {
@@ -268,6 +301,19 @@ onMounted(() => {
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         插件市场
         <span class="mkt-tab-badge">{{ items.length }}</span>
+      </button>
+      <button
+        v-if="auth.isLoggedIn"
+        type="button"
+        class="mkt-tab"
+        :class="{ active: activeTab === 'mine' }"
+        role="tab"
+        :aria-selected="activeTab === 'mine'"
+        @click="activeTab = 'mine'"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        我的发布
+        <span class="mkt-tab-badge">{{ myPlugins.length }}</span>
       </button>
       <button
         type="button"
@@ -533,6 +579,33 @@ onMounted(() => {
       </aside>
     </div>
     </div><!-- /插件市场 -->
+
+    <!-- === 我的发布 === -->
+    <div v-show="activeTab === 'mine'">
+      <div v-if="myLoading" class="mkt-empty">加载中...</div>
+      <div v-else-if="myPlugins.length === 0" class="mkt-empty">
+        <p>你还没有发布过插件</p>
+        <p style="font-size:12px;color:var(--text-tertiary)">在「插件构建」中创建插件后即可发布</p>
+      </div>
+      <div v-else class="mkt-grid">
+        <div v-for="p in myPlugins" :key="p.id" class="mkt-card">
+          <div class="mkt-card-head">
+            <span class="mkt-card-name">{{ p.name }}</span>
+            <span class="mkt-card-ver">v{{ p.version }}</span>
+          </div>
+          <p class="mkt-card-desc">{{ p.description || '暂无描述' }}</p>
+          <div class="mkt-card-meta">
+            <span>⬇ {{ p.downloads || 0 }}</span>
+            <span>❤ {{ p.likes || 0 }}</span>
+            <span v-if="p.scope === 'team'" style="color:var(--green)">团队</span>
+            <span v-else style="color:var(--brand-500)">公共</span>
+          </div>
+          <div class="mkt-card-actions">
+            <button class="mkt-btn-danger" @click="deletePlugin(p.id)">删除</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- === 团队空间 === -->
     <div v-show="activeTab === 'team'">

@@ -4,6 +4,7 @@ import Header from './components/Header.vue'
 import Toast from './components/Toast.vue'
 import Modal from './components/Modal.vue'
 import AppDialog from './components/AppDialog.vue'
+import AuthDialog from './components/AuthDialog.vue'
 import LogPanel from './components/LogPanel.vue'
 import IdeView from './views/IdeView.vue'
 import LlmView from './views/LlmView.vue'
@@ -22,6 +23,7 @@ import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
 import { useKeysStore } from './stores/keys'
+import { useAuthStore } from './stores/auth'
 
 const tab = ref('ide')
 // 全部菜单定义（顺序仅作为"更多"区默认顺序）
@@ -47,6 +49,7 @@ const ide = useIdeStore()
 const env = useEnvStore()
 const mcp = useMcpStore()
 const keys = useKeysStore()
+const auth = useAuthStore()
 
 onMounted(() => {
   ide.loadIdeDetect()
@@ -54,6 +57,7 @@ onMounted(() => {
   mcp.loadMcpCatalog()
   mcp.loadMcpConfig()
   keys.loadKeys()
+  auth.restore()
 })
 onBeforeUnmount(() => {})
 </script>
@@ -81,6 +85,7 @@ onBeforeUnmount(() => {})
     <Toast />
     <Modal />
     <AppDialog />
+    <AuthDialog />
     <LogPanel />
   </div>
 </template>

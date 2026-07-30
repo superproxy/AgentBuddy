@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { api, serverApi, getServerUrl } from '../api/client'
+import { api, serverApi, getServerUrl, getAuthToken } from '../api/client'
 import { useUiStore } from './ui'
 import { useSkillStore } from './skill'
 import { usePluginStore } from './plugin'
@@ -229,9 +229,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       const fd = new FormData()
       fd.append('file', zipBlob, file.replace(/\.plugin\.yaml$/, '') + '-plugin.zip')
       fd.append('tags', JSON.stringify(tags))
+      const headers: Record<string, string> = {}
+      const token = getAuthToken()
+      if (token) headers['Authorization'] = 'Bearer ' + token
       const r = await fetch(serverApi('/api/marketplace/publish'), {
         method: 'POST',
         body: fd,
+        headers,
       })
       const result = await r.json() as { ok: boolean; data?: MarketItem; error?: string }
       if (result.ok) {
