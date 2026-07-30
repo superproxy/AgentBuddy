@@ -9,19 +9,12 @@
  */
 
 const SERVER_URL_KEY = 'agentbuddy-server-url'
-const DEFAULT_SERVER_URL = 'http://123.60.75.27'
+const DEFAULT_SERVER_URL = 'http://123.60.75.27:5001'
 const TOKEN_KEY = 'agentbuddy-token'
 
 /** 获取远程 server 地址（marketplace + AI 生成服务） */
 export function getServerUrl(): string {
-  const stored = localStorage.getItem(SERVER_URL_KEY)
-  // 迁移旧地址（带 :5001 端口）→ 新地址（端口 80）
-  if (stored && stored.includes(':5001')) {
-    const newUrl = stored.replace(/:5001\/?$/, '').replace(/:5001\b/, '')
-    localStorage.setItem(SERVER_URL_KEY, newUrl)
-    return newUrl
-  }
-  return stored || DEFAULT_SERVER_URL
+  return localStorage.getItem(SERVER_URL_KEY) || DEFAULT_SERVER_URL
 }
 
 /** 设置远程 server 地址 */
