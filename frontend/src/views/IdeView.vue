@@ -1546,16 +1546,15 @@ watch(
 
 /* ==================== 品牌分组视图样式 ==================== */
 
-/* 品牌视图容器 — 横排网格 */
+/* 品牌视图容器 — 竖排堆叠，品牌内水平排列 */
 .brand-view {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
 /* 品牌 chip（常用区 + 更多收起） */
 .brand-chips {
-  grid-column: 1 / -1;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
