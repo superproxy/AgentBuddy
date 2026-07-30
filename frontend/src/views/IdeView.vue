@@ -507,8 +507,6 @@ watch(
               </div>
             </div>
           </div>
-          <!-- 品牌描述放底部 -->
-          <div class="brand-foot">{{ bg.vendor }}</div>
         </div>
 
         <!-- 品牌卡片列表（Code 和 Work 并列展示） -->
@@ -609,6 +607,8 @@ watch(
               </div>
             </div>
           </div>
+          <!-- 品牌描述放底部 -->
+          <div class="brand-foot">{{ bg.vendor }}</div>
         </div>
 
         <!-- 空状态：当前筛选条件下无 IDE -->
