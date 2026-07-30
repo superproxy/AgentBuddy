@@ -1710,15 +1710,17 @@ watch(
 
 /* 品牌卡片内 Code/Work 并列布局 */
 .cat-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: row;
   gap: 16px;
+  flex-wrap: wrap;
 }
 @media (max-width: 900px) {
-  .cat-row { grid-template-columns: 1fr; }
+  .cat-row { flex-direction: column; }
 }
 .cat-col {
   min-width: 0;
+  flex: 1 1 320px;
 }
 .cat-head {
   display: flex;
@@ -1869,13 +1871,17 @@ watch(
 .brand-view .type-badge.idea { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
 .brand-view .type-badge.acp { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
 
-/* 品牌视图下的 grid 保持与经典视图一致（不压缩） */
+/* 品牌视图下的 grid 横排排列 */
 .brand-view .grid {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .brand-view .item {
   padding: 12px 8px;
+  flex: 0 0 auto;
+  width: 96px;
 }
 .brand-view .item .icon-wrap .icon {
   width: 72px;

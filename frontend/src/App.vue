@@ -25,13 +25,13 @@ import { useMcpStore } from './stores/mcp'
 import { useKeysStore } from './stores/keys'
 import { useAuthStore } from './stores/auth'
 
-const tab = ref('ide')
+const tab = ref('marketplace')
 // 全部菜单定义（顺序仅作为"更多"区默认顺序）
 const tabs = [
+  { key: 'marketplace', label: '插件市场' },
   { key: 'ide', label: 'AIDE 管理' },
   { key: 'plugin', label: '插件管理' },
   { key: 'plugin-build', label: '插件构建' },
-  { key: 'marketplace', label: '插件市场' },
   { key: 'terminal', label: '终端测试' },
   { key: 'keys', label: '密钥' },
   { key: 'env', label: 'LLM 配置' },
@@ -42,8 +42,8 @@ const tabs = [
   { key: 'rules', label: 'Rules' },
   { key: 'hooks', label: 'Hooks' },
 ]
-// 方案 D 默认常用区顺序（用户指定）：AIDE → 密钥 → LLM → MCP → Skills → 插件
-const defaultFavoriteKeys = ['ide', 'keys', 'env', 'mcp', 'skill', 'plugin']
+// 方案 D 默认常用区顺序（用户指定）：市场 → AIDE → 密钥 → LLM → MCP → Skills → 插件
+const defaultFavoriteKeys = ['marketplace', 'ide', 'keys', 'env', 'mcp', 'skill', 'plugin']
 
 const ide = useIdeStore()
 const env = useEnvStore()
