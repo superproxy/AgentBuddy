@@ -1555,6 +1555,7 @@ watch(
 
 /* 品牌 chip（常用区 + 更多收起） */
 .brand-chips {
+  grid-column: 1 / -1;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
