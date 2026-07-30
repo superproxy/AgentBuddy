@@ -4,6 +4,8 @@ flask-cors>=4.0.0
 pyyaml>=6.0
 openai>=1.0.0
 requests>=2.28.0
+bcrypt>=4.0.0
+PyJWT>=2.8.0
 
 # 终端服务需要 ttyd（系统级安装，非 pip）：
 #   macOS:   brew install ttyd

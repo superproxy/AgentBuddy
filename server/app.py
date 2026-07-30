@@ -47,6 +47,18 @@ def create_app() -> Flask:
     # 确保数据目录存在
     MARKETPLACE_DIR.mkdir(parents=True, exist_ok=True)
 
+    # 初始化用户认证数据库
+    from auth.models import set_db_path, set_marketplace_dir, migrate_index_json
+    DB_PATH = DATA_DIR / "agentbuddy.db"
+    set_db_path(DB_PATH)
+    set_marketplace_dir(MARKETPLACE_DIR)
+    migrate_index_json()
+
+    # 注册认证 + 团队路由
+    from auth.routes import create_auth_bp
+    auth_bp = create_auth_bp()
+    app.register_blueprint(auth_bp, url_prefix="/api")
+
     # 注册插件市场路由
     from marketplace import create_marketplace_bp
     bp = create_marketplace_bp(marketplace_dir=MARKETPLACE_DIR)
