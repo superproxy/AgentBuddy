@@ -509,7 +509,7 @@ watch(
           </div>
         </div>
 
-        <!-- 品牌卡片列表（Code 和 Work 并列展示） -->
+        <!-- 品牌卡片列表（扁平网格：B 方案） -->
         <div
           v-for="bg in filteredBrandGroups"
           :key="bg.brand"
@@ -522,6 +522,7 @@ watch(
             </div>
             <div class="brand-title">
               <div class="brand-name">{{ bg.brand }}</div>
+              <div class="brand-vendor">{{ bg.vendor }}</div>
             </div>
             <div class="brand-stats">
               <span class="stat installed">
@@ -533,82 +534,40 @@ watch(
             </div>
           </div>
 
-          <!-- 品牌卡片内：Code 和 Work 两个分类并列展示 -->
-          <div class="cat-row">
-            <div
-              v-for="cat in bg.categories"
-              :key="cat.category"
-              class="cat-col"
-            >
-              <!-- 分类标题 -->
-              <div class="cat-head">
-                <span
-                  class="cat-badge"
-                  :style="{
-                    background: CATEGORY_META_LOCAL[cat.category]?.bg,
-                    color: CATEGORY_META_LOCAL[cat.category]?.color,
-                    borderColor: CATEGORY_META_LOCAL[cat.category]?.border
-                  }"
-                >{{ CATEGORY_META_LOCAL[cat.category]?.label || cat.category }}</span>
-                <div class="line"></div>
-              </div>
-
-              <!-- 形式分组 -->
+          <!-- 扁平网格：直接平铺所有 IDE -->
+          <div class="brand-grid">
+            <template v-for="cat in bg.categories" :key="cat.category">
               <div
                 v-for="fg in cat.forms"
                 :key="fg.form"
-                class="sub-form"
+                class="sub-form-flat"
               >
-                <div class="sub-form-head">
-                  <span :class="['type-icon', fg.form]">
-                    <svg v-if="fg.form === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-                    <svg v-else-if="fg.form === 'app'" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-                    <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01" stroke-linecap="round"/></svg>
-                  </span>
-                  <span class="sub-form-name">
-                    {{ fg.form === 'cli' ? '命令行工具' : fg.form === 'app' ? '桌面应用' : fg.form === 'vscode' ? 'VSCode 扩展' : fg.form === 'acp' ? 'ACP 协议' : 'IDEA 插件' }}
-                  </span>
-                  <span class="count">{{ fg.items.length }}</span>
-                  <div class="line"></div>
-                </div>
-                <div class="grid">
-                  <div
-                    v-for="it in fg.items"
-                    :key="it.key + ':' + fg.form"
-                    :class="['item', { 'selected': expandedIde === it.key + ':' + fg.form, 'offline': !it.installed, 'dragging': dragIdeKey === it.key, 'drag-over': dragOverIdeKey === it.key && dragIdeKey !== it.key }]"
-                    draggable="true"
-                    @click="toggleIdeCard(it.key + ':' + fg.form)"
-                    @dragstart="onIdeDragStart($event, it.key)"
-                    @dragover="onIdeDragOver($event, it.key)"
-                    @drop="onIdeDrop($event, it.key)"
-                    @dragend="onIdeDragEnd"
-                  >
-                    <div class="icon-wrap">
-                      <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                        <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
-                        <span v-else class="icon-text">{{ markText(it.label) }}</span>
-                      </div>
-                      <div
-                        v-if="fg.form === 'cli' || fg.form === 'app' || fg.form === 'vscode' || fg.form === 'idea' || fg.form === 'acp'"
-                        :class="['type-badge', fg.form === 'vscode' ? 'app' : fg.form === 'idea' ? 'both' : fg.form]"
-                        :title="FORM_META_LOCAL[fg.form]?.label || fg.form"
-                      >
-                        <svg v-if="fg.form === 'cli'" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 7l4 4-4 4M13 17h6"/></svg>
-                        <svg v-else fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16" stroke-linecap="round"/></svg>
-                      </div>
-                      <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
+                <div
+                  v-for="it in fg.items"
+                  :key="it.key + ':' + fg.form"
+                  :class="['item', { 'selected': expandedIde === it.key + ':' + fg.form, 'offline': !it.installed, 'dragging': dragIdeKey === it.key, 'drag-over': dragOverIdeKey === it.key && dragIdeKey !== it.key }]"
+                  draggable="true"
+                  @click="toggleIdeCard(it.key + ':' + fg.form)"
+                  @dragstart="onIdeDragStart($event, it.key)"
+                  @dragover="onIdeDragOver($event, it.key)"
+                  @drop="onIdeDrop($event, it.key)"
+                  @dragend="onIdeDragEnd"
+                >
+                  <div class="icon-wrap">
+                    <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
+                      <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
+                      <span v-else class="icon-text">{{ markText(it.label) }}</span>
                     </div>
-                    <div class="label" :title="it.label">{{ it.label }}</div>
-                    <div class="sublabel">
-                      <span>{{ it.version || (it.installed ? '已安装' : '未安装') }}</span>
-                    </div>
+                    <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
+                  </div>
+                  <div class="label" :title="it.label">{{ it.label }}</div>
+                  <div class="sublabel">
+                    <span>{{ it.version || (it.installed ? '已安装' : '未安装') }}</span>
                   </div>
                 </div>
               </div>
-            </div>
+            </template>
           </div>
-          <!-- 品牌描述放底部 -->
-          <div class="brand-foot">{{ bg.vendor }}</div>
         </div>
 
         <!-- 空状态：当前筛选条件下无 IDE -->
@@ -1834,6 +1793,16 @@ watch(
   padding-top: 8px;
   border-top: 1px solid var(--border-base);
   text-align: center;
+}
+
+/* B 方案：扁平网格 */
+.brand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 2px;
+}
+.sub-form-flat {
+  display: contents;
 }
 .top-form { margin: 10px 0 8px; }
 .top-form-head {
