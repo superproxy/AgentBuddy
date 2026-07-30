@@ -1801,7 +1801,7 @@ watch(
 .brand-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
-  gap: 2px;
+  gap: 30px;
 }
 .sub-form-flat {
   display: contents;
