@@ -940,6 +940,98 @@ onMounted(() => {
   </div>
 </template>
 
+<!-- 弹窗样式（非 scoped，因为 Header.vue 的 scoped 样式不跨组件生效） -->
+<style>
+.upgrade-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.upgrade-panel {
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-base, #e5e7eb);
+  border-radius: 14px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+.upgrade-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-base, #e5e7eb);
+}
+.upgrade-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #1f2329);
+}
+.upgrade-close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--text-tertiary, #86909c);
+  display: inline-flex;
+}
+.upgrade-close:hover {
+  background: var(--bg-sunken, #f7f8fa);
+  color: var(--text-primary, #1f2329);
+}
+.upgrade-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+.upgrade-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  font-size: 13px;
+  color: var(--text-secondary, #4e5969);
+  line-height: 1.6;
+}
+.upgrade-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-base, #e5e7eb);
+  background: var(--bg-sunken, #f7f8fa);
+}
+.upgrade-modal-enter-active,
+.upgrade-modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.upgrade-modal-enter-active .upgrade-panel,
+.upgrade-modal-leave-active .upgrade-panel {
+  transition: transform 0.2s ease;
+}
+.upgrade-modal-enter-from,
+.upgrade-modal-leave-to {
+  opacity: 0;
+}
+.upgrade-modal-enter-from .upgrade-panel,
+.upgrade-modal-leave-to .upgrade-panel {
+  transform: scale(0.96) translateY(-8px);
+}
+</style>
+
 <style scoped>
 .mkt-page {
   display: flex;
