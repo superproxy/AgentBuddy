@@ -617,12 +617,21 @@
   <!-- 创建团队弹窗 -->
   <div v-if="showCreateTeam" class="login-mask" @click.self="showCreateTeam = false">
     <div class="login-panel">
-      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">创建团队</h3>
-      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">创建后你就是团队 Owner</p>
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:16px">创建团队空间</h3>
       <div v-if="createTeamError" class="login-error">{{ createTeamError }}</div>
-      <input class="login-input" v-model="createTeamForm.name" type="text" placeholder="团队名称" />
-      <textarea class="login-input" v-model="createTeamForm.description" placeholder="团队描述（可选）" rows="2" style="resize:none;font-family:inherit"></textarea>
-      <button class="login-btn" @click="doCreateTeam" :disabled="createTeamLoading">{{ createTeamLoading ? '...' : '创建' }}</button>
+      <div class="form-field">
+        <label class="form-label">空间名称</label>
+        <input class="login-input" v-model="createTeamForm.name" type="text" placeholder="输入团队空间名称" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">描述</label>
+        <textarea class="login-input" v-model="createTeamForm.description" placeholder="团队描述（可选）" rows="3" style="resize:none;font-family:inherit"></textarea>
+      </div>
+      <p style="font-size:12px;color:var(--text-tertiary);margin-bottom:16px;line-height:1.5">创建后你将自动成为团队 Owner，可在空间详情中邀请成员</p>
+      <div class="form-actions">
+        <button class="form-btn-cancel" @click="showCreateTeam = false">取消</button>
+        <button class="login-btn" @click="doCreateTeam" :disabled="createTeamLoading" style="margin-bottom:0">{{ createTeamLoading ? '...' : '创建空间' }}</button>
+      </div>
     </div>
   </div>
 
@@ -632,8 +641,13 @@
       <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">邀请成员</h3>
       <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">输入已注册的用户名，发送邀请后等待对方确认</p>
       <div v-if="inviteError" class="login-error">{{ inviteError }}</div>
-      <input class="login-input" v-model="inviteUsername" type="text" placeholder="用户名" @keydown.enter="doInvite" />
-      <button class="login-btn" @click="doInvite" :disabled="inviteLoading">{{ inviteLoading ? '...' : '邀请' }}</button>
+      <div class="form-field">
+        <input class="login-input" v-model="inviteUsername" type="text" placeholder="用户名" @keydown.enter="doInvite" />
+      </div>
+      <div class="form-actions">
+        <button class="form-btn-cancel" @click="showInvite = false">取消</button>
+        <button class="login-btn" @click="doInvite" :disabled="inviteLoading" style="margin-bottom:0">{{ inviteLoading ? '...' : '邀请' }}</button>
+      </div>
     </div>
   </div>
 
@@ -643,12 +657,25 @@
       <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">修改密码</h3>
       <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">新密码至少 8 位</p>
       <div v-if="changePwdError" class="login-error">{{ changePwdError }}</div>
-      <input class="login-input" v-model="changePwdForm.old_password" type="password" placeholder="旧密码" />
-      <input class="login-input" v-model="changePwdForm.new_password" type="password" placeholder="新密码（至少 8 位）" />
-      <input class="login-input" v-model="changePwdForm.confirm_password" type="password" placeholder="确认新密码" @keydown.enter="doChangePassword" />
-      <button class="login-btn" @click="doChangePassword" :disabled="changePwdLoading">{{ changePwdLoading ? '...' : '确认修改' }}</button>
+      <div class="form-field">
+        <label class="form-label">旧密码</label>
+        <input class="login-input" v-model="changePwdForm.old_password" type="password" placeholder="输入当前密码" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">新密码</label>
+        <input class="login-input" v-model="changePwdForm.new_password" type="password" placeholder="至少 8 位" />
+      </div>
+      <div class="form-field">
+        <label class="form-label">确认新密码</label>
+        <input class="login-input" v-model="changePwdForm.confirm_password" type="password" placeholder="再次输入新密码" @keydown.enter="doChangePassword" />
+      </div>
+      <div class="form-actions">
+        <button class="form-btn-cancel" @click="showChangePwd = false">取消</button>
+        <button class="login-btn" @click="doChangePassword" :disabled="changePwdLoading" style="margin-bottom:0">{{ changePwdLoading ? '...' : '确认修改' }}</button>
+      </div>
     </div>
   </div>
+
   <footer class="site-footer">
     <p>AgentBuddy · AI 编程助手插件平台</p>
     <p style="margin-top:4px"><a class="footer-link" href="https://github.com/superproxy/AgentBuddy">GitHub</a></p>
@@ -1120,12 +1147,27 @@ createApp({
 }
 .login-input {
   display: block; width: 100%;
-  padding: 9px 12px; margin-bottom: 12px;
+  padding: 9px 12px; margin-bottom: 0;
   border: 1px solid var(--border-strong);
   border-radius: 8px; font-size: 14px;
   background: var(--surface); color: var(--text-primary);
 }
 .login-input:focus { outline: none; border-color: var(--brand-500); }
+.form-field { margin-bottom: 14px; }
+.form-label {
+  display: block; font-size: 12px; font-weight: 500;
+  color: var(--text-secondary); margin-bottom: 4px;
+}
+.form-actions { display: flex; gap: 8px; }
+.form-actions .login-btn { flex: 1; }
+.form-btn-cancel {
+  flex: 1; padding: 10px;
+  border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text-secondary);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s;
+}
+.form-btn-cancel:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
 .login-btn {
   width: 100%; padding: 10px;
   border-radius: 8px; border: none;
