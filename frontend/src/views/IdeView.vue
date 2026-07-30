@@ -507,6 +507,8 @@ watch(
               </div>
             </div>
           </div>
+          <!-- 品牌描述放底部 -->
+          <div class="brand-foot">{{ bg.vendor }}</div>
         </div>
 
         <!-- 品牌卡片列表（Code 和 Work 并列展示） -->
@@ -522,7 +524,6 @@ watch(
             </div>
             <div class="brand-title">
               <div class="brand-name">{{ bg.brand }}</div>
-              <div class="brand-vendor">{{ bg.vendor }}</div>
             </div>
             <div class="brand-stats">
               <span class="stat installed">
@@ -1545,10 +1546,10 @@ watch(
 
 /* ==================== 品牌分组视图样式 ==================== */
 
-/* 品牌视图容器 */
+/* 品牌视图容器 — 横排网格 */
 .brand-view {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   gap: 14px;
 }
 
@@ -1813,6 +1814,14 @@ watch(
 .brand-stats .stat.installed .num { color: #059669; }
 
 /* 顶层分类（Code/Work）—— 不再使用，保留兼容 */
+.brand-foot {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-base);
+  text-align: center;
+}
 .top-form { margin: 10px 0 8px; }
 .top-form-head {
   display: flex;

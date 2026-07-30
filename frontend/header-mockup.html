@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Header 布局方案对比</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-hover: #21262d;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --brand-500: #6366f1;
+    --brand-700: #4338ca;
+    --active: #6366f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #010409;
+    color: var(--text-primary);
+    padding: 20px;
+  }
+  h2 { font-size: 14px; color: var(--text-secondary); margin: 24px 0 8px; font-weight: 500; }
+  h2:first-child { margin-top: 0; }
+  .mockup-wrapper { margin-bottom: 32px; }
+  .mockup-label {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .label-a { background: #6366f120; color: #818cf8; }
+  .label-b { background: #10b98120; color: #34d399; }
+  .label-c { background: #f59e0b20; color: #fbbf24; }
+  .desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+
+  /* === 公共 Header 样式 === */
+  .header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .brand-mark {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: white;
+    font-weight: bold; font-size: 14px;
+  }
+  .brand-text { font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .version-pill {
+    font-size: 11px; color: var(--text-secondary);
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 6px; border-radius: 4px; background: var(--surface-hover);
+  }
+  .version-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22c55e; box-shadow: 0 0 4px #22c55e;
+  }
+
+  .tab {
+    font-size: 13px; font-weight: 500;
+    padding: 6px 12px; border-radius: 8px;
+    cursor: pointer; white-space: nowrap;
+    transition: all 0.15s;
+    color: var(--text-secondary);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .tab:hover { color: var(--text-primary); }
+  .tab.active { background: var(--active); color: white; font-weight: 600; }
+
+  .more-trigger {
+    font-size: 13px; padding: 6px 12px; border-radius: 8px;
+    color: var(--text-secondary); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 2px;
+  }
+  .more-trigger:hover { color: var(--text-primary); }
+
+  .action-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px; border: none;
+    background: transparent; color: var(--text-secondary);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .action-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .sync-bar {
+    font-size: 11px; color: var(--text-secondary);
+    padding: 4px 10px; border-radius: 6px; background: var(--surface-hover);
+  }
+
+  /* === 方案 A：两行 — 品牌行 + Tab行 === */
+  .layout-a .header { padding: 0; }
+  .layout-a .row-1 {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px;
+  }
+  .layout-a .row-2 {
+    display: flex; align-items: center; gap: 2px;
+    padding: 0 20px 10px;
+    overflow-x: auto;
+  }
+  .layout-a .actions { display: flex; gap: 6px; align-items: center; }
+
+  /* === 方案 B：单行 — 品牌左 + Tab平铺 + Actions右 === */
+  .layout-b .header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 20px;
+  }
+  .layout-b .tabs { display: flex; gap: 2px; flex: 1; overflow-x: auto; }
+  .layout-b .actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .layout-b .divider {
+    width: 1px; height: 20px; background: var(--border); flex-shrink: 0;
+  }
+
+  /* === 方案 C：两行 — 品牌左+Actions右 / Tab居中第二行 === */
+  .layout-c .header { padding: 0; }
+  .layout-c .row-1 {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 20px;
+  }
+  .layout-c .row-2 {
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    padding: 0 20px 10px;
+    overflow-x: auto;
+  }
+
+  /* 图标 */
+  .icon { width: 16px; height: 16px; display: inline-block; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<div class="mockup-wrapper">
+  <span class="mockup-label label-a">方案 A</span>
+  <h2>两行布局：品牌行 + Tab 平铺行</h2>
+  <p class="desc">品牌在左，版本+同步+Actions在右，第二行 Tab 完全平铺，不再居中挤压</p>
+  <div class="layout-a">
+    <div class="header">
+      <div class="row-1">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="brand-mark">飞</div>
+          <div>
+            <div class="brand-text">飞翼</div>
+            <span class="version-pill"><span class="version-dot"></span> v2.2.48</span>
+          </div>
+        </div>
+        <div class="actions">
+          <span class="sync-bar">同步 · Codex / Claude</span>
+          <button class="action-btn">⚙</button>
+          <button class="action-btn">🌙</button>
+        </div>
+      </div>
+      <div class="row-2">
+        <span class="tab active">AIDE 管理</span>
+        <span class="tab">插件管理</span>
+        <span class="tab">插件构建</span>
+        <span class="tab">插件市场</span>
+        <span class="tab">终端测试</span>
+        <span class="tab">密钥</span>
+        <span class="tab">LLM 配置</span>
+        <span class="tab">MCP 配置</span>
+        <span class="tab">Skills</span>
+        <span class="more-trigger">更多 3 ▾</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-wrapper">
+  <span class="mockup-label label-b">方案 B</span>
+  <h2>单行布局：品牌 + Tab 平铺 + Actions</h2>
+  <p class="desc">一行搞定，品牌紧凑在左，Tab 直接平铺铺满中间，Actions 在右。最省垂直空间</p>
+  <div class="layout-b">
+    <div class="header">
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <div class="brand-mark">飞</div>
+        <div>
+          <div class="brand-text">飞翼</div>
+          <span class="version-pill"><span class="version-dot"></span> v2.2.48</span>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="tabs">
+        <span class="tab active">AIDE 管理</span>
+        <span class="tab">插件管理</span>
+        <span class="tab">插件构建</span>
+        <span class="tab">插件市场</span>
+        <span class="tab">终端测试</span>
+        <span class="tab">密钥</span>
+        <span class="tab">LLM 配置</span>
+        <span class="tab">MCP</span>
+        <span class="more-trigger">更多 ▾</span>
+      </div>
+      <div class="divider"></div>
+      <div class="actions">
+        <span class="sync-bar">同步</span>
+        <button class="action-btn">⚙</button>
+        <button class="action-btn">🌙</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup-wrapper">
+  <span class="mockup-label label-c">方案 C</span>
+  <h2>两行布局：品牌+Actions 第一行 / Tab 居中第二行</h2>
+  <p class="desc">第一行品牌左对齐、Actions 右对齐；第二行 Tab 居中平铺，视觉上更平衡</p>
+  <div class="layout-c">
+    <div class="header">
+      <div class="row-1">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="brand-mark">飞</div>
+          <div>
+            <div class="brand-text">飞翼</div>
+            <span class="version-pill"><span class="version-dot"></span> v2.2.48</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="sync-bar">同步 · Codex / Claude</span>
+          <button class="action-btn">⚙</button>
+          <button class="action-btn">🌙</button>
+        </div>
+      </div>
+      <div class="row-2">
+        <span class="tab active">AIDE 管理</span>
+        <span class="tab">插件管理</span>
+        <span class="tab">插件构建</span>
+        <span class="tab">插件市场</span>
+        <span class="tab">终端测试</span>
+        <span class="tab">密钥</span>
+        <span class="tab">LLM 配置</span>
+        <span class="tab">MCP 配置</span>
+        <span class="tab">Skills</span>
+        <span class="more-trigger">更多 3 ▾</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

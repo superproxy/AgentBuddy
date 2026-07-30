@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIDE 品牌区布局方案</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-hover: #21262d;
+    --border: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-tertiary: #6e7681;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: #010409;
+    color: var(--text-primary);
+    padding: 20px;
+  }
+  h2 { font-size: 14px; color: var(--text-secondary); margin: 24px 0 8px; font-weight: 500; }
+  h2:first-child { margin-top: 0; }
+  .mockup-wrapper { margin-bottom: 32px; }
+  .mockup-label {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .label-a { background: #6366f120; color: #818cf8; }
+  .label-b { background: #10b98120; color: #34d399; }
+  .label-c { background: #f59e0b20; color: #fbbf24; }
+  .desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+
+  /* === 公共样式 === */
+  .launchpad {
+    background: linear-gradient(180deg, #0d1117, #010409);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border);
+  }
+  .brand-chips {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .chip.active { background: #6366f1; color: white; border-color: #6366f1; }
+
+  .brand-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .brand-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .brand-logo {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    font-size: 14px; font-weight: 800;
+    color: var(--text-secondary);
+  }
+  .brand-name { font-size: 14px; font-weight: 600; }
+  .brand-vendor { font-size: 10px; color: var(--text-tertiary); }
+  .brand-stats { display: flex; gap: 4px; flex-shrink: 0; }
+  .stat {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+  }
+  .stat.installed { background: rgba(16,185,129,0.08); border-color: rgba(16,185,129,0.25); color: #059669; }
+
+  .sub-form-head {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 6px;
+  }
+  .sub-form-name { font-size: 11px; color: var(--text-secondary); }
+  .count { font-size: 10px; color: var(--text-tertiary); }
+  .line { flex: 1; height: 1px; background: var(--border); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 6px;
+  }
+  .item {
+    padding: 10px 6px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    text-align: center;
+    cursor: pointer;
+  }
+  .item .icon {
+    width: 48px; height: 48px;
+    border-radius: 12px;
+    margin: 0 auto 6px;
+    display: grid; place-items: center;
+    font-size: 14px; font-weight: 700; color: white;
+  }
+  .item .label { font-size: 10px; font-weight: 500; }
+  .item .sublabel { font-size: 9px; color: var(--text-tertiary); }
+
+  /* === 方案 A：品牌卡片网格横排 === */
+  .layout-a .brand-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px;
+  }
+
+  /* === 方案 B：品牌卡片宽行横排（每行2个品牌） === */
+  .layout-b .brand-view {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .layout-b .cat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* === 方案 C：品牌头部横排 + IDE 列表网格（无分类层级，更扁平） === */
+  .layout-c .brand-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .layout-c .brand-card { padding: 12px; }
+  .layout-c .grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  }
+  .layout-c .cat-head { display: none; }
+  .layout-c .sub-form-head { display: none; }
+  .layout-c .sub-form { margin: 0; }
+  .brand-foot {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .icon-k { background: linear-gradient(145deg, #6b7280, #374151); }
+  .icon-cl { background: linear-gradient(145deg, #e88a5c, #c75d3a); }
+  .icon-co { background: linear-gradient(145deg, #1ec8a0, #0a8a6a); }
+  .icon-tr { background: linear-gradient(145deg, #6b7bf9, #3d4fd6); }
+  .icon-qo { background: linear-gradient(145deg, #3bcee6, #0a93b3); }
+</style>
+</head>
+<body>
+
+<!-- 方案 A -->
+<div class="mockup-wrapper">
+  <span class="mockup-label label-a">方案 A</span>
+  <h2>品牌卡片网格横排（auto-fill 自适应）</h2>
+  <p class="desc">每个品牌一个卡片，横向网格排列。屏幕宽时一行 4-5 个品牌，窄时自动收缩。保持当前卡片内部结构不变</p>
+  <div class="layout-a">
+    <div class="launchpad">
+      <div class="brand-chips">
+        <span class="chip active">全部 AIDE</span>
+        <span class="chip">Kimi</span>
+        <span class="chip">Claude</span>
+        <span class="chip">Codex</span>
+        <span class="chip">Trae</span>
+        <span class="chip">更多 3 ▾</span>
+      </div>
+      <div class="brand-view">
+        <!-- 品牌卡片 1 -->
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">K</div>
+            <div style="flex:1">
+              <div class="brand-name">Kimi</div>
+              <div class="brand-vendor">Moonshot AI</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">2 已安装</span>
+              <span class="stat">3 共</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">CLI · APP</div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi CLI</div><div class="sublabel">v1.2.0</div></div>
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi App</div><div class="sublabel">已安装</div></div>
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi VSCode</div><div class="sublabel">未安装</div></div>
+          </div>
+        </div>
+        <!-- 品牌卡片 2 -->
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Cl</div>
+            <div style="flex:1">
+              <div class="brand-name">Claude</div>
+              <div class="brand-vendor">Anthropic</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">1 已安装</span>
+              <span class="stat">2 共</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">CLI · APP</div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude CLI</div><div class="sublabel">v1.0</div></div>
+            <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude App</div><div class="sublabel">未安装</div></div>
+          </div>
+        </div>
+        <!-- 品牌卡片 3 -->
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Co</div>
+            <div style="flex:1">
+              <div class="brand-name">Codex</div>
+              <div class="brand-vendor">OpenAI</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">1 已安装</span>
+              <span class="stat">2 共</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">CLI · APP</div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-co">Co</div><div class="label">Codex CLI</div><div class="sublabel">v1.0</div></div>
+            <div class="item"><div class="icon icon-co">Co</div><div class="label">Codex App</div><div class="sublabel">未安装</div></div>
+          </div>
+        </div>
+        <!-- 品牌卡片 4 -->
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Tr</div>
+            <div style="flex:1">
+              <div class="brand-name">Trae</div>
+              <div class="brand-vendor">字节跳动</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">1 已安装</span>
+              <span class="stat">2 共</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">CLI · APP</div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-tr">Tr</div><div class="label">Trae CLI</div><div class="sublabel">未安装</div></div>
+            <div class="item"><div class="icon icon-tr">Tr</div><div class="label">Trae App</div><div class="sublabel">v1.5</div></div>
+          </div>
+        </div>
+        <!-- 品牌卡片 5 -->
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Qo</div>
+            <div style="flex:1">
+              <div class="brand-name">Qoder</div>
+              <div class="brand-vendor">阿里云 · 通义灵码</div>
+            </div>
+            <div class="brand-stats">
+              <span class="stat installed">1 已安装</span>
+              <span class="stat">2 共</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:6px">CLI · APP</div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-qo">Qo</div><div class="label">Qoder CLI</div><div class="sublabel">v2.0</div></div>
+            <div class="item"><div class="icon icon-qo">Qo</div><div class="label">Qoder App</div><div class="sublabel">未安装</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 方案 B -->
+<div class="mockup-wrapper">
+  <span class="mockup-label label-b">方案 B</span>
+  <h2>品牌卡片固定两列（保持 Code/Work 并列）</h2>
+  <p class="desc">每行 2 个品牌卡片，保持现有 cat-row（Code/Work 并列）结构不变，仅把品牌卡片从纵向堆叠改为两列网格</p>
+  <div class="layout-b">
+    <div class="launchpad">
+      <div class="brand-chips">
+        <span class="chip active">全部 AIDE</span>
+        <span class="chip">Kimi</span>
+        <span class="chip">Claude</span>
+        <span class="chip">Codex</span>
+        <span class="chip">更多 ▾</span>
+      </div>
+      <div class="brand-view">
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">K</div>
+            <div style="flex:1"><div class="brand-name">Kimi</div><div class="brand-vendor">Moonshot AI</div></div>
+            <div class="brand-stats"><span class="stat installed">2 已安装</span></div>
+          </div>
+          <div class="cat-row">
+            <div>
+              <div class="sub-form-head"><span class="sub-form-name">命令行工具</span><span class="count">2</span><div class="line"></div></div>
+              <div class="grid">
+                <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi CLI</div></div>
+                <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi VSCode</div></div>
+              </div>
+            </div>
+            <div>
+              <div class="sub-form-head"><span class="sub-form-name">桌面应用</span><span class="count">1</span><div class="line"></div></div>
+              <div class="grid">
+                <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi App</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Cl</div>
+            <div style="flex:1"><div class="brand-name">Claude</div><div class="brand-vendor">Anthropic</div></div>
+            <div class="brand-stats"><span class="stat installed">1 已安装</span></div>
+          </div>
+          <div class="cat-row">
+            <div>
+              <div class="sub-form-head"><span class="sub-form-name">命令行工具</span><span class="count">1</span><div class="line"></div></div>
+              <div class="grid">
+                <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude CLI</div></div>
+              </div>
+            </div>
+            <div>
+              <div class="sub-form-head"><span class="sub-form-name">桌面应用</span><span class="count">1</span><div class="line"></div></div>
+              <div class="grid">
+                <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude App</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 方案 C -->
+<div class="mockup-wrapper">
+  <span class="mockup-label label-c">方案 C</span>
+  <h2>扁平网格（品牌头精简，描述放底部）</h2>
+  <p class="desc">品牌头只保留 logo + 名称 + 统计，vendor 描述移到卡片底部。IDE 直接网格排列，去掉分类层级</p>
+  <div class="layout-c">
+    <div class="launchpad">
+      <div class="brand-chips">
+        <span class="chip active">全部 AIDE</span>
+        <span class="chip">Kimi</span>
+        <span class="chip">Claude</span>
+        <span class="chip">Codex</span>
+        <span class="chip">Trae</span>
+        <span class="chip">更多 ▾</span>
+      </div>
+      <div class="brand-view">
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">K</div>
+            <div style="flex:1"><div class="brand-name">Kimi</div></div>
+            <div class="brand-stats"><span class="stat installed">2/3</span></div>
+          </div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi CLI</div></div>
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi App</div></div>
+            <div class="item"><div class="icon icon-k">K</div><div class="label">Kimi VSCode</div></div>
+          </div>
+          <div class="brand-foot">Moonshot AI · 月之暗面</div>
+        </div>
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Cl</div>
+            <div style="flex:1"><div class="brand-name">Claude</div></div>
+            <div class="brand-stats"><span class="stat installed">1/2</span></div>
+          </div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude CLI</div></div>
+            <div class="item"><div class="icon icon-cl">Cl</div><div class="label">Claude App</div></div>
+          </div>
+          <div class="brand-foot">Anthropic</div>
+        </div>
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Co</div>
+            <div style="flex:1"><div class="brand-name">Codex</div></div>
+            <div class="brand-stats"><span class="stat installed">1/2</span></div>
+          </div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-co">Co</div><div class="label">Codex CLI</div></div>
+            <div class="item"><div class="icon icon-co">Co</div><div class="label">Codex App</div></div>
+          </div>
+          <div class="brand-foot">OpenAI</div>
+        </div>
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Tr</div>
+            <div style="flex:1"><div class="brand-name">Trae</div></div>
+            <div class="brand-stats"><span class="stat installed">1/2</span></div>
+          </div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-tr">Tr</div><div class="label">Trae CLI</div></div>
+            <div class="item"><div class="icon icon-tr">Tr</div><div class="label">Trae App</div></div>
+          </div>
+          <div class="brand-foot">字节跳动 · ByteDance</div>
+        </div>
+        <div class="brand-card">
+          <div class="brand-head">
+            <div class="brand-logo">Qo</div>
+            <div style="flex:1"><div class="brand-name">Qoder</div></div>
+            <div class="brand-stats"><span class="stat installed">1/2</span></div>
+          </div>
+          <div class="grid">
+            <div class="item"><div class="icon icon-qo">Qo</div><div class="label">Qoder CLI</div></div>
+            <div class="item"><div class="icon icon-qo">Qo</div><div class="label">Qoder App</div></div>
+          </div>
+          <div class="brand-foot">阿里云 · 通义灵码</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
