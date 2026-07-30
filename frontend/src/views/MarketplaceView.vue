@@ -195,7 +195,7 @@ async function sendInvite() {
       body: JSON.stringify({ username: inviteInput.value.trim() }),
     })
     if (r.ok) {
-      ui.toast(`已邀请 ${inviteInput.value} 加入团队`, 'ok')
+      ui.toast(`已向 ${inviteInput.value} 发送邀请，等待对方确认`, 'ok')
       inviteOpen.value = false
       await loadTeamMembers(selectedSpaceId.value)
       await loadTeams()

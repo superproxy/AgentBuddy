@@ -7,7 +7,7 @@ import SyncBar from './SyncBar.vue'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
 import { runSse } from '../api/sse'
-import { getServerUrl } from '../api/client'
+import { getServerUrl, serverApi, api, getAuthToken } from '../api/client'
 
 interface TabItem {
   key: string
@@ -226,6 +226,46 @@ function onTabWheel(e: WheelEvent) {
   }
 }
 
+// ==================== 邀请通知 ====================
+interface Invitation {
+  id: number
+  team_id: number
+  team_name: string
+  team_desc: string
+  inviter_name: string
+  message: string
+  created_at: string
+}
+const invitations = ref<Invitation[]>([])
+const invPanelOpen = ref(false)
+const invLoading = ref(false)
+
+async function loadInvitations() {
+  if (!auth.isLoggedIn) return
+  try {
+    const url = serverApi('/api/invitations')
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: Invitation[] }>(url)
+    if (r.ok) invitations.value = r.data || []
+  } catch { /* ignore */ }
+}
+
+async function respondInvitation(inv: Invitation, accept: boolean) {
+  invLoading.value = true
+  try {
+    const url = serverApi(`/api/invitations/${inv.id}/${accept ? 'accept' : 'decline'}`)
+    if (!url) return
+    await api(url, { method: 'POST' })
+    invitations.value = invitations.value.filter(i => i.id !== inv.id)
+    ui.toast(accept ? `已加入「${inv.team_name}」团队` : `已拒绝邀请`, accept ? 'ok' : 'warn')
+    if (accept) emit('update:tab', 'marketplace')
+  } catch { /* ignore */ } finally {
+    invLoading.value = false
+  }
+}
+
+let invTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   try {
     const r = await fetch('/api/version')
@@ -241,6 +281,13 @@ onMounted(async () => {
   upgrade.check().catch(() => { /* 静默失败 */ })
   // 点击更多面板外部时关闭
   window.addEventListener('click', onGlobalClick)
+  // 邀请通知：加载 + 定时轮询（30秒）
+  loadInvitations()
+  invTimer = setInterval(loadInvitations, 30000)
+})
+
+onBeforeUnmount(() => {
+  if (invTimer) clearInterval(invTimer)
 })
 
 function onGlobalClick(e: MouseEvent) {
@@ -251,6 +298,9 @@ function onGlobalClick(e: MouseEvent) {
   }
   if (userMenuOpen.value && !target.closest('.user-menu-wrap')) {
     userMenuOpen.value = false
+  }
+  if (invPanelOpen.value && !target.closest('.inv-wrap')) {
+    invPanelOpen.value = false
   }
 }
 
@@ -512,6 +562,46 @@ onBeforeUnmount(() => {
         <div class="actions flex items-center justify-end gap-2 max-[1100px]:col-start-2 max-[1100px]:row-start-1">
           <!-- 同步控件（内联） -->
           <SyncBar :tab="tab" />
+          <!-- 邀请通知 -->
+          <div v-if="auth.isLoggedIn" class="inv-wrap relative">
+            <button
+              class="theme-toggle"
+              type="button"
+              title="团队邀请"
+              aria-label="团队邀请"
+              @click.stop="invPanelOpen = !invPanelOpen"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span v-if="invitations.length" class="inv-badge">{{ invitations.length }}</span>
+            </button>
+            <Transition name="user-menu">
+              <div v-if="invPanelOpen" class="inv-panel" @click.stop>
+                <div class="inv-panel-head">
+                  <span>团队邀请</span>
+                  <span v-if="invitations.length" class="inv-count">{{ invitations.length }} 条待处理</span>
+                </div>
+                <div v-if="invitations.length === 0" class="inv-empty">暂无邀请</div>
+                <div v-for="inv in invitations" :key="inv.id" class="inv-card">
+                  <div class="inv-card-head">
+                    <span class="inv-team-icon">{{ inv.team_name.charAt(0) }}</span>
+                    <div style="flex:1;min-width:0">
+                      <div class="inv-team-name">{{ inv.team_name }}</div>
+                      <div class="inv-team-desc">{{ inv.team_desc || '暂无描述' }}</div>
+                    </div>
+                  </div>
+                  <div class="inv-from">{{ inv.inviter_name }} 邀请你加入</div>
+                  <p v-if="inv.message" class="inv-msg">{{ inv.message }}</p>
+                  <div class="inv-actions">
+                    <button class="mkt-btn mkt-btn-ghost inv-reject" :disabled="invLoading" @click="respondInvitation(inv, false)">拒绝</button>
+                    <button class="mkt-btn mkt-btn-primary inv-accept" :disabled="invLoading" @click="respondInvitation(inv, true)">接受</button>
+                  </div>
+                </div>
+              </div>
+            </Transition>
+          </div>
           <!-- 官网入口 -->
           <button
             class="theme-toggle"
@@ -1691,4 +1781,72 @@ onBeforeUnmount(() => {
 /* Transition */
 .user-menu-enter-active, .user-menu-leave-active { transition: opacity 0.15s, transform 0.15s; }
 .user-menu-enter-from, .user-menu-leave-to { opacity: 0; transform: translateY(-6px); }
+
+/* ==================== 邀请通知 ==================== */
+.inv-wrap { position: relative; }
+.inv-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.inv-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-elevated, #fff);
+  border: 1px solid var(--border-base, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  z-index: 100;
+  padding: 8px;
+}
+.inv-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border-base, #e5e7eb);
+  font-size: 14px;
+  font-weight: 700;
+}
+.inv-count { font-size: 11px; color: var(--text-tertiary); font-weight: 500; }
+.inv-empty { padding: 24px 12px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
+.inv-card {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-base, #e5e7eb);
+}
+.inv-card:last-child { border-bottom: none; }
+.inv-card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.inv-team-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  display: grid; place-items: center;
+  font-size: 14px; font-weight: 700;
+  flex-shrink: 0;
+}
+.inv-team-name { font-size: 14px; font-weight: 600; }
+.inv-team-desc { font-size: 11px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-from { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.inv-msg { font-size: 12px; color: var(--text-tertiary); margin: 4px 0 8px; padding: 6px 8px; background: var(--bg-sunken, #f7f8fa); border-radius: 6px; }
+.inv-actions { display: flex; gap: 8px; }
+.inv-actions .mkt-btn { flex: 1; padding: 6px 0; font-size: 12px; border-radius: 8px; justify-content: center; }
+.inv-reject { border: 1px solid var(--border-base, #c9cdd4); background: transparent; color: var(--text-secondary); }
+.inv-reject:hover { background: var(--bg-sunken, #f3f4f6); }
+.inv-accept { border: none; background: #6366f1; color: #fff; }
+.inv-accept:hover { background: #5457e5; }
 </style>

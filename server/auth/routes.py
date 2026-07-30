@@ -13,7 +13,11 @@ API:
 import bcrypt
 from flask import Blueprint, jsonify, request, g
 
-from .models import get_db, now_iso
+from .models import (
+    get_db, now_iso,
+    is_team_member, is_team_owner,
+    create_invitation, get_pending_invitations, respond_invitation,
+)
 from .middleware import generate_token, require_auth, get_current_user
 
 
@@ -137,9 +141,10 @@ def create_auth_bp() -> Blueprint:
     @bp.route("/teams/<int:team_id>/invite", methods=["POST"])
     @require_auth
     def teams_invite(team_id):
-        """邀请成员（通过用户名，直接加入）。Body: { username }"""
+        """邀请成员（发送邀请，对方需接受）。Body: { username, message? }"""
         data = request.get_json(force=True, silent=True) or {}
         username = (data.get("username") or "").strip()
+        message = (data.get("message") or "").strip()
 
         if not username:
             return jsonify({"ok": False, "error": "用户名不能为空"}), 400
@@ -148,11 +153,7 @@ def create_auth_bp() -> Blueprint:
         conn = get_db()
 
         # 检查是否是团队成员
-        membership = conn.execute(
-            "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
-            (team_id, uid),
-        ).fetchone()
-        if not membership:
+        if not is_team_member(team_id, uid):
             conn.close()
             return jsonify({"ok": False, "error": "你不是该团队成员"}), 403
 
@@ -171,13 +172,50 @@ def create_auth_bp() -> Blueprint:
             conn.close()
             return jsonify({"ok": False, "error": f"{username} 已在团队中"}), 409
 
-        conn.execute(
-            "INSERT INTO team_members (team_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
-            (team_id, target["id"], now_iso()),
-        )
-        conn.commit()
+        # 检查是否已有待处理邀请
+        pending = conn.execute(
+            "SELECT 1 FROM invitations WHERE team_id = ? AND invitee_id = ? AND status = 'pending'",
+            (team_id, target["id"]),
+        ).fetchone()
+        if pending:
+            conn.close()
+            return jsonify({"ok": False, "error": f"已向 {username} 发送过邀请，等待对方确认"}), 409
+
         conn.close()
-        return jsonify({"ok": True, "data": {"username": username, "team_id": team_id}})
+
+        # 创建邀请记录
+        inv = create_invitation(team_id, uid, target["id"], message)
+        return jsonify({"ok": True, "data": inv})
+
+    # ==================== 邀请管理 ====================
+
+    @bp.route("/invitations", methods=["GET"])
+    @require_auth
+    def invitations_list():
+        """我的待处理邀请列表。"""
+        uid = g.current_user["id"]
+        invs = get_pending_invitations(uid)
+        return jsonify({"ok": True, "data": invs})
+
+    @bp.route("/invitations/<int:inv_id>/accept", methods=["POST"])
+    @require_auth
+    def invitation_accept(inv_id):
+        """接受邀请。"""
+        uid = g.current_user["id"]
+        inv = respond_invitation(inv_id, uid, accept=True)
+        if not inv:
+            return jsonify({"ok": False, "error": "邀请不存在或已处理"}), 404
+        return jsonify({"ok": True, "data": inv})
+
+    @bp.route("/invitations/<int:inv_id>/decline", methods=["POST"])
+    @require_auth
+    def invitation_decline(inv_id):
+        """拒绝邀请。"""
+        uid = g.current_user["id"]
+        inv = respond_invitation(inv_id, uid, accept=False)
+        if not inv:
+            return jsonify({"ok": False, "error": "邀请不存在或已处理"}), 404
+        return jsonify({"ok": True, "data": inv})
 
     @bp.route("/teams/<int:team_id>/members", methods=["GET"])
     @require_auth

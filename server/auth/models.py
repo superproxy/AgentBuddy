@@ -94,6 +94,17 @@ def init_db():
             created_at  TEXT NOT NULL,
             PRIMARY KEY (plugin_id, user_id)
         );
+
+        CREATE TABLE IF NOT EXISTS invitations (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+            inviter_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            invitee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            status      TEXT NOT NULL DEFAULT 'pending',
+            message     TEXT DEFAULT '',
+            created_at  TEXT NOT NULL,
+            responded_at TEXT
+        );
     """)
     conn.commit()
     conn.close()
@@ -170,6 +181,101 @@ def is_team_member(team_id: int, user_id: int) -> bool:
     ).fetchone()
     conn.close()
     return row is not None
+
+
+def is_team_owner(team_id: int, user_id: int) -> bool:
+    """检查用户是否为团队 owner。"""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT role FROM team_members WHERE team_id = ? AND user_id = ?",
+        (team_id, user_id),
+    ).fetchone()
+    conn.close()
+    return row is not None and row["role"] == "owner"
+
+
+# ==================== 邀请管理 ====================
+
+def create_invitation(team_id: int, inviter_id: int, invitee_id: int, message: str = "") -> dict:
+    """创建邀请。返回邀请记录 dict。"""
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO invitations (team_id, inviter_id, invitee_id, status, message, created_at) "
+        "VALUES (?, ?, ?, 'pending', ?, ?)",
+        (team_id, inviter_id, invitee_id, message, now_iso()),
+    )
+    inv_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return get_invitation(inv_id)
+
+
+def get_invitation(inv_id: int) -> dict | None:
+    conn = get_db()
+    row = conn.execute(
+        """SELECT i.*, t.name as team_name, t.description as team_desc,
+                  u1.username as inviter_name, u2.username as invitee_name
+           FROM invitations i
+           JOIN teams t ON t.id = i.team_id
+           JOIN users u1 ON u1.id = i.inviter_id
+           JOIN users u2 ON u2.id = i.invitee_id
+           WHERE i.id = ?""",
+        (inv_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pending_invitations(user_id: int) -> list[dict]:
+    """获取用户的待处理邀请列表。"""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT i.*, t.name as team_name, t.description as team_desc,
+                  u.username as inviter_name
+           FROM invitations i
+           JOIN teams t ON t.id = i.team_id
+           JOIN users u ON u.id = i.inviter_id
+           WHERE i.invitee_id = ? AND i.status = 'pending'
+           ORDER BY i.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def respond_invitation(inv_id: int, user_id: int, accept: bool) -> dict | None:
+    """接受或拒绝邀请。"""
+    conn = get_db()
+    inv = conn.execute(
+        "SELECT * FROM invitations WHERE id = ? AND invitee_id = ? AND status = 'pending'",
+        (inv_id, user_id),
+    ).fetchone()
+    if not inv:
+        conn.close()
+        return None
+
+    status = "accepted" if accept else "declined"
+    conn.execute(
+        "UPDATE invitations SET status = ?, responded_at = ? WHERE id = ?",
+        (status, now_iso(), inv_id),
+    )
+
+    # 接受邀请 → 加入团队
+    if accept:
+        # 检查是否已在团队（可能已通过其他方式加入）
+        existing = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?",
+            (inv["team_id"], user_id),
+        ).fetchone()
+        if not existing:
+            conn.execute(
+                "INSERT INTO team_members (team_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+                (inv["team_id"], user_id, now_iso()),
+            )
+
+    conn.commit()
+    conn.close()
+    return get_invitation(inv_id)
 
 
 # ==================== 插件 CRUD ====================
