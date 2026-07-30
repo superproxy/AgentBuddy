@@ -200,9 +200,7 @@ export const usePluginStore = defineStore('plugin', () => {
     }
   }
   async function publishToMarketplace(file: string, scope?: 'public' | 'team', teamId?: number) {
-    const tags = prompt('请输入标签（逗号分隔，可留空）：', '')
-    const tagList = tags ? tags.split(/[,，]/).map((t: string) => t.trim()).filter(Boolean) : []
-    await marketplace.publish(file, tagList, scope || 'public', teamId)
+    await marketplace.publish(file, [], scope || 'public', teamId)
   }
 
   return {

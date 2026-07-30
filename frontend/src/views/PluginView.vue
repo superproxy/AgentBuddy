@@ -3,11 +3,14 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePluginStore } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
+import { useAuthStore } from '../stores/auth'
+import { api } from '../api/client'
 
 const emit = defineEmits<{ 'go-tab': [key: string] }>()
 
 const plugin = usePluginStore()
 const ui = useUiStore()
+const auth = useAuthStore()
 const { plugins, installingPlugin, selectedForExport } = storeToRefs(plugin)
 const {
   refreshPluginList, exportPlugin, onImportPluginFile, importPluginFile,
@@ -26,6 +29,35 @@ const dragCounter = ref(0)
 const importOpen = ref(false)
 const importDragOver = ref(false)
 const importFileInput = ref<HTMLInputElement | null>(null)
+
+// ===== 发布弹窗 =====
+interface TeamSpace { id: number; name: string; role: string }
+const publishDialogOpen = ref(false)
+const publishFile = ref('')
+const publishScope = ref<'public' | 'team'>('public')
+const publishTeamId = ref<number | null>(null)
+const teamSpaces = ref<TeamSpace[]>([])
+
+async function loadTeams() {
+  if (!auth.isLoggedIn) return
+  try {
+    const r = await api('/api/teams')
+    if (r.ok) teamSpaces.value = r.data || []
+  } catch { /* ignore */ }
+}
+
+function openPublishDialog(file: string) {
+  publishFile.value = file
+  publishScope.value = 'public'
+  publishTeamId.value = null
+  publishDialogOpen.value = true
+  if (auth.isLoggedIn) loadTeams()
+}
+
+async function doPublish() {
+  publishDialogOpen.value = false
+  await publishToMarketplace(publishFile.value, publishScope.value, publishTeamId.value || undefined)
+}
 
 // ===== 视图切换：列表（默认）/ 图标 =====
 type ViewMode = 'list' | 'grid'
@@ -462,7 +494,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
                       <button type="button" @click="doExport(p.file, 'yaml')">YAML（仅配置）</button>
                     </div>
                   </div>
-                  <button type="button" class="btn btn-ghost btn-sm" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+                  <button type="button" class="btn btn-ghost btn-sm" title="发布到市场" @click="openPublishDialog(p.file)">分享</button>
                   <button type="button" class="btn btn-danger-text btn-sm" title="删除插件及其独占技能" @click="deletePlugin(p)">删除</button>
                 </div>
               </td>
@@ -530,7 +562,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
                 <button type="button" @click="doExport(p.file, 'yaml')">YAML</button>
               </div>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" title="发布到本地市场" @click="publishToMarketplace(p.file)">分享</button>
+            <button type="button" class="btn btn-ghost btn-sm" title="发布到市场" @click="openPublishDialog(p.file)">分享</button>
             <button type="button" class="btn btn-danger-text btn-sm" title="删除插件及其独占技能" @click="deletePlugin(p)">删除</button>
           </div>
         </article>
@@ -659,6 +691,52 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
         </div>
       </div>
     </Transition>
+
+    <!-- 发布插件弹窗 -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div v-if="publishDialogOpen" class="modal-mask" @click.self="publishDialogOpen = false">
+          <div class="modal-card" role="dialog" aria-modal="true" style="max-width: 480px">
+            <header class="modal-head">
+              <h2>发布插件</h2>
+              <button type="button" class="modal-close" aria-label="关闭" @click="publishDialogOpen = false">×</button>
+            </header>
+            <div class="modal-body">
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:10px">发布到</label>
+              <div style="display:flex;gap:10px;margin-bottom:16px">
+                <label style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;cursor:pointer" :style="{ borderColor: publishScope === 'public' ? 'var(--brand-500,#6366f1)' : '' }">
+                  <input type="radio" v-model="publishScope" value="public" style="accent-color:var(--brand-500,#6366f1)" />
+                  <div>
+                    <div style="font-size:14px;font-weight:600">公共市场</div>
+                    <div style="font-size:12px;color:var(--text-tertiary)">所有人可见可下载</div>
+                  </div>
+                </label>
+                <label v-if="auth.isLoggedIn && teamSpaces.length > 0" style="flex:1;display:flex;align-items:center;gap:8px;padding:12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;cursor:pointer" :style="{ borderColor: publishScope === 'team' ? 'var(--brand-500,#6366f1)' : '' }">
+                  <input type="radio" v-model="publishScope" value="team" style="accent-color:var(--brand-500,#6366f1)" />
+                  <div>
+                    <div style="font-size:14px;font-weight:600">团队空间</div>
+                    <div style="font-size:12px;color:var(--text-tertiary)">仅团队成员可见</div>
+                  </div>
+                </label>
+              </div>
+              <div v-if="publishScope === 'team' && teamSpaces.length > 0" style="margin-bottom:16px">
+                <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px">选择团队</label>
+                <select v-model="publishTeamId" style="width:100%;padding:10px 12px;border:1px solid var(--color-ink-300,#c9cdd4);border-radius:8px;font-size:14px;background:var(--bg-base,#f7f8fa)">
+                  <option :value="null" disabled>请选择团队空间</option>
+                  <option v-for="t in teamSpaces" :key="t.id" :value="t.id">{{ t.name }}（{{ t.role === 'owner' ? 'Owner' : 'Member' }}）</option>
+                </select>
+              </div>
+              <p v-if="publishScope === 'team' && teamSpaces.length === 0" style="font-size:13px;color:var(--text-tertiary)">你还没有加入任何团队，请先创建团队空间</p>
+              <p v-if="!auth.isLoggedIn" style="font-size:13px;color:var(--text-tertiary)">登录后可发布到团队空间</p>
+            </div>
+            <footer class="modal-foot">
+              <button type="button" class="btn btn-ghost" @click="publishDialogOpen = false">取消</button>
+              <button type="button" class="btn btn-primary" :disabled="publishScope === 'team' && !publishTeamId" @click="doPublish">发布</button>
+            </footer>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
