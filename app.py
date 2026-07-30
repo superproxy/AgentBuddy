@@ -537,7 +537,7 @@ def open_with_pywebview(url: str, title: str = "飞翼", width: int = 1400, heig
     api = _DownloadApi()
     window = webview.create_window(title, url, width=width, height=height,
                                    min_size=(1000, 680), text_select=True, js_api=api)
-    webview.start()
+    webview.start(private_mode=False)
     # webview.start 阻塞直到窗口关闭
     try:
         window.destroy()
