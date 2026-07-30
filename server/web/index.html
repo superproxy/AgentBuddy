@@ -301,6 +301,38 @@
       </nav>
       <div class="header-actions">
         <template v-if="user">
+          <!-- 邀请通知铃铛 -->
+          <div class="inv-wrap" style="position:relative">
+            <button class="header-btn inv-bell" @click.stop="invPanelOpen = !invPanelOpen" title="团队邀请">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              <span v-if="invitations.length" class="inv-badge">{{ invitations.length }}</span>
+            </button>
+            <div v-if="invPanelOpen" class="inv-panel" @click.stop>
+              <div class="inv-panel-head">
+                <span>团队邀请</span>
+                <span v-if="invitations.length" class="inv-count">{{ invitations.length }} 条待处理</span>
+              </div>
+              <div v-if="invitations.length === 0" class="inv-empty">暂无邀请</div>
+              <div v-for="inv in invitations" :key="inv.id" class="inv-card">
+                <div class="inv-card-head">
+                  <span class="inv-team-icon">{{ (inv.team_name || '?').charAt(0) }}</span>
+                  <div style="flex:1;min-width:0">
+                    <div class="inv-team-name">{{ inv.team_name }}</div>
+                    <div class="inv-team-desc">{{ inv.team_desc || '暂无描述' }}</div>
+                  </div>
+                </div>
+                <div class="inv-from">{{ inv.inviter_name }} 邀请你加入</div>
+                <p v-if="inv.message" class="inv-msg">{{ inv.message }}</p>
+                <div class="inv-actions">
+                  <button class="header-btn inv-reject" :disabled="invLoading" @click="respondInvitation(inv, false)">拒绝</button>
+                  <button class="header-btn header-btn-primary inv-accept" :disabled="invLoading" @click="respondInvitation(inv, true)">接受</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <span class="auth-bar-info">👋 <b>{{ user.username }}</b></span>
           <button class="header-btn" @click="logout">退出</button>
         </template>
@@ -535,7 +567,7 @@
   <div v-if="showInvite" class="login-mask" @click.self="showInvite = false">
     <div class="login-panel">
       <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">邀请成员</h3>
-      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">输入已注册的用户名，直接加入团队</p>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">输入已注册的用户名，发送邀请后等待对方确认</p>
       <div v-if="inviteError" class="login-error">{{ inviteError }}</div>
       <input class="login-input" v-model="inviteUsername" type="text" placeholder="用户名" @keydown.enter="doInvite" />
       <button class="login-btn" @click="doInvite" :disabled="inviteLoading">{{ inviteLoading ? '...' : '邀请' }}</button>
@@ -588,6 +620,12 @@ createApp({
     const inviteUsername = ref('')
     const inviteError = ref('')
     const inviteLoading = ref(false)
+
+    // === 收到的邀请 ===
+    const invitations = ref([])
+    const invPanelOpen = ref(false)
+    const invLoading = ref(false)
+    let invTimer = null
 
     function authHeaders() {
       const token = user.value?.token
@@ -711,6 +749,35 @@ createApp({
       } catch (e) { console.error(e) }
     }
 
+    // === 收到的邀请 ===
+    async function loadInvitations() {
+      if (!user.value) { invitations.value = []; return }
+      try {
+        const r = await fetch('/api/invitations', { headers: authHeaders() })
+        const d = await r.json()
+        if (d.ok) invitations.value = d.data || []
+      } catch (e) { console.error(e) }
+    }
+
+    async function respondInvitation(inv, accept) {
+      invLoading.value = true
+      try {
+        const r = await fetch('/api/invitations/' + inv.id + '/' + (accept ? 'accept' : 'decline'), {
+          method: 'POST', headers: authHeaders(),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          invitations.value = invitations.value.filter(i => i.id !== inv.id)
+          if (accept) {
+            await loadTeams()
+            page.value = 'teams'
+          }
+        }
+      } catch (e) { console.error(e) } finally {
+        invLoading.value = false
+      }
+    }
+
     const filteredItems = computed(() => {
       if (!activeTag.value) return items.value
       return items.value.filter(it =>
@@ -818,6 +885,7 @@ createApp({
           localStorage.setItem('agentbuddy-token', JSON.stringify(d.data))
           showLogin.value = false
           loginForm.value = { username: '', password: '', email: '' }
+          loadInvitations()
         } else {
           loginError.value = d.error || '操作失败'
         }
@@ -830,12 +898,23 @@ createApp({
 
     function logout() {
       user.value = null
+      invitations.value = []
+      invPanelOpen.value = false
       localStorage.removeItem('agentbuddy-token')
     }
 
     onMounted(() => {
       restoreUser()
       doSearch()
+      if (user.value) loadInvitations()
+      invTimer = setInterval(() => {
+        if (user.value) loadInvitations()
+      }, 30000)
+      window.addEventListener('click', (e) => {
+        if (invPanelOpen.value && !e.target.closest('.inv-wrap')) {
+          invPanelOpen.value = false
+        }
+      })
     })
 
     return {
@@ -849,6 +928,7 @@ createApp({
       showInvite, inviteUsername, inviteError, inviteLoading,
       loadTeams, openTeam, doCreateTeam, doInvite, removeMember, deleteTeam,
       teamPlugins, teamPluginsLoading,
+      invitations, invPanelOpen, invLoading, loadInvitations, respondInvitation,
     }
   }
 }).mount('#app')
@@ -939,6 +1019,56 @@ createApp({
   color: white; font-weight: 600; font-size: 14px;
   flex-shrink: 0;
 }
+
+/* === 邀请通知铃铛 === */
+.inv-bell {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  padding: 7px 10px;
+}
+.inv-badge {
+  position: absolute; top: -2px; right: -2px;
+  min-width: 16px; height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--red); color: white;
+  font-size: 10px; font-weight: 700;
+  line-height: 16px; text-align: center;
+}
+.inv-panel {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: 340px; max-width: 90vw;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+  z-index: 100;
+  max-height: 440px; overflow-y: auto;
+}
+.inv-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px;
+  font-size: 14px; font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.inv-count { font-size: 12px; font-weight: 500; color: var(--brand-500); }
+.inv-empty { padding: 32px 16px; text-align: center; font-size: 13px; color: var(--text-tertiary); }
+.inv-card { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.inv-card:last-child { border-bottom: none; }
+.inv-card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.inv-team-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 14px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+}
+.inv-team-name { font-size: 14px; font-weight: 600; }
+.inv-team-desc { font-size: 12px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-from { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.inv-msg { font-size: 12px; color: var(--text-secondary); background: var(--surface-hover); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; }
+.inv-actions { display: flex; gap: 8px; }
+.inv-actions button { flex: 1; padding: 7px; font-size: 13px; }
+.inv-reject { color: var(--text-secondary); }
 </style>
 </body>
 </html>
