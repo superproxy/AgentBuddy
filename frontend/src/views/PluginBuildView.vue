@@ -1061,7 +1061,7 @@ onMounted(() => {
           <button type="button" class="pb-btn pb-btn-ghost" @click="ai.closeDialog()">丢弃</button>
           <button type="button" class="pb-btn pb-btn-success" @click="ai.save()">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
-            保存到插件配置
+            保存到插件管理
           </button>
         </div>
       </div>
