@@ -36,12 +36,19 @@ const userMenuOpen = ref(false)
 
 // ============ 两级菜单 ============
 const openGroupName = ref('')
+let closeTimer: ReturnType<typeof setTimeout> | null = null
 
 function openGroup(name: string) {
-  openGroupName.value = name
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null }
+  if (name) openGroupName.value = name
+}
+
+function scheduleClose() {
+  closeTimer = setTimeout(() => { openGroupName.value = '' }, 150)
 }
 
 function toggleGroup(name: string) {
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null }
   openGroupName.value = openGroupName.value === name ? '' : name
 }
 
@@ -500,7 +507,7 @@ onBeforeUnmount(() => {
             :key="grp.group"
             class="nav-group-wrap relative"
             @mouseenter="openGroup(grp.group)"
-            @mouseleave="openGroup('')"
+            @mouseleave="scheduleClose()"
           >
             <!-- 单项组（无下拉） -->
             <button
