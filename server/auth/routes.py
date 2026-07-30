@@ -41,18 +41,22 @@ def create_auth_bp() -> Blueprint:
             conn.close()
             return jsonify({"ok": False, "error": "用户名已存在"}), 409
 
+        # 首个注册的用户自动成为管理员
+        user_count = conn.execute("SELECT COUNT(*) as cnt FROM users").fetchone()["cnt"]
+        role = "admin" if user_count == 0 else "member"
+
         # 创建用户
         hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         cursor = conn.execute(
-            "INSERT INTO users (username, password, email, created_at) VALUES (?, ?, ?, ?)",
-            (username, hashed, email, now_iso()),
+            "INSERT INTO users (username, password, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+            (username, hashed, email, role, now_iso()),
         )
         user_id = cursor.lastrowid
         conn.commit()
         conn.close()
 
         token = generate_token(user_id, username)
-        return jsonify({"ok": True, "data": {"id": user_id, "username": username, "email": email, "token": token}})
+        return jsonify({"ok": True, "data": {"id": user_id, "username": username, "email": email, "role": role, "token": token}})
 
     @bp.route("/auth/login", methods=["POST"])
     def login():
@@ -66,7 +70,7 @@ def create_auth_bp() -> Blueprint:
 
         conn = get_db()
         row = conn.execute(
-            "SELECT id, username, password, email FROM users WHERE username = ?", (username,)
+            "SELECT id, username, password, email, role FROM users WHERE username = ?", (username,)
         ).fetchone()
         conn.close()
 
@@ -74,7 +78,7 @@ def create_auth_bp() -> Blueprint:
             return jsonify({"ok": False, "error": "用户名或密码错误"}), 401
 
         token = generate_token(row["id"], row["username"])
-        return jsonify({"ok": True, "data": {"id": row["id"], "username": row["username"], "email": row["email"], "token": token}})
+        return jsonify({"ok": True, "data": {"id": row["id"], "username": row["username"], "email": row["email"], "role": row["role"], "token": token}})
 
     @bp.route("/auth/me", methods=["GET"])
     @require_auth

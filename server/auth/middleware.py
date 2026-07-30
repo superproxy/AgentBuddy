@@ -58,7 +58,7 @@ def get_current_user() -> dict | None:
 
     conn = get_db()
     row = conn.execute(
-        "SELECT id, username, email FROM users WHERE id = ?", (payload["id"],)
+        "SELECT id, username, email, role FROM users WHERE id = ?", (payload["id"],)
     ).fetchone()
     conn.close()
     return dict(row) if row else None

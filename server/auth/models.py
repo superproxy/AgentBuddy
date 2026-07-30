@@ -1,8 +1,8 @@
 """SQLite 数据模型 — 用户、团队、成员关系、插件、点赞。
 
 单文件 SQLite，零配置。数据库文件路径由 app.py 通过 DB_PATH 传入。
-首次创建时自动初始化默认管理员账号（admin / admin888）。
 启动时自动从 index.json 迁移已有插件数据。
+首次注册的用户自动成为管理员。
 """
 import sqlite3
 import json
@@ -17,12 +17,9 @@ MARKETPLACE_DIR: Path | None = None
 def set_db_path(path: Path):
     """设置数据库文件路径（由 app.py 在启动时调用）。"""
     global DB_PATH
-    is_new = not path.exists()
     DB_PATH = path
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     init_db()
-    if is_new:
-        _create_default_admin()
 
 
 def set_marketplace_dir(path: Path):
@@ -54,6 +51,7 @@ def init_db():
             username    TEXT NOT NULL UNIQUE,
             password    TEXT NOT NULL,
             email       TEXT DEFAULT '',
+            role        TEXT NOT NULL DEFAULT 'member',
             created_at  TEXT NOT NULL
         );
 
@@ -159,18 +157,8 @@ def migrate_index_json():
 
 
 def _create_default_admin():
-    """首次创建数据库时，初始化默认管理员账号。"""
-    hashed = bcrypt.hashpw(b"admin888", bcrypt.gensalt()).decode("utf-8")
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO users (username, password, email, created_at) VALUES (?, ?, ?, ?)",
-            ("admin", hashed, "admin@agentbuddy.local", now_iso()),
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass  # 已存在则跳过
-    conn.close()
+    """已废弃：不再创建默认管理员。首个注册的用户自动成为 admin。"""
+    pass
 
 
 # ==================== 插件 CRUD ====================
