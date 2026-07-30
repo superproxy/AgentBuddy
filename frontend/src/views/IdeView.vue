@@ -196,6 +196,11 @@ async function copyPath(path: string | undefined) {
 }
 
 /** 生成图标首字母（最多 2 个字符） */
+/** form 标签（用于扁平网格中区分 cli/app/vscode 等） */
+function formLabel(form: string): string {
+  return FORM_META_LOCAL[form]?.label || form
+}
+
 function markText(label: string): string {
   const words = label.split(/\s+/).filter(Boolean)
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
@@ -555,12 +560,12 @@ watch(
                 >
                   <div class="icon-wrap">
                     <div class="icon" :class="{ 'has-img': !iconFailed(it.key) }" :style="iconStyle(it.key)" aria-hidden="true">
-                      <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label" class="icon-img" @error="onIconError(it.key)" draggable="false" />
+                      <img v-if="!iconFailed(it.key)" :src="iconUrl(it.key)" :alt="it.label + ' ' + formLabel(fg.form)" class="icon-img" @error="onIconError(it.key)" draggable="false" />
                       <span v-else class="icon-text">{{ markText(it.label) }}</span>
                     </div>
                     <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
                   </div>
-                  <div class="label" :title="it.label">{{ it.label }}</div>
+                  <div class="label" :title="it.label + ' ' + formLabel(fg.form)">{{ it.label }} {{ formLabel(fg.form) }}</div>
                   <div class="sublabel">
                     <span>{{ it.version || (it.installed ? '已安装' : '未安装') }}</span>
                   </div>
