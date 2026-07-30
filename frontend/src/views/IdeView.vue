@@ -1722,6 +1722,17 @@ watch(
   min-width: 0;
   flex: 1 1 320px;
 }
+/* 品牌视图下 cat-col 为 flex row，让所有 sub-form 横向排列 */
+.brand-view .cat-col {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+.brand-view .sub-form {
+  flex-shrink: 0;
+}
 .cat-head {
   display: flex;
   align-items: center;
