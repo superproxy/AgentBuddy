@@ -566,9 +566,6 @@ watch(
                     <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
                   </div>
                   <div class="label" :title="it.label + ' ' + formLabel(fg.form)">{{ it.label }} {{ formLabel(fg.form) }}</div>
-                  <div class="sublabel">
-                    <span>{{ it.version || (it.installed ? '已安装' : '未安装') }}</span>
-                  </div>
                 </div>
               </div>
             </template>
