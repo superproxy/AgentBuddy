@@ -296,7 +296,8 @@
         <span class="logo-name">AgentBuddy</span>
       </a>
       <nav class="header-nav">
-        <a class="nav-link active" href="/">插件市场</a>
+        <a class="nav-link" :class="{ active: page === 'market' }" href="#" @click.prevent="page = 'market'">插件市场</a>
+        <a v-if="user" class="nav-link" :class="{ active: page === 'teams' }" href="#" @click.prevent="goTeams">团队空间</a>
       </nav>
       <div class="header-actions">
         <template v-if="user">
@@ -311,6 +312,8 @@
     </div>
   </header>
 
+  <!-- ==================== 插件市场页 ==================== -->
+  <template v-if="page === 'market'">
   <!-- Hero -->
   <section class="hero">
     <h1 class="hero-title">AgentBuddy 插件市场</h1>
@@ -420,8 +423,99 @@
       </p>
     </div>
   </div>
+  </template><!-- /插件市场页 -->
 
-  <!-- Footer -->
+  <!-- ==================== 团队空间页 ==================== -->
+  <template v-if="page === 'teams'">
+    <div style="max-width:1200px;margin:0 auto;padding:32px 24px 48px">
+      <!-- 团队列表视图 -->
+      <div v-if="!selectedTeam">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <h2 style="font-size:22px;font-weight:700">团队空间</h2>
+          <button class="header-btn header-btn-primary" @click="showCreateTeam = true">+ 创建团队</button>
+        </div>
+        <div v-if="teamsLoading" class="loading"><div class="loading-spinner"></div>加载中...</div>
+        <div v-else-if="teams.length === 0" class="empty" style="padding:40px">
+          <p style="font-size:16px;margin-bottom:4px">还没有团队空间</p>
+          <p style="font-size:13px">创建一个团队，邀请成员共同管理插件</p>
+        </div>
+        <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+          <div v-for="t in teams" :key="t.id" class="team-card" @click="openTeam(t)">
+            <div class="team-card-head">
+              <div style="flex:1">
+                <div style="font-size:15px;font-weight:600">{{ t.name }}</div>
+                <div style="font-size:12px;color:var(--text-tertiary);margin-top:2px">{{ t.description || '暂无描述' }}</div>
+              </div>
+              <span v-if="t.role === 'owner'" class="role-tag role-owner">Owner</span>
+              <span v-else class="role-tag role-member">Member</span>
+            </div>
+            <div class="team-card-stats">
+              <span>👥 {{ t.member_count }} 人</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 团队详情视图 -->
+      <div v-else>
+        <button class="header-btn" @click="selectedTeam = null" style="margin-bottom:16px">← 返回团队列表</button>
+        <div class="team-detail-head">
+          <div style="flex:1">
+            <h2 style="font-size:20px;font-weight:700">{{ selectedTeam.name }}</h2>
+            <p style="font-size:13px;color:var(--text-tertiary);margin-top:4px">{{ selectedTeam.description || '暂无描述' }}</p>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="header-btn header-btn-primary" @click="showInvite = true" v-if="selectedTeam.role === 'owner'">邀请成员</button>
+            <button class="header-btn" style="color:var(--red);border-color:rgba(239,68,68,0.3)" @click="deleteTeam" v-if="selectedTeam.role === 'owner'">删除团队</button>
+          </div>
+        </div>
+
+        <!-- 成员列表 -->
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--text-secondary)">团队成员</h3>
+        <div v-if="membersLoading" class="loading"><div class="loading-spinner"></div>加载中...</div>
+        <div v-else style="display:flex;flex-direction:column;gap:8px">
+          <div v-for="m in members" :key="m.id" class="member-row">
+            <div class="member-avatar" :style="{ background: colorFor(m.username) }">{{ m.username.charAt(0).toUpperCase() }}</div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:500">{{ m.username }}</div>
+              <div style="font-size:12px;color:var(--text-tertiary)">{{ m.email || '无邮箱' }}</div>
+            </div>
+            <span v-if="m.role === 'owner'" class="role-tag role-owner">Owner</span>
+            <span v-else class="role-tag role-member">Member</span>
+            <button
+              v-if="selectedTeam.role === 'owner' && m.role !== 'owner'"
+              class="header-btn"
+              style="font-size:12px;padding:4px 10px;color:var(--red)"
+              @click="removeMember(m.username)"
+            >移除</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template><!-- /团队空间页 -->
+
+  <!-- 创建团队弹窗 -->
+  <div v-if="showCreateTeam" class="login-mask" @click.self="showCreateTeam = false">
+    <div class="login-panel">
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">创建团队</h3>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">创建后你就是团队 Owner</p>
+      <div v-if="createTeamError" class="login-error">{{ createTeamError }}</div>
+      <input class="login-input" v-model="createTeamForm.name" type="text" placeholder="团队名称" />
+      <textarea class="login-input" v-model="createTeamForm.description" placeholder="团队描述（可选）" rows="2" style="resize:none;font-family:inherit"></textarea>
+      <button class="login-btn" @click="doCreateTeam" :disabled="createTeamLoading">{{ createTeamLoading ? '...' : '创建' }}</button>
+    </div>
+  </div>
+
+  <!-- 邀请成员弹窗 -->
+  <div v-if="showInvite" class="login-mask" @click.self="showInvite = false">
+    <div class="login-panel">
+      <h3 style="font-size:18px;font-weight:700;margin-bottom:4px">邀请成员</h3>
+      <p style="font-size:13px;color:var(--text-tertiary);margin-bottom:16px">输入已注册的用户名，直接加入团队</p>
+      <div v-if="inviteError" class="login-error">{{ inviteError }}</div>
+      <input class="login-input" v-model="inviteUsername" type="text" placeholder="用户名" @keydown.enter="doInvite" />
+      <button class="login-btn" @click="doInvite" :disabled="inviteLoading">{{ inviteLoading ? '...' : '邀请' }}</button>
+    </div>
+  </div>
   <footer class="site-footer">
     <p>AgentBuddy · AI 编程助手插件平台</p>
     <p style="margin-top:4px"><a class="footer-link" href="https://github.com/superproxy/AgentBuddy">GitHub</a></p>
@@ -449,6 +543,138 @@ createApp({
     const loginForm = ref({ username: '', password: '', email: '' })
     const loginError = ref('')
     const loginLoading = ref(false)
+
+    // === 页面切换 ===
+    const page = ref('market')
+
+    // === 团队空间 ===
+    const teams = ref([])
+    const teamsLoading = ref(false)
+    const selectedTeam = ref(null)
+    const members = ref([])
+    const membersLoading = ref(false)
+    const showCreateTeam = ref(false)
+    const createTeamForm = ref({ name: '', description: '' })
+    const createTeamError = ref('')
+    const createTeamLoading = ref(false)
+    const showInvite = ref(false)
+    const inviteUsername = ref('')
+    const inviteError = ref('')
+    const inviteLoading = ref(false)
+
+    function authHeaders() {
+      const token = user.value?.token
+      return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+    }
+
+    async function goTeams() {
+      page.value = 'teams'
+      await loadTeams()
+    }
+
+    async function loadTeams() {
+      if (!user.value) return
+      teamsLoading.value = true
+      try {
+        const r = await fetch('/api/teams', { headers: authHeaders() })
+        const d = await r.json()
+        if (d.ok) teams.value = d.data || []
+      } catch (e) { console.error(e) } finally {
+        teamsLoading.value = false
+      }
+    }
+
+    async function openTeam(t) {
+      selectedTeam.value = t
+      membersLoading.value = true
+      try {
+        const r = await fetch('/api/teams/' + t.id + '/members', { headers: authHeaders() })
+        const d = await r.json()
+        if (d.ok) members.value = d.data || []
+      } catch (e) { console.error(e) } finally {
+        membersLoading.value = false
+      }
+    }
+
+    async function doCreateTeam() {
+      createTeamError.value = ''
+      if (!createTeamForm.value.name.trim()) {
+        createTeamError.value = '团队名称不能为空'
+        return
+      }
+      createTeamLoading.value = true
+      try {
+        const r = await fetch('/api/teams', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ name: createTeamForm.value.name.trim(), description: createTeamForm.value.description.trim() }),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          showCreateTeam.value = false
+          createTeamForm.value = { name: '', description: '' }
+          await loadTeams()
+          if (d.data) openTeam(d.data)
+        } else {
+          createTeamError.value = d.error || '创建失败'
+        }
+      } catch (e) {
+        createTeamError.value = '网络错误'
+      } finally {
+        createTeamLoading.value = false
+      }
+    }
+
+    async function doInvite() {
+      inviteError.value = ''
+      if (!inviteUsername.value.trim()) {
+        inviteError.value = '用户名不能为空'
+        return
+      }
+      inviteLoading.value = true
+      try {
+        const r = await fetch('/api/teams/' + selectedTeam.value.id + '/invite', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify({ username: inviteUsername.value.trim() }),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          showInvite.value = false
+          inviteUsername.value = ''
+          await openTeam(selectedTeam.value)
+          await loadTeams()
+          selectedTeam.value = teams.value.find(t => t.id === selectedTeam.value.id) || selectedTeam.value
+        } else {
+          inviteError.value = d.error || '邀请失败'
+        }
+      } catch (e) {
+        inviteError.value = '网络错误'
+      } finally {
+        inviteLoading.value = false
+      }
+    }
+
+    async function removeMember(username) {
+      if (!confirm('确定移除 ' + username + '？')) return
+      try {
+        await fetch('/api/teams/' + selectedTeam.value.id + '/members/' + username, {
+          method: 'DELETE', headers: authHeaders(),
+        })
+        await openTeam(selectedTeam.value)
+        await loadTeams()
+        selectedTeam.value = teams.value.find(t => t.id === selectedTeam.value.id) || selectedTeam.value
+      } catch (e) { console.error(e) }
+    }
+
+    async function deleteTeam() {
+      if (!confirm('确定删除团队「' + selectedTeam.value.name + '」？此操作不可撤销！')) return
+      try {
+        await fetch('/api/teams/' + selectedTeam.value.id, {
+          method: 'DELETE', headers: authHeaders(),
+        })
+        selectedTeam.value = null
+        await loadTeams()
+      } catch (e) { console.error(e) }
+    }
 
     const filteredItems = computed(() => {
       if (!activeTag.value) return items.value
@@ -582,6 +808,11 @@ createApp({
       filteredItems, colorFor, formatSize, downloadUrl, onSearch, doSearch,
       user, showLogin, loginMode, loginForm, loginError, loginLoading,
       doLogin, logout,
+      page, goTeams,
+      teams, teamsLoading, selectedTeam, members, membersLoading,
+      showCreateTeam, createTeamForm, createTeamError, createTeamLoading,
+      showInvite, inviteUsername, inviteError, inviteLoading,
+      loadTeams, openTeam, doCreateTeam, doInvite, removeMember, deleteTeam,
     }
   }
 }).mount('#app')
@@ -625,6 +856,52 @@ createApp({
   background: rgba(239,68,68,0.08);
   padding: 8px 12px; border-radius: 6px;
   margin-bottom: 12px;
+}
+
+/* === 团队空间 === */
+.team-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.team-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  border-color: var(--border-strong);
+}
+.team-card-head {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-bottom: 12px;
+}
+.team-card-stats {
+  font-size: 13px; color: var(--text-tertiary);
+}
+.team-detail-head {
+  display: flex; align-items: flex-start; gap: 16px;
+  margin-bottom: 24px; padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.role-tag {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  white-space: nowrap;
+}
+.role-owner { background: rgba(16,185,129,0.1); color: var(--green); }
+.role-member { background: rgba(99,102,241,0.1); color: var(--brand-500); }
+.member-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.member-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 600; font-size: 14px;
+  flex-shrink: 0;
 }
 </style>
 </body>
