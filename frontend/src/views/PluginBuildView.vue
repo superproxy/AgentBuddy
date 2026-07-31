@@ -45,6 +45,23 @@ const listFilter = ref('')
 const skillAuthorFilter = ref('')
 const nameTouched = ref(false)
 
+// 表格排序
+type SortCol = 'skill_name' | 'description' | 'category' | 'author' | 'repo' | 'provider' | 'protocol' | 'base_url' | 'name'
+const sortCol = ref<SortCol>('skill_name')
+const sortDir = ref<'asc' | 'desc'>('asc')
+function toggleSort(col: SortCol) {
+  if (sortCol.value === col) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
+  else { sortCol.value = col; sortDir.value = 'asc' }
+}
+function sortList<T>(list: T[], getter: (item: T) => string): T[] {
+  const dir = sortDir.value === 'asc' ? 1 : -1
+  return [...list].sort((a, b) => {
+    const va = getter(a) || ''
+    const vb = getter(b) || ''
+    return va.localeCompare(vb, 'zh') * dir
+  })
+}
+
 const CAT_META: Record<CatKey, { title: string; hint: string; label: string; sub: string }> = {
   llm: { title: '本地 LLM', hint: '勾选要打包的 Provider', label: 'LLM', sub: '模型 Provider' },
   mcp: { title: '本地 MCP', hint: '过滤并勾选 MCP 服务', label: 'MCP', sub: '工具服务' },
@@ -127,18 +144,27 @@ const q = computed(() => listFilter.value.trim().toLowerCase())
 
 const filteredLlms = computed(() => {
   const qq = q.value
-  if (!qq) return localLlmList.value
-  return localLlmList.value.filter(l =>
-    l.provider.toLowerCase().includes(qq)
-    || l.protocol.toLowerCase().includes(qq)
-    || (l.base_url || '').toLowerCase().includes(qq),
-  )
+  let list = localLlmList.value
+  if (qq) {
+    list = list.filter(l =>
+      l.provider.toLowerCase().includes(qq)
+      || l.protocol.toLowerCase().includes(qq)
+      || (l.base_url || '').toLowerCase().includes(qq),
+    )
+  }
+  const col = sortCol.value
+  if (col === 'provider') return sortList(list, (l: any) => l.provider || '')
+  if (col === 'protocol') return sortList(list, (l: any) => l.protocol || '')
+  if (col === 'base_url') return sortList(list, (l: any) => l.base_url || '')
+  return list
 })
 
 const filteredMcps = computed(() => {
   const qq = q.value || mcpFilterText.value.trim().toLowerCase()
-  if (!qq) return mcpNames.value
-  return mcpNames.value.filter(n => n.toLowerCase().includes(qq))
+  let list = mcpNames.value
+  if (qq) list = list.filter(n => n.toLowerCase().includes(qq))
+  if (sortCol.value === 'name') return sortList(list, (n: string) => n)
+  return list
 })
 
 const filteredSkills = computed(() => {
@@ -147,14 +173,23 @@ const filteredSkills = computed(() => {
   if (skillAuthorFilter.value) {
     list = list.filter((s: any) => skillAuthor(s) === skillAuthorFilter.value)
   }
-  if (!qq) return list
-  return list.filter((s: any) =>
-    (s.skill_name || '').toLowerCase().includes(qq)
-    || (s.description || '').toLowerCase().includes(qq)
-    || (s.source || '').toLowerCase().includes(qq)
-    || (s.author || '').toLowerCase().includes(qq)
-    || (s.repo || '').toLowerCase().includes(qq),
-  )
+  if (qq) {
+    list = list.filter((s: any) =>
+      (s.skill_name || '').toLowerCase().includes(qq)
+      || (s.description || '').toLowerCase().includes(qq)
+      || (s.source || '').toLowerCase().includes(qq)
+      || (s.author || '').toLowerCase().includes(qq)
+      || (s.repo || '').toLowerCase().includes(qq),
+    )
+  }
+  // 排序
+  const col = sortCol.value
+  if (col === 'skill_name') return sortList(list, (s: any) => s.skill_name || '')
+  if (col === 'description') return sortList(list, (s: any) => s.description || '')
+  if (col === 'category') return sortList(list, (s: any) => s.category || '')
+  if (col === 'author') return sortList(list, (s: any) => skillAuthor(s))
+  if (col === 'repo') return sortList(list, (s: any) => skillRepo(s))
+  return list
 })
 
 // 从 source (owner/repo) 解析 author
@@ -495,32 +530,42 @@ onMounted(() => {
               <strong>{{ localLlmList.length ? '没有匹配项' : '未配置 LLM Provider' }}</strong>
               <p>{{ localLlmList.length ? '换个关键词，或清空搜索查看全部' : '请到 LLM 配置 tab 添加' }}</p>
             </div>
-            <button
-              v-for="l in filteredLlms"
-              :key="llmKey(l)"
-              type="button"
-              class="pb-item"
-              :class="{ on: selectedLlm.includes(llmKey(l)) }"
-              role="option"
-              :aria-selected="selectedLlm.includes(llmKey(l))"
-              @click="toggleLlm(llmKey(l))"
-            >
-              <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg></span>
-              <span class="avatar">{{ initials(l.provider) }}</span>
-              <span class="body">
-                <span class="title">
-                  {{ l.provider }}
-                  <span class="tag">{{ l.protocol }}</span>
-                  <span v-if="l.active" class="tag live">active</span>
-                  <span v-if="l.has_key" class="tag live">key ✓</span>
-                </span>
-                <span class="meta">{{ l.base_url || '(无 base_url)' }} · {{ l.model_count }} 模型</span>
-                <span class="foot">
-                  <span class="dot" :class="{ on: l.active || l.has_key }" />
-                  {{ selectedLlm.includes(llmKey(l)) ? '已加入装箱' : '点击加入装箱' }}
-                </span>
-              </span>
-            </button>
+            <table v-else class="pb-skill-table">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-name sortable" @click="toggleSort('provider')">Provider <span class="sort-arrow" :class="{ on: sortCol === 'provider' }">{{ sortCol === 'provider' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="sortable" @click="toggleSort('protocol')">协议 <span class="sort-arrow" :class="{ on: sortCol === 'protocol' }">{{ sortCol === 'protocol' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="sortable" @click="toggleSort('base_url')">Base URL <span class="sort-arrow" :class="{ on: sortCol === 'base_url' }">{{ sortCol === 'base_url' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th>模型数</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="l in filteredLlms"
+                  :key="llmKey(l)"
+                  class="pb-skill-row"
+                  :class="{ on: selectedLlm.includes(llmKey(l)) }"
+                  @click="toggleLlm(llmKey(l))"
+                >
+                  <td class="col-check">
+                    <span class="check" :class="{ checked: selectedLlm.includes(llmKey(l)) }">
+                      <svg v-if="selectedLlm.includes(llmKey(l))" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                  </td>
+                  <td class="col-name">{{ l.provider }}</td>
+                  <td>{{ l.protocol }}</td>
+                  <td class="col-desc">{{ l.base_url || '—' }}</td>
+                  <td>{{ l.model_count }}</td>
+                  <td>
+                    <span v-if="l.active" class="tag live">active</span>
+                    <span v-if="l.has_key" class="tag live">key ✓</span>
+                    <span v-if="!l.active && !l.has_key" class="text-ink-400">—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </template>
 
           <!-- MCP -->
@@ -530,27 +575,32 @@ onMounted(() => {
               <strong>{{ mcpNames.length ? '没有匹配项' : '无可用 MCP' }}</strong>
               <p>{{ mcpNames.length ? '换个关键词试试' : '请到 MCP 配置 tab 添加' }}</p>
             </div>
-            <button
-              v-for="name in filteredMcps"
-              :key="name"
-              type="button"
-              class="pb-item"
-              :class="{ on: selectedMcp.includes(name) }"
-              role="option"
-              :aria-selected="selectedMcp.includes(name)"
-              @click="toggleMcp(name)"
-            >
-              <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg></span>
-              <span class="avatar">{{ initials(name) }}</span>
-              <span class="body">
-                <span class="title">{{ name }}</span>
-                <span class="meta">MCP 服务</span>
-                <span class="foot">
-                  <span class="dot" :class="{ on: selectedMcp.includes(name) }" />
-                  {{ selectedMcp.includes(name) ? '已加入装箱' : '点击加入装箱' }}
-                </span>
-              </span>
-            </button>
+            <table v-else class="pb-skill-table">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-name sortable" @click="toggleSort('name')">名称 <span class="sort-arrow" :class="{ on: sortCol === 'name' }">{{ sortCol === 'name' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th>类型</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="name in filteredMcps"
+                  :key="name"
+                  class="pb-skill-row"
+                  :class="{ on: selectedMcp.includes(name) }"
+                  @click="toggleMcp(name)"
+                >
+                  <td class="col-check">
+                    <span class="check" :class="{ checked: selectedMcp.includes(name) }">
+                      <svg v-if="selectedMcp.includes(name)" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                  </td>
+                  <td class="col-name">{{ name }}</td>
+                  <td>MCP 服务</td>
+                </tr>
+              </tbody>
+            </table>
           </template>
 
           <!-- Skill -->
@@ -564,11 +614,11 @@ onMounted(() => {
               <thead>
                 <tr>
                   <th class="col-check"></th>
-                  <th class="col-name">名称</th>
-                  <th class="col-desc">描述</th>
-                  <th class="col-cat">分类</th>
-                  <th class="col-author">作者</th>
-                  <th class="col-repo">仓库</th>
+                  <th class="col-name sortable" @click="toggleSort('skill_name')">名称 <span class="sort-arrow" :class="{ on: sortCol === 'skill_name' }">{{ sortCol === 'skill_name' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="col-desc sortable" @click="toggleSort('description')">描述 <span class="sort-arrow" :class="{ on: sortCol === 'description' }">{{ sortCol === 'description' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="col-cat sortable" @click="toggleSort('category')">分类 <span class="sort-arrow" :class="{ on: sortCol === 'category' }">{{ sortCol === 'category' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="col-author sortable" @click="toggleSort('author')">作者 <span class="sort-arrow" :class="{ on: sortCol === 'author' }">{{ sortCol === 'author' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
+                  <th class="col-repo sortable" @click="toggleSort('repo')">仓库 <span class="sort-arrow" :class="{ on: sortCol === 'repo' }">{{ sortCol === 'repo' ? (sortDir === 'asc' ? '▲' : '▼') : '↕' }}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1288,6 +1338,10 @@ onMounted(() => {
 .col-repo { white-space: nowrap; }
 .col-repo a { color: var(--color-brand-500); text-decoration: none; }
 .col-repo a:hover { text-decoration: underline; }
+.pb-skill-table th.sortable { cursor: pointer; user-select: none; }
+.pb-skill-table th.sortable:hover { color: var(--color-brand-500); }
+.sort-arrow { opacity: 0.3; font-size: 10px; margin-left: 2px; }
+.sort-arrow.on { opacity: 1; color: var(--color-brand-500); }
 .pb-skill-row .check {
   display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px;
   border: 1.5px solid var(--color-ink-300); background: var(--bg-elevated); transition: .15s;
