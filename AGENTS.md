@@ -129,3 +129,10 @@ cd frontend && npx vite build
 |-----|------|
 | OpenClaw | Gateway 服务架构，非 TUI CLI（`openclaw sessions` 仅列出会话，无 `--resume` 参数） |
 | ZCode | 桌面 IDE，非 TUI CLI（会话管理通过 UI 进行） |
+
+## Git 部署约定
+
+- **推送**：只推 GitHub（`git push`），不手动推 Gitee
+- **Gitee 自动同步**：Gitee 仓库配置了从 GitHub 自动镜像同步，push GitHub 后 Gitee 会自动拉取
+- **服务器部署**：服务器 `run.sh update` 从 Gitee 拉取代码，Gitee 同步延迟约 1-2 分钟，部署前等待同步完成
+- **部署命令**：`cd /root/AgentBuddy/server && ./run.sh update`（自动 git pull + 重启）
