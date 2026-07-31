@@ -1758,8 +1758,15 @@ def list_local_skills():
     for scan_dir in (AGENTS_SKILLS_CACHE, PROJECT_SKILLS_DIR, DOT_AGENTS_SKILLS):
         if not scan_dir.exists():
             continue
-        for d in sorted(scan_dir.iterdir()):
-            if not d.is_dir() or not (d / "SKILL.md").exists():
+        try:
+            entries = sorted(scan_dir.iterdir())
+        except OSError:
+            continue
+        for d in entries:
+            try:
+                if not d.is_dir() or not (d / "SKILL.md").exists():
+                    continue
+            except OSError:
                 continue
             name = d.name
             if name in seen:
@@ -1861,8 +1868,15 @@ def list_installed_skills():
     for scan_dir in scan_dirs:
         if not scan_dir.exists():
             continue
-        for d in scan_dir.iterdir():
-            if not d.is_dir() or not (d / "SKILL.md").exists():
+        try:
+            entries = list(scan_dir.iterdir())
+        except OSError:
+            continue
+        for d in entries:
+            try:
+                if not d.is_dir() or not (d / "SKILL.md").exists():
+                    continue
+            except OSError:
                 continue
             if d.name in seen:
                 continue
@@ -2030,9 +2044,15 @@ def import_skills():
     for base in (DOT_AGENTS_SKILLS, PROJECT_SKILLS_DIR):
         if not base.exists():
             continue
-        for p in base.iterdir():
-            if p.is_dir():
-                installed.add(p.name)
+        try:
+            for p in base.iterdir():
+                try:
+                    if p.is_dir():
+                        installed.add(p.name)
+                except OSError:
+                    continue
+        except OSError:
+            continue
 
     # 清洗目标名称
     target = [str(n).strip() for n in names if str(n).strip()]
@@ -2349,10 +2369,17 @@ def skills_fill_sources_sse():
         for base in (DOT_AGENTS_SKILLS, PROJECT_SKILLS_DIR):
             if not base.exists():
                 continue
-            for d in base.iterdir():
-                if d.is_dir() and (d / "SKILL.md").exists():
-                    if d.name not in sources_map and d.name not in targets:
-                        targets.append(d.name)
+            try:
+                base_entries = list(base.iterdir())
+            except OSError:
+                continue
+            for d in base_entries:
+                try:
+                    if d.is_dir() and (d / "SKILL.md").exists():
+                        if d.name not in sources_map and d.name not in targets:
+                            targets.append(d.name)
+                except OSError:
+                    continue
 
     def _stream():
         yield f"data: [INFO] 待补全来源: {len(targets)} 个\n\n"
@@ -4138,11 +4165,14 @@ def import_from_ide():
         scanned_dirs.append(str(sdir))
         try:
             for d in sdir.iterdir():
-                if d.is_dir() and (d / "SKILL.md").exists():
-                    if d.name in skill_name_sources:
-                        skill_name_sources[d.name].append(ide_label)
-                    else:
-                        skill_name_sources[d.name] = [ide_label]
+                try:
+                    if d.is_dir() and (d / "SKILL.md").exists():
+                        if d.name in skill_name_sources:
+                            skill_name_sources[d.name].append(ide_label)
+                        else:
+                            skill_name_sources[d.name] = [ide_label]
+                except OSError:
+                    continue
         except Exception:
             continue
     merged_skills = [{"name": n, "sources": ss} for n, ss in skill_name_sources.items()]
