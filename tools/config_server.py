@@ -1749,6 +1749,9 @@ def list_local_skills():
                 if name:
                     csv_map[name] = row
 
+    # 加载 sources_map（skill.yaml 中记录的安装来源），用于补充 author/repo
+    sources_map = get_skill_sources(SKILL_YAML)
+
     # 扫描三源本地 skill 目录，前源优先，同名跳过：
     #   template/skills/（预置缓存）→ config/skills/（项目级副本）→ .agents/skills/（安装目标）
     seen = set()
@@ -1777,6 +1780,15 @@ def list_local_skills():
                 else:
                     row["author"] = ""
                     row["repo"] = ""
+                # 优先用 sources_map 中的安装来源覆盖 CSV 的 author/repo
+                src_info = sources_map.get(name) if isinstance(sources_map, dict) else None
+                if src_info and isinstance(src_info, dict):
+                    src_str = src_info.get("source") or ""
+                    if not src_str.startswith("local:"):
+                        s_owner, s_repo = resolve_github_owner_repo(src_str)
+                        if s_owner and s_repo:
+                            row["author"] = s_owner
+                            row["repo"] = s_repo
                 rows.append(row)
             else:
                 # CSV 中未登记，用基本信息
