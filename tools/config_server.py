@@ -4124,9 +4124,10 @@ def import_from_ide():
         (home / ".idea" / "skills", "IDEA"),
         (home / ".config" / "opencode" / "skills", "OpenCode"),
         (home / ".trae" / "skills", "Trae"),
-        (home / ".traecn" / "skills", "TraeCN"),
-        (home / ".traesolocn" / "skills", "TraeSoloCN"),
-        (DOT_AGENTS_SKILLS, "Project(config/skills)"),
+        (home / ".trae-cn" / "skills", "TraeCN"),
+        (home / ".traesolo" / "skills", "TraeSolo"),
+        (PROJECT_SKILLS_DIR, "Project(config/skills)"),
+        (DOT_AGENTS_SKILLS, "Project(.agents/skills)"),
     ]
     merged_skills = []  # [{name, sources:[]}]
     skill_name_sources = {}  # name -> [ide名]
