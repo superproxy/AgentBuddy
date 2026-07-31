@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Flask, jsonify, send_from_directory, g
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
 # server 目录加入 sys.path，使 marketplace / ai_generator 可 import
@@ -56,7 +56,6 @@ def create_app() -> Flask:
 
     # 注册认证 + 团队路由
     from auth.routes import create_auth_bp
-    from auth.middleware import require_auth
     auth_bp = create_auth_bp()
     app.register_blueprint(auth_bp, url_prefix="/api")
 
@@ -74,20 +73,6 @@ def create_app() -> Flask:
     @app.route("/api/health", methods=["GET"])
     def health():
         return jsonify({"ok": True, "service": "AgentBuddy Server"})
-
-    # 一键更新（git pull + 重启）—— 仅 admin 可用
-    @app.route("/api/server/update", methods=["POST"])
-    @require_auth
-    def server_update():
-        user = g.current_user
-        if user.get("role") != "admin":
-            return jsonify({"ok": False, "error": "仅管理员可执行此操作"}), 403
-        import subprocess
-        try:
-            r = subprocess.run(["bash", "run.sh", "update"], capture_output=True, text=True, timeout=120, cwd=str(SERVER_DIR))
-            return jsonify({"ok": True, "stdout": r.stdout[-2000:], "stderr": r.stderr[-2000:]})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
 
     # === Web 前端（插件市场官网） ===
     WEB_DIR = SERVER_DIR / "web"
