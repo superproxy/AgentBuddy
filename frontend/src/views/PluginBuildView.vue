@@ -42,6 +42,7 @@ const { refreshPluginList } = plugin
 
 const activeCat = ref<CatKey>('key')
 const listFilter = ref('')
+const skillAuthorFilter = ref('')
 const nameTouched = ref(false)
 
 const CAT_META: Record<CatKey, { title: string; hint: string; label: string; sub: string }> = {
@@ -142,11 +143,42 @@ const filteredMcps = computed(() => {
 
 const filteredSkills = computed(() => {
   const qq = q.value
-  if (!qq) return filteredLocalSkills.value
-  return filteredLocalSkills.value.filter((s: any) =>
+  let list = filteredLocalSkills.value
+  if (skillAuthorFilter.value) {
+    list = list.filter((s: any) => skillAuthor(s) === skillAuthorFilter.value)
+  }
+  if (!qq) return list
+  return list.filter((s: any) =>
     (s.skill_name || '').toLowerCase().includes(qq)
-    || (s.description || '').toLowerCase().includes(qq),
+    || (s.description || '').toLowerCase().includes(qq)
+    || (s.source || '').toLowerCase().includes(qq)
+    || (s.author || '').toLowerCase().includes(qq)
+    || (s.repo || '').toLowerCase().includes(qq),
   )
+})
+
+// 从 source (owner/repo) 解析 author
+function skillAuthor(s: any): string {
+  if (s.author) return s.author
+  const src = s.source || ''
+  if (src.includes('/')) return src.split('/')[0]
+  return ''
+}
+// 从 source 解析 repo
+function skillRepo(s: any): string {
+  if (s.repo) return s.repo
+  const src = s.source || ''
+  if (src.includes('/')) return src.split('/').slice(1).join('/')
+  return ''
+}
+// 唯一作者列表
+const skillAuthors = computed(() => {
+  const set = new Set<string>()
+  filteredLocalSkills.value.forEach((s: any) => {
+    const a = skillAuthor(s)
+    if (a) set.add(a)
+  })
+  return [...set].sort()
 })
 
 const filteredAgents = computed(() => {
@@ -213,6 +245,7 @@ function switchCat(key: CatKey) {
   if (key !== 'mcp') mcpFilterText.value = ''
   if (key !== 'skill') {
     skillFilter.value.text = ''
+    skillAuthorFilter.value = ''
   }
 }
 
@@ -444,6 +477,10 @@ onMounted(() => {
                 <option value="">全部分类</option>
                 <option v-for="c in skillCategories" :key="c" :value="c">{{ c }}</option>
               </select>
+              <select v-model="skillAuthorFilter" class="pb-select pb-select-sm">
+                <option value="">全部作者</option>
+                <option v-for="a in skillAuthors" :key="a" :value="a">{{ a }}</option>
+              </select>
             </template>
             <button type="button" class="pb-btn pb-btn-soft pb-btn-sm" @click="selectAllCat">全选</button>
             <button type="button" class="pb-btn pb-btn-ghost pb-btn-sm" @click="clearCat">取消本类</button>
@@ -523,27 +560,47 @@ onMounted(() => {
               <strong>没有匹配项</strong>
               <p>换个关键词或分类</p>
             </div>
-            <button
-              v-for="s in filteredSkills"
-              :key="s.skill_name"
-              type="button"
-              class="pb-item"
-              :class="{ on: selectedSkills.includes(s.skill_name) }"
-              role="option"
-              :aria-selected="selectedSkills.includes(s.skill_name)"
-              @click="toggleSkill(s.skill_name)"
-            >
-              <span class="check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg></span>
-              <span class="avatar">{{ initials(s.skill_name) }}</span>
-              <span class="body">
-                <span class="title">{{ s.skill_name }}</span>
-                <span class="meta">{{ s.description || '无描述' }}</span>
-                <span class="foot">
-                  <span class="dot" :class="{ on: selectedSkills.includes(s.skill_name) }" />
-                  {{ selectedSkills.includes(s.skill_name) ? '已加入装箱' : '点击加入装箱' }}
-                </span>
-              </span>
-            </button>
+            <table v-else class="pb-skill-table">
+              <thead>
+                <tr>
+                  <th class="col-check"></th>
+                  <th class="col-name">名称</th>
+                  <th class="col-desc">描述</th>
+                  <th class="col-cat">分类</th>
+                  <th class="col-author">作者</th>
+                  <th class="col-repo">仓库</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="s in filteredSkills"
+                  :key="s.skill_name"
+                  class="pb-skill-row"
+                  :class="{ on: selectedSkills.includes(s.skill_name) }"
+                  @click="toggleSkill(s.skill_name)"
+                >
+                  <td class="col-check">
+                    <span class="check" :class="{ checked: selectedSkills.includes(s.skill_name) }">
+                      <svg v-if="selectedSkills.includes(s.skill_name)" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                    </span>
+                  </td>
+                  <td class="col-name">{{ s.skill_name }}</td>
+                  <td class="col-desc">{{ s.description || '—' }}</td>
+                  <td class="col-cat">{{ s.category || '—' }}</td>
+                  <td class="col-author">{{ skillAuthor(s) || '—' }}</td>
+                  <td class="col-repo">
+                    <a
+                      v-if="skillRepo(s)"
+                      :href="'https://github.com/' + skillAuthor(s) + '/' + skillRepo(s)"
+                      target="_blank"
+                      rel="noopener"
+                      @click.stop
+                    >{{ skillRepo(s) }}</a>
+                    <span v-else>—</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </template>
 
           <!-- Keys -->
@@ -1206,6 +1263,37 @@ onMounted(() => {
   flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
   background: linear-gradient(180deg, #fff 0%, #fafbfd 100%); max-height: 62vh;
 }
+
+/* Skill 表格视图 */
+.pb-skill-table {
+  width: 100%; border-collapse: collapse; font-size: 12px; background: var(--bg-elevated);
+  border: 1px solid var(--color-ink-200); border-radius: 10px; overflow: hidden;
+}
+.pb-skill-table thead { position: sticky; top: 0; z-index: 1; }
+.pb-skill-table th {
+  background: var(--color-ink-50); padding: 8px 10px; text-align: left; font-weight: 600;
+  font-size: 11px; color: var(--color-ink-500); border-bottom: 1px solid var(--color-ink-200);
+  white-space: nowrap;
+}
+.pb-skill-row { cursor: pointer; transition: background .15s; border-bottom: 1px solid var(--color-ink-100); }
+.pb-skill-row:last-child { border-bottom: none; }
+.pb-skill-row:hover { background: var(--color-brand-50); }
+.pb-skill-row.on { background: var(--color-brand-50); }
+.pb-skill-row td { padding: 8px 10px; vertical-align: middle; }
+.col-check { width: 32px; text-align: center; }
+.col-name { font-weight: 600; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.col-desc { color: var(--color-ink-500); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-cat { white-space: nowrap; color: var(--color-ink-500); }
+.col-author { white-space: nowrap; color: var(--color-ink-500); }
+.col-repo { white-space: nowrap; }
+.col-repo a { color: var(--color-brand-500); text-decoration: none; }
+.col-repo a:hover { text-decoration: underline; }
+.pb-skill-row .check {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px;
+  border: 1.5px solid var(--color-ink-300); background: var(--bg-elevated); transition: .15s;
+}
+.pb-skill-row .check.checked { background: var(--color-brand-500); border-color: var(--color-brand-500); }
+.pb-skill-row .check svg { width: 10px; height: 10px; stroke: #fff; fill: none; stroke-width: 3; }
 .pb-item {
   display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px;
   border: 1px solid var(--color-ink-200); border-radius: 10px; background: var(--bg-elevated);
