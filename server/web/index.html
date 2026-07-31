@@ -773,6 +773,9 @@ createApp({
         const d = await r.json()
         if (d.ok) {
           myPlugins.value = myPlugins.value.filter(p => p.id !== id)
+          // 同步刷新公共市场和团队插件
+          items.value = items.value.filter(p => p.id !== id)
+          teamPlugins.value = teamPlugins.value.filter(p => p.id !== id)
         } else {
           alert(d.error || '删除失败')
         }
