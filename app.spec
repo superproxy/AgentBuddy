@@ -91,12 +91,11 @@ hiddenimports = [
 # - numpy / PIL: openai SDK 间接依赖但 AgentBuddy 运行时不使用
 # - cryptography: Flask session 加密用，但 JWT auth 不依赖（可选）
 # - pydantic_core: openai SDK 间接依赖
-# - pythonnet / Pythonwin: pywebview 在 Windows 用 win32 而非 pythonnet
+# - pythonnet: pywebview 在 Windows 上需要 pythonnet 作为 GUI 后端，不能排除
 # - Tcl/Tk: 无 GUI 需求
 EXCLUDES = [
     'numpy', 'numpy.libs', 'PIL', 'Pillow',
     'pydantic_core', 'pydantic',
-    'pythonnet', 'Pythonwin',
     'tkinter', '_tkinter',
     'matplotlib', 'scipy', 'pandas',
 ]
