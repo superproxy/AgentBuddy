@@ -18,6 +18,7 @@ from flask import Blueprint, jsonify, request, send_file, g
 from auth.models import (
     plugin_list, plugin_get, plugin_save, plugin_delete,
     plugin_increment_downloads, plugin_toggle_like,
+    plugin_toggle_favorite, get_favorited_plugins,
     get_db, now_iso, is_team_member,
 )
 from auth.middleware import require_auth, get_current_user
@@ -261,5 +262,24 @@ def create_marketplace_bp(marketplace_dir: Path):
             return jsonify({"ok": False, "error": "插件不存在"}), 404
         liked = plugin_toggle_like(plugin_id, user["id"])
         return jsonify({"ok": True, "data": {"liked": liked}})
+
+    @bp.route("/<plugin_id>/favorite", methods=["POST"])
+    @require_auth
+    def marketplace_favorite(plugin_id):
+        """收藏/取消收藏。"""
+        user = g.current_user
+        entry = plugin_get(plugin_id)
+        if not entry:
+            return jsonify({"ok": False, "error": "插件不存在"}), 404
+        favorited = plugin_toggle_favorite(plugin_id, user["id"])
+        return jsonify({"ok": True, "data": {"favorited": favorited}})
+
+    @bp.route("/favorites", methods=["GET"])
+    @require_auth
+    def marketplace_favorites():
+        """我收藏的插件列表。"""
+        user = g.current_user
+        items = get_favorited_plugins(user["id"])
+        return jsonify({"ok": True, "data": items, "total": len(items)})
 
     return bp

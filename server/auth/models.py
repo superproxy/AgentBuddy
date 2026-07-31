@@ -95,6 +95,13 @@ def init_db():
             PRIMARY KEY (plugin_id, user_id)
         );
 
+        CREATE TABLE IF NOT EXISTS plugin_favorites (
+            plugin_id   TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at  TEXT NOT NULL,
+            PRIMARY KEY (plugin_id, user_id)
+        );
+
         CREATE TABLE IF NOT EXISTS invitations (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -303,11 +310,13 @@ def plugin_list(q: str = "", scope: str = "", team_id: int | None = None, user_i
     rows = conn.execute(sql, params).fetchall()
     conn.close()
     items = [_plugin_row_to_dict(r) for r in rows]
-    # 附加 liked 字段
+    # 附加 liked + favorited 字段
     if user_id:
         liked_ids = _get_liked_ids(conn, [i["id"] for i in items], user_id) if items else set()
+        fav_ids = _get_favorited_ids(conn, [i["id"] for i in items], user_id) if items else set()
         for it in items:
             it["liked"] = it["id"] in liked_ids
+            it["favorited"] = it["id"] in fav_ids
     return items
 
 
@@ -318,6 +327,18 @@ def _get_liked_ids(conn, plugin_ids: list[str], user_id: int) -> set[str]:
     placeholders = ",".join("?" * len(plugin_ids))
     rows = conn.execute(
         f"SELECT plugin_id FROM plugin_likes WHERE user_id = ? AND plugin_id IN ({placeholders})",
+        [user_id] + plugin_ids,
+    ).fetchall()
+    return {r["plugin_id"] for r in rows}
+
+
+def _get_favorited_ids(conn, plugin_ids: list[str], user_id: int) -> set[str]:
+    """批量查询用户已收藏的插件 ID。"""
+    if not plugin_ids:
+        return set()
+    placeholders = ",".join("?" * len(plugin_ids))
+    rows = conn.execute(
+        f"SELECT plugin_id FROM plugin_favorites WHERE user_id = ? AND plugin_id IN ({placeholders})",
         [user_id] + plugin_ids,
     ).fetchall()
     return {r["plugin_id"] for r in rows}
@@ -336,6 +357,11 @@ def plugin_get(plugin_id: str, user_id: int | None = None) -> dict | None:
             (plugin_id, user_id),
         ).fetchone()
         d["liked"] = liked is not None
+        fav = conn.execute(
+            "SELECT 1 FROM plugin_favorites WHERE plugin_id = ? AND user_id = ?",
+            (plugin_id, user_id),
+        ).fetchone()
+        d["favorited"] = fav is not None
     conn.close()
     return d
 
@@ -410,6 +436,59 @@ def plugin_toggle_like(plugin_id: str, user_id: int) -> bool:
         conn.commit()
         conn.close()
         return True
+
+
+# ==================== 收藏管理 ====================
+
+def plugin_toggle_favorite(plugin_id: str, user_id: int) -> bool:
+    """切换收藏。返回 True=已收藏，False=已取消。"""
+    conn = get_db()
+    existing = conn.execute(
+        "SELECT 1 FROM plugin_favorites WHERE plugin_id = ? AND user_id = ?",
+        (plugin_id, user_id),
+    ).fetchone()
+    if existing:
+        conn.execute("DELETE FROM plugin_favorites WHERE plugin_id = ? AND user_id = ?", (plugin_id, user_id))
+        conn.commit()
+        conn.close()
+        return False
+    else:
+        conn.execute("INSERT INTO plugin_favorites (plugin_id, user_id, created_at) VALUES (?, ?, ?)",
+                     (plugin_id, user_id, now_iso()))
+        conn.commit()
+        conn.close()
+        return True
+
+
+def get_favorite_plugin_ids(user_id: int) -> set[str]:
+    """获取用户收藏的插件 ID 集合。"""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT plugin_id FROM plugin_favorites WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    conn.close()
+    return {r["plugin_id"] for r in rows}
+
+
+def get_favorited_plugins(user_id: int) -> list[dict]:
+    """获取用户收藏的插件列表。"""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT p.* FROM plugins p
+           JOIN plugin_favorites f ON f.plugin_id = p.id
+           WHERE f.user_id = ?
+           ORDER BY f.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    items = [_plugin_row_to_dict(r) for r in rows]
+    # 附加 liked 字段
+    if items:
+        liked_ids = _get_liked_ids(conn, [i["id"] for i in items], user_id)
+        for it in items:
+            it["liked"] = it["id"] in liked_ids
+            it["favorited"] = True
+    return items
 
 
 def _plugin_row_to_dict(row: sqlite3.Row) -> dict:
