@@ -258,12 +258,11 @@ async function doPublish() {
   }
 }
 
-// 热门推荐：本地未安装 + 综合能力分数（skills + mcp）前 4 个
+// 热门推荐：从服务端市场数据按 downloads + likes 排序，取前 4
 const featuredPlugins = computed(() => {
-  return plugins.value
-    .filter((p) => !p.installed)
+  return items.value
     .slice()
-    .sort((a, b) => ((b.skills_count || 0) + (b.mcp_count || 0)) - ((a.skills_count || 0) + (a.mcp_count || 0)))
+    .sort((a, b) => ((b.downloads || 0) + (b.likes || 0)) - ((a.downloads || 0) + (a.likes || 0)))
     .slice(0, 4)
 })
 
@@ -468,7 +467,7 @@ onMounted(() => {
         <span class="mkt-featured-count">{{ featuredPlugins.length }} 个</span>
       </header>
       <div class="mkt-featured-grid">
-        <article v-for="p in featuredPlugins" :key="p.file" class="mkt-featured-card">
+        <article v-for="p in featuredPlugins" :key="p.id" class="mkt-featured-card">
           <div class="mkt-featured-top">
             <div class="mkt-featured-avatar" aria-hidden="true">{{ initials(p.name) }}</div>
             <span class="mkt-featured-tag">推荐</span>
@@ -478,21 +477,20 @@ onMounted(() => {
             <p class="mkt-featured-desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
           </div>
           <div class="mkt-featured-meta">
-            <span class="mkt-chip brand">{{ p.skills_count }} skills</span>
-            <span class="mkt-chip">{{ p.mcp_count }} mcp</span>
+            <span class="mkt-chip brand">⬇ {{ p.downloads || 0 }}</span>
+            <span class="mkt-chip">♥ {{ p.likes || 0 }}</span>
+            <span class="mkt-chip">by {{ p.author }}</span>
           </div>
           <div class="mkt-featured-foot">
             <button
               type="button"
               class="mkt-btn mkt-btn-primary"
-              :disabled="!!installingPlugin"
-              @click="onTogglePlugin(p, true)"
+              @click="mkt.install(p.id)"
             >
-              {{ installingPlugin === p.name || installingPlugin === p.file ? '安装中…' : '安装' }}
+              {{ mkt.installing === p.id ? '安装中…' : '安装' }}
             </button>
             <div class="mkt-featured-ops">
-              <button type="button" class="mkt-btn mkt-btn-ghost" @click="editPlugin(p.file)">编辑</button>
-              <button type="button" class="mkt-btn mkt-btn-ghost" title="发布插件" @click="openPublishDialog(p.file)">分享</button>
+              <a class="mkt-btn mkt-btn-ghost" :href="'/api/marketplace/download?id=' + encodeURIComponent(p.id)">下载</a>
             </div>
           </div>
         </article>
