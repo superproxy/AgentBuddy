@@ -7,7 +7,7 @@ import SyncBar from './SyncBar.vue'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
 import { runSse } from '../api/sse'
-import { getServerUrl, serverApi, api, getAuthToken } from '../api/client'
+import { getServerUrl, setServerUrl, serverApi, api, getAuthToken } from '../api/client'
 
 interface TabItem {
   key: string
@@ -33,6 +33,10 @@ const upgradeOpen = ref(false)
 const ui = useUiStore()
 const silentUpgrading = ref(false)
 const userMenuOpen = ref(false)
+const serverDialogOpen = ref(false)
+const serverUrlInput = ref('')
+const serverUrlTesting = ref(false)
+const serverUrlMsg = ref('')
 
 // ============ 两级菜单 ============
 const openGroupName = ref('')
@@ -379,6 +383,38 @@ function openWebsite() {
   }
 }
 
+function openServerDialog() {
+  serverUrlInput.value = getServerUrl()
+  serverUrlMsg.value = ''
+  serverDialogOpen.value = true
+  closeUserMenu()
+}
+
+async function testServerUrl() {
+  const url = serverUrlInput.value.trim().replace(/\/+$/, '')
+  if (!url) { serverUrlMsg.value = '请输入地址'; return }
+  serverUrlTesting.value = true
+  serverUrlMsg.value = ''
+  try {
+    const resp = await fetch(url + '/api/health', { timeout: 5000 } as any)
+    const d = await resp.json()
+    if (d.ok) {
+      serverUrlMsg.value = '✓ 连接成功'
+    } else {
+      serverUrlMsg.value = '✗ 返回异常'
+    }
+  } catch {
+    serverUrlMsg.value = '✗ 连接失败'
+  } finally {
+    serverUrlTesting.value = false
+  }
+}
+
+function saveServerUrl() {
+  setServerUrl(serverUrlInput.value.trim().replace(/\/+$/, ''))
+  serverDialogOpen.value = false
+}
+
 async function openUpgrade() {
   upgradeOpen.value = true
   // 强制刷新一次
@@ -669,6 +705,7 @@ onBeforeUnmount(() => {
                   <div class="user-menu-email">{{ auth.user?.email }}</div>
                 </div>
                 <div class="user-menu-item" @click="emit('update:tab', 'marketplace'); closeUserMenu()">插件市场</div>
+                <div class="user-menu-item" @click="openServerDialog">服务器设置</div>
                 <div class="user-menu-item" @click="openPwdDialog">修改密码</div>
                 <div class="user-menu-item danger" @click="handleLogout">退出登录</div>
               </div>
@@ -844,7 +881,34 @@ onBeforeUnmount(() => {
     </Transition>
   </Teleport>
 
-  <!-- Server 设置弹层已移除，改为官网入口 -->
+  <!-- 服务器设置弹窗 -->
+  <Teleport to="body">
+    <Transition name="auth-dialog">
+      <div v-if="serverDialogOpen" class="pwd-mask" @click.self="serverDialogOpen = false">
+        <div class="pwd-panel" role="dialog" aria-modal="true" style="max-width: 460px;">
+          <div class="pwd-title">服务器设置</div>
+          <div class="pwd-sub">配置插件市场 / AI 生成服务的远程地址</div>
+          <div class="pwd-field" style="margin: 16px 0;">
+            <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 6px;">Server URL</label>
+            <input
+              v-model="serverUrlInput"
+              type="text"
+              placeholder="http://123.60.75.27:5001"
+              style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-base); border-radius: 8px; font-size: 14px; background: var(--bg-input); color: var(--text-primary);"
+              @keyup.enter="saveServerUrl"
+            >
+          </div>
+          <div v-if="serverUrlMsg" style="font-size: 12px; margin-bottom: 12px; color: var(--text-secondary);">{{ serverUrlMsg }}</div>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button type="button" class="btn-ghost" style="padding: 8px 16px; border: 1px solid var(--border-base); border-radius: 8px; background: transparent; color: var(--text-primary); cursor: pointer; font-size: 14px;" @click="testServerUrl" :disabled="serverUrlTesting">
+              {{ serverUrlTesting ? '测试中…' : '测试连接' }}
+            </button>
+            <button type="button" style="padding: 8px 16px; border: none; border-radius: 8px; background: var(--color-brand-500); color: #fff; cursor: pointer; font-size: 14px;" @click="saveServerUrl">保存</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
