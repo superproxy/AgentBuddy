@@ -313,6 +313,11 @@ export const useSkillStore = defineStore('skill', () => {
   async function loadInstalledSkills() {
     const r = await api<{ ok: boolean; data?: InstalledSkill[] }>('/api/skills/installed')
     if (r.ok) installedSkills.value = r.data || []
+    // 如果 localSkills 已加载，同步刷新（来源信息可能已变更）
+    if (localSkills.value.length) {
+      localSkills.value = []
+      await loadLocalSkills()
+    }
   }
 
   /** 可升级的 skill 数量（有 GitHub 来源记录且检查出有更新） */
