@@ -504,7 +504,7 @@ onMounted(() => {
               {{ mkt.installing === p.id ? '安装中…' : '安装' }}
             </button>
             <div class="mkt-featured-ops">
-              <a class="mkt-btn mkt-btn-ghost" :href="'/api/marketplace/download?id=' + encodeURIComponent(p.id)">下载</a>
+              <a class="mkt-btn mkt-btn-ghost" :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))" download>下载</a>
             </div>
           </div>
         </article>
@@ -624,6 +624,7 @@ onMounted(() => {
                 v-if="!isMock"
                 class="mkt-btn mkt-btn-ghost"
                 :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(item.id))"
+                download
               >下载</a>
               <button
                 v-else

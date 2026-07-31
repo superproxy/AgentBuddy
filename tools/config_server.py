@@ -1766,6 +1766,17 @@ def list_local_skills():
                 # CSV 中有元信息，合并
                 row = dict(csv_map[name])
                 row["skill_name"] = name
+                # 从 source 解析 author/repo
+                src = (row.get("source") or "").strip()
+                if "@" in src:
+                    src = src.split("@", 1)[0].strip()
+                if "/" in src:
+                    parts = src.split("/", 1)
+                    row["author"] = parts[0].strip()
+                    row["repo"] = parts[1].strip() if len(parts) > 1 else ""
+                else:
+                    row["author"] = ""
+                    row["repo"] = ""
                 rows.append(row)
             else:
                 # CSV 中未登记，用基本信息
