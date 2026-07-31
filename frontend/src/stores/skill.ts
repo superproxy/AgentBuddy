@@ -99,9 +99,34 @@ export const useSkillStore = defineStore('skill', () => {
 
   const skillCategories = computed(() => [...new Set(localSkills.value.map((s) => s.category).filter(Boolean))].sort())
   const skillRoles = computed(() => [...new Set(localSkills.value.flatMap((s) => (s.role || '').split('|')).filter(Boolean))].sort())
+
+  /** 合并后的本地 skills（公共数据集）— 把 installedSkills 的源信息合并进 localSkills */
+  const mergedLocalSkills = computed(() => {
+    const map = new Map<string, InstalledSkill>()
+    for (const ins of installedSkills.value) {
+      map.set(ins.name, ins)
+    }
+    return localSkills.value.map((s) => {
+      const ins = map.get(s.skill_name) || map.get(s.name)
+      if (!ins) return s
+      return {
+        ...s,
+        source: ins.source || s.source,
+        author: ins.author || s.author,
+        repo: ins.repo || s.repo,
+        source_type: ins.source_type || s.source_type,
+        github_url: ins.github_url || s.github_url,
+        installed_sha: ins.installed_sha || s.installed_sha,
+        installed_at: ins.installed_at || s.installed_at,
+        installed_ref: ins.installed_ref || s.installed_ref,
+        enabled: ins.enabled ?? s.enabled,
+      }
+    })
+  })
+
   const filteredLocalSkills = computed(() => {
     const q = localFilterQ.value.trim().toLowerCase() || skillFilter.text.trim().toLowerCase()
-    return localSkills.value.filter((s) => {
+    return mergedLocalSkills.value.filter((s) => {
       if (skillFilter.cat && s.category !== skillFilter.cat) return false
       if (skillFilter.role && !(s.role || '').includes(skillFilter.role)) return false
       if (q) {
@@ -128,6 +153,8 @@ export const useSkillStore = defineStore('skill', () => {
   })
 
   async function loadLocalSkills() {
+    // 确保 installedSkills 已加载（用于合并源信息）
+    if (!installedSkills.value.length) await loadInstalledSkills()
     if (localSkills.value.length) return
     const r = await api<{ ok: boolean; data?: any[] }>('/api/skills/local')
     if (r.ok) localSkills.value = r.data || []
@@ -593,7 +620,7 @@ export const useSkillStore = defineStore('skill', () => {
     manualSkillInput, manualPreview, manualSelected, manualPreviewing, manualInstalling,
     installedSkills,
     listFilter, listQuery, localFilterQ,
-    skillCategories, skillRoles, filteredLocalSkills, enabledInstalledCount, disabledInstalledCount,
+    skillCategories, skillRoles, filteredLocalSkills, mergedLocalSkills, enabledInstalledCount, disabledInstalledCount,
     filteredInstalled,
     // 升级检查
     updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount, rateLimited,
