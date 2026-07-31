@@ -83,6 +83,29 @@ async function toggleFavorite(p: any) {
   } catch { /* ignore */ }
 }
 
+// 下载插件 zip（fetch blob → 触发浏览器下载，兼容 Electron 跨域）
+async function downloadPlugin(p: any) {
+  try {
+    const url = serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))
+    if (!url) { ui.toast('请先配置 Server 地址', 'err'); return }
+    const headers: Record<string, string> = {}
+    const token = getAuthToken()
+    if (token) headers['Authorization'] = 'Bearer ' + token
+    const resp = await fetch(url, { headers })
+    if (!resp.ok) { ui.toast('下载失败: HTTP ' + resp.status, 'err'); return }
+    const blob = await resp.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = (p.name || 'plugin') + '-v' + (p.version || '1.0.0') + '.zip'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(a.href)
+  } catch (e: any) {
+    ui.toast('下载失败: ' + (e.message || ''), 'err')
+  }
+}
+
 // 加载收藏列表
 async function loadFavorites() {
   if (!auth.isLoggedIn) return
@@ -530,7 +553,7 @@ onMounted(() => {
               {{ mkt.installing === p.id ? '安装中…' : '安装' }}
             </button>
             <div class="mkt-featured-ops">
-              <a class="mkt-btn mkt-btn-ghost" :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))" download>下载</a>
+              <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
             </div>
           </div>
         </article>
@@ -659,8 +682,8 @@ onMounted(() => {
               <a
                 v-if="!isMock"
                 class="mkt-btn mkt-btn-ghost"
-                :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(item.id))"
-                download
+                @click="downloadPlugin(item)"
+                href="javascript:void(0)"
               >下载</a>
               <button
                 v-else
@@ -783,7 +806,7 @@ onMounted(() => {
                 <button class="mkt-btn mkt-btn-ghost" :class="{ 'mkt-btn-liked': p.favorited }" @click="toggleFavorite(p); myFavorites = myFavorites.filter(x => x.id !== p.id)">
                   <svg viewBox="0 0 24 24" :fill="p.favorited ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" style="width:14px;height:14px" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 </button>
-                <a class="mkt-btn mkt-btn-ghost" :href="serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))" download>下载</a>
+                <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
               </div>
             </div>
           </div>
