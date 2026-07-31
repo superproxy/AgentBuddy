@@ -235,6 +235,15 @@
   .card-btn-primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
   .card-btn-liked { color: #ef4444 !important; border-color: rgba(239,68,68,0.3) !important; }
   .card-btn-liked:hover { background: rgba(239,68,68,0.06); }
+
+  .fav-star {
+    position: absolute; top: 8px; right: 8px; z-index: 1;
+    width: 28px; height: 28px; display: grid; place-items: center;
+    border: none; background: transparent; cursor: pointer;
+    color: var(--text-quaternary, #c9cdd4); border-radius: 6px; transition: .15s;
+  }
+  .fav-star:hover { background: var(--bg-sunken, #f3f4f6); color: #ff7d00; }
+  .fav-star.on { color: #ff7d00; }
   .card-btn-danger {
     background: transparent; color: #ef4444;
     border-color: rgba(239, 68, 68, 0.3);
@@ -305,7 +314,7 @@
       </a>
       <nav class="header-nav">
         <a class="nav-link" :class="{ active: page === 'market' }" href="#" @click.prevent="page = 'market'">插件市场</a>
-        <a v-if="user" class="nav-link" :class="{ active: page === 'mine' }" href="#" @click.prevent="goMine">我的发布</a>
+        <a v-if="user" class="nav-link" :class="{ active: page === 'mine' }" href="#" @click.prevent="goMine">我的</a>
         <a v-if="user" class="nav-link" :class="{ active: page === 'teams' }" href="#" @click.prevent="goTeams">团队空间</a>
       </nav>
       <div class="header-actions">
@@ -410,7 +419,12 @@
 
   <!-- Plugin grid -->
   <div v-else class="plugin-grid">
-    <div v-for="item in filteredItems" :key="item.id" class="plugin-card">
+    <div v-for="item in filteredItems" :key="item.id" class="plugin-card" style="position:relative">
+      <button v-if="user" class="fav-star" :class="{ on: item.favorited }" :title="item.favorited ? '取消收藏' : '收藏'" @click="toggleFavorite(item)">
+        <svg width="16" height="16" viewBox="0 0 24 24" :fill="item.favorited ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      </button>
       <div class="card-head">
         <div class="card-icon" :style="{ background: colorFor(item.name) }">
           {{ item.name.charAt(0).toUpperCase() }}
@@ -481,8 +495,7 @@
   <template v-if="page === 'mine'">
     <div style="max-width:1200px;margin:0 auto;padding:32px 24px 48px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-        <h2 style="font-size:22px;font-weight:700">我的发布</h2>
-        <span style="font-size:13px;color:var(--text-tertiary)">共 {{ myPlugins.length }} 个插件</span>
+        <h2 style="font-size:22px;font-weight:700">我的</h2>
       </div>
 
       <div v-if="mineLoading" class="loading">
@@ -490,47 +503,100 @@
         加载中...
       </div>
 
-      <div v-else-if="myPlugins.length === 0" class="empty">
-        <p style="font-size:16px;margin-bottom:4px">还没有发布过插件</p>
-        <p style="font-size:13px">在客户端 AgentBuddy 桌面应用中发布你的第一个插件吧</p>
-      </div>
-
-      <div v-else class="plugin-grid">
-        <div v-for="item in myPlugins" :key="item.id" class="plugin-card">
-          <div class="card-head">
-            <div class="card-icon" :style="{ background: colorFor(item.name) }">
-              {{ item.name.charAt(0).toUpperCase() }}
+      <template v-else>
+        <!-- 我的发布 -->
+        <div v-if="myPlugins.length" style="margin-bottom:32px">
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">我的发布 <span style="font-size:12px;font-weight:500;color:var(--text-tertiary);background:var(--bg-sunken);padding:1px 6px;border-radius:999px">{{ myPlugins.length }}</span></h3>
+          <div class="plugin-grid">
+            <div v-for="item in myPlugins" :key="item.id" class="plugin-card">
+              <div class="card-head">
+                <div class="card-icon" :style="{ background: colorFor(item.name) }">
+                  {{ item.name.charAt(0).toUpperCase() }}
+                </div>
+                <div class="card-info">
+                  <div class="card-name">{{ item.name }}</div>
+                  <div class="card-ver">v{{ item.version }}</div>
+                </div>
+              </div>
+              <p class="card-desc">{{ item.description || '暂无描述' }}</p>
+              <div class="card-meta">
+                <span class="meta-item">⬇ {{ item.downloads || 0 }}</span>
+                <span class="meta-item">❤ {{ item.likes || 0 }}</span>
+                <span class="meta-item" v-if="item.size">{{ formatSize(item.size) }}</span>
+              </div>
+              <div class="card-tags" v-if="item.tags && item.tags.length">
+                <span v-for="tag in item.tags" :key="tag" class="card-tag">{{ tag }}</span>
+              </div>
+              <div class="card-actions">
+                <a
+                  class="card-btn card-btn-primary"
+                  :href="downloadUrl(item.id)"
+                  :download="item.name + '-' + item.version + '.zip'"
+                >下载离线包</a>
+                <button
+                  class="card-btn card-btn-danger"
+                  @click="removeMyPlugin(item.id, item.name)"
+                  :disabled="mineRemoving === item.id"
+                >{{ mineRemoving === item.id ? '...' : '删除' }}</button>
+              </div>
             </div>
-            <div class="card-info">
-              <div class="card-name">{{ item.name }}</div>
-              <div class="card-ver">v{{ item.version }}</div>
-            </div>
-          </div>
-          <p class="card-desc">{{ item.description || '暂无描述' }}</p>
-          <div class="card-meta">
-            <span class="meta-item">⬇ {{ item.downloads || 0 }}</span>
-            <span class="meta-item">❤ {{ item.likes || 0 }}</span>
-            <span class="meta-item" v-if="item.size">{{ formatSize(item.size) }}</span>
-          </div>
-          <div class="card-tags" v-if="item.tags && item.tags.length">
-            <span v-for="tag in item.tags" :key="tag" class="card-tag">{{ tag }}</span>
-          </div>
-          <div class="card-actions">
-            <a
-              class="card-btn card-btn-primary"
-              :href="downloadUrl(item.id)"
-              :download="item.name + '-' + item.version + '.zip'"
-            >下载离线包</a>
-            <button
-              class="card-btn card-btn-danger"
-              @click="removeMyPlugin(item.id, item.name)"
-              :disabled="mineRemoving === item.id"
-            >{{ mineRemoving === item.id ? '...' : '删除' }}</button>
           </div>
         </div>
-      </div>
+
+        <!-- 我的收藏 -->
+        <div v-if="myFavorites.length">
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">我的收藏 <span style="font-size:12px;font-weight:500;color:var(--text-tertiary);background:var(--bg-sunken);padding:1px 6px;border-radius:999px">{{ myFavorites.length }}</span></h3>
+          <div class="plugin-grid">
+            <div v-for="item in myFavorites" :key="item.id" class="plugin-card" style="position:relative">
+              <button class="fav-star on" title="取消收藏" @click="toggleFavorite(item); myFavorites = myFavorites.filter(p => p.id !== item.id)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              </button>
+              <div class="card-head">
+                <div class="card-icon" :style="{ background: colorFor(item.name) }">
+                  {{ item.name.charAt(0).toUpperCase() }}
+                </div>
+                <div class="card-info">
+                  <div class="card-name">{{ item.name }}</div>
+                  <div class="card-ver">v{{ item.version }}</div>
+                </div>
+              </div>
+              <p class="card-desc">{{ item.description || '暂无描述' }}</p>
+              <div class="card-author">发布者：{{ item.author || '管理员' }}</div>
+              <div class="card-meta">
+                <span class="meta-item">⬇ {{ item.downloads || 0 }}</span>
+                <span class="meta-item">❤ {{ item.likes || 0 }}</span>
+              </div>
+              <div class="card-actions">
+                <button
+                  class="card-btn"
+                  :class="{ 'card-btn-liked': item.liked }"
+                  @click="toggleLike(item)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" :fill="item.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                  </svg>
+                  {{ item.likes || 0 }}
+                </button>
+                <a
+                  class="card-btn card-btn-primary"
+                  :href="downloadUrl(item.id)"
+                  :download="item.name + '-' + item.version + '.zip'"
+                >下载离线包</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="!myPlugins.length && !myFavorites.length" class="empty">
+          <p style="font-size:16px;margin-bottom:4px">还没有发布或收藏任何插件</p>
+          <p style="font-size:13px">在插件市场点击星标收藏，或在客户端发布你的第一个插件</p>
+        </div>
+      </template>
     </div>
-  </template><!-- /我的发布页 -->
+  </template><!-- /我的页 -->
 
   <!-- ==================== 团队空间页 ==================== -->
   <template v-if="page === 'teams'">
@@ -753,14 +819,24 @@ createApp({
       return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
     }
 
-    // === 我的发布 ===
+    // === 我的发布 + 收藏 ===
     const myPlugins = ref([])
+    const myFavorites = ref([])
     const mineLoading = ref(false)
     const mineRemoving = ref(null)
 
     async function goMine() {
       page.value = 'mine'
-      await loadMyPlugins()
+      await Promise.all([loadMyPlugins(), loadFavorites()])
+    }
+
+    async function loadFavorites() {
+      if (!user.value) return
+      try {
+        const r = await fetch('/api/marketplace/favorites', { headers: authHeaders() })
+        const d = await r.json()
+        if (d.ok) myFavorites.value = d.data || []
+      } catch (e) { console.error(e) }
     }
 
     async function loadMyPlugins() {
@@ -1031,6 +1107,20 @@ createApp({
       } catch (e) { console.error(e) }
     }
 
+    // 收藏/取消收藏
+    async function toggleFavorite(item) {
+      if (!user.value) { alert('请先登录'); return }
+      try {
+        const r = await fetch('/api/marketplace/' + item.id + '/favorite', {
+          method: 'POST', headers: authHeaders(),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          item.favorited = d.data.favorited
+        }
+      } catch (e) { console.error(e) }
+    }
+
     function downloadUrl(id) {
       return '/api/marketplace/download?id=' + encodeURIComponent(id)
     }
@@ -1153,7 +1243,7 @@ createApp({
       teamPlugins, teamPluginsLoading,
       invitations, invPanelOpen, invLoading, loadInvitations, respondInvitation,
       showChangePwd, changePwdForm, changePwdError, changePwdLoading, openChangePwd, doChangePassword,
-      myPlugins, mineLoading, mineRemoving, loadMyPlugins, removeMyPlugin,
+      myPlugins, myFavorites, mineLoading, mineRemoving, loadMyPlugins, removeMyPlugin, loadFavorites, toggleFavorite,
     }
   }
 }).mount('#app')

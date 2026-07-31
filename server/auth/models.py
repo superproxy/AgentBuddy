@@ -308,7 +308,6 @@ def plugin_list(q: str = "", scope: str = "", team_id: int | None = None, user_i
         sql += " WHERE " + " AND ".join(conditions)
     sql += " ORDER BY published_at DESC"
     rows = conn.execute(sql, params).fetchall()
-    conn.close()
     items = [_plugin_row_to_dict(r) for r in rows]
     # 附加 liked + favorited 字段
     if user_id:
@@ -317,6 +316,7 @@ def plugin_list(q: str = "", scope: str = "", team_id: int | None = None, user_i
         for it in items:
             it["liked"] = it["id"] in liked_ids
             it["favorited"] = it["id"] in fav_ids
+    conn.close()
     return items
 
 
@@ -474,20 +474,20 @@ def get_favorited_plugins(user_id: int) -> list[dict]:
     """获取用户收藏的插件列表。"""
     conn = get_db()
     rows = conn.execute(
-        """SELECT p.* FROM plugins p
-           JOIN plugin_favorites f ON f.plugin_id = p.id
-           WHERE f.user_id = ?
-           ORDER BY f.created_at DESC""",
-        (user_id,),
-    ).fetchall()
-    conn.close()
+            """SELECT p.* FROM plugins p
+               JOIN plugin_favorites f ON f.plugin_id = p.id
+               WHERE f.user_id = ?
+               ORDER BY f.created_at DESC""",
+            (user_id,),
+        ).fetchall()
     items = [_plugin_row_to_dict(r) for r in rows]
-    # 附加 liked 字段
+    # 附加 liked + favorited 字段
     if items:
         liked_ids = _get_liked_ids(conn, [i["id"] for i in items], user_id)
         for it in items:
             it["liked"] = it["id"] in liked_ids
             it["favorited"] = True
+    conn.close()
     return items
 
 

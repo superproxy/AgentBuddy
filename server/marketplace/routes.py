@@ -158,21 +158,20 @@ def create_marketplace_bp(marketplace_dir: Path):
     def marketplace_mine():
         """我发布的插件。"""
         user = g.current_user
+        from auth.models import _plugin_row_to_dict, _get_liked_ids, _get_favorited_ids
         conn = get_db()
         rows = conn.execute(
             "SELECT * FROM plugins WHERE author_id = ? ORDER BY published_at DESC",
             (user["id"],),
         ).fetchall()
-        conn.close()
-        from auth.models import _plugin_row_to_dict, _get_liked_ids
         items = [_plugin_row_to_dict(r) for r in rows]
-        # 附加 liked 字段
         if items:
-            conn2 = get_db()
-            liked_ids = _get_liked_ids(conn2, [i["id"] for i in items], user["id"])
-            conn2.close()
+            liked_ids = _get_liked_ids(conn, [i["id"] for i in items], user["id"])
+            fav_ids = _get_favorited_ids(conn, [i["id"] for i in items], user["id"])
             for it in items:
                 it["liked"] = it["id"] in liked_ids
+                it["favorited"] = it["id"] in fav_ids
+        conn.close()
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/download", methods=["GET"])
