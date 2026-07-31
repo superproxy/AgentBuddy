@@ -85,26 +85,12 @@ hiddenimports = [
     'openai',
     'marketplace', 'marketplace.routes', 'marketplace.storage',
     'ai_generator', 'ai_generator.generator',
-    # LLM 网关代理（litellm 动态导入多，自动收集全部子模块）
-    # litellm proxy 运行时会动态导入各 provider、integrations 等，
-    # 手动列举不可靠，用 collect_submodules 自动收集
 ]
 
-# 自动收集 litellm 所有子模块 + 数据文件
-litellm_hidden = collect_submodules('litellm')
-litellm_datas = collect_data_files('litellm')
-hiddenimports.extend(litellm_hidden)
-datas.extend(litellm_datas)
-
-# litellm[proxy] 依赖的额外库 — 自动收集子模块 + 数据文件
-for _proxy_dep in ('uvicorn', 'fastapi', 'starlette', 'gunicorn',
-                   'backoff', 'cryptography', 'apscheduler',
-                   'orjson', 'anyio', 'h11', 'click', 'pydantic'):
-    try:
-        hiddenimports.extend(collect_submodules(_proxy_dep))
-        datas.extend(collect_data_files(_proxy_dep))
-    except Exception:
-        pass
+# litellm 不打包进 bundle — 运行时按需 pip install litellm[proxy]
+# （打包 litellm + fastapi/uvicorn/cryptography 等依赖会使体积从 ~10MB 涨到 ~100MB）
+# 用户在 LLM 网关页面点击「启动」时，后端检测 litellm 是否可用，
+# 若未安装则提示运行: pip install 'litellm[proxy]'
 
 a = Analysis(
     ['app.py'],

@@ -460,21 +460,8 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
 def _check_litellm_installed() -> tuple[bool, str]:
     """检查 litellm 包是否已安装。
 
-    打包模式：直接在当前进程 import（litellm 已打包在 _internal 中）。
-    开发模式：用子进程检测。
+    litellm 不打包进 bundle（体积太大 ~90MB），运行时用子进程检测是否已 pip install。
     """
-    if getattr(sys, "frozen", False):
-        # 打包模式：直接在当前进程 import
-        try:
-            import litellm  # noqa: F401
-            try:
-                from litellm._version import version as ver
-            except Exception:
-                ver = "unknown"
-            return True, ver
-        except ImportError:
-            return False, "litellm 未打包进 bundle"
-    # 开发模式：用子进程检测
     py = _get_python()
     try:
         r = subprocess.run(
