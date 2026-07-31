@@ -499,3 +499,24 @@ def _plugin_row_to_dict(row: sqlite3.Row) -> dict:
     except (json.JSONDecodeError, TypeError):
         d["tags"] = []
     return d
+
+
+def get_liked_plugins(user_id: int) -> list[dict]:
+    """获取用户点赞的插件列表。"""
+    conn = get_db()
+    rows = conn.execute(
+            """SELECT p.* FROM plugins p
+               JOIN plugin_likes l ON l.plugin_id = p.id
+               WHERE l.user_id = ?
+               ORDER BY l.created_at DESC""",
+            (user_id,),
+        ).fetchall()
+    items = [_plugin_row_to_dict(r) for r in rows]
+    # 附加 liked + favorited 字段
+    if items:
+        favorited_ids = _get_favorited_ids(conn, [i["id"] for i in items], user_id)
+        for it in items:
+            it["liked"] = True
+            it["favorited"] = it["id"] in favorited_ids
+    conn.close()
+    return items

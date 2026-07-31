@@ -589,9 +589,38 @@
           </div>
         </div>
 
+        <!-- 我的点赞 -->
+        <div v-if="myLiked.length">
+          <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">我的点赞 <span style="font-size:12px;font-weight:500;color:var(--text-tertiary);background:var(--bg-sunken);padding:1px 6px;border-radius:999px">{{ myLiked.length }}</span></h3>
+          <div class="plugin-grid">
+            <div v-for="item in myLiked" :key="item.id" class="plugin-card" style="position:relative">
+              <button class="fav-star on" title="取消点赞" @click="toggleLike(item); myLiked = myLiked.filter(p => p.id !== item.id)">❤</button>
+              <div class="card-body">
+                <div class="card-title">{{ item.name }}</div>
+                <div class="card-meta">
+                  <span>v{{ item.version }}</span>
+                  <span>⬇ {{ item.downloads || 0 }}</span>
+                  <span>by {{ item.author }}</span>
+                </div>
+                <p class="card-desc">{{ item.description || '暂无描述' }}</p>
+              </div>
+              <div class="card-footer">
+                <button class="card-btn" :class="{ 'card-btn-liked': item.favorited }" @click="toggleFavorite(item)">
+                  ★
+                </button>
+                <a
+                  class="card-btn card-btn-primary"
+                  :href="downloadUrl(item.id)"
+                  :download="item.name + '-' + item.version + '.zip'"
+                >下载离线包</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 空状态 -->
-        <div v-if="!myPlugins.length && !myFavorites.length" class="empty">
-          <p style="font-size:16px;margin-bottom:4px">还没有发布或收藏任何插件</p>
+        <div v-if="!myPlugins.length && !myFavorites.length && !myLiked.length" class="empty">
+          <p style="font-size:16px;margin-bottom:4px">还没有发布、收藏或点赞任何插件</p>
           <p style="font-size:13px">在插件市场点击星标收藏，或在客户端发布你的第一个插件</p>
         </div>
       </template>
@@ -819,15 +848,16 @@ createApp({
       return token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
     }
 
-    // === 我的发布 + 收藏 ===
+    // === 我的发布 + 收藏 + 点赞 ===
     const myPlugins = ref([])
     const myFavorites = ref([])
+    const myLiked = ref([])
     const mineLoading = ref(false)
     const mineRemoving = ref(null)
 
     async function goMine() {
       page.value = 'mine'
-      await Promise.all([loadMyPlugins(), loadFavorites()])
+      await Promise.all([loadMyPlugins(), loadFavorites(), loadLiked()])
     }
 
     async function loadFavorites() {
@@ -836,6 +866,15 @@ createApp({
         const r = await fetch('/api/marketplace/favorites', { headers: authHeaders() })
         const d = await r.json()
         if (d.ok) myFavorites.value = d.data || []
+      } catch (e) { console.error(e) }
+    }
+
+    async function loadLiked() {
+      if (!user.value) return
+      try {
+        const r = await fetch('/api/marketplace/liked', { headers: authHeaders() })
+        const d = await r.json()
+        if (d.ok) myLiked.value = d.data || []
       } catch (e) { console.error(e) }
     }
 
@@ -1244,7 +1283,7 @@ createApp({
       teamPlugins, teamPluginsLoading,
       invitations, invPanelOpen, invLoading, loadInvitations, respondInvitation,
       showChangePwd, changePwdForm, changePwdError, changePwdLoading, openChangePwd, doChangePassword,
-      myPlugins, myFavorites, mineLoading, mineRemoving, loadMyPlugins, removeMyPlugin, loadFavorites, toggleFavorite,
+      myPlugins, myFavorites, myLiked, mineLoading, mineRemoving, loadMyPlugins, removeMyPlugin, loadFavorites, loadLiked, toggleFavorite,
     }
   }
 }).mount('#app')

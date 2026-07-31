@@ -21,9 +21,10 @@ const auth = useAuthStore()
 type TabKey = 'market' | 'mine' | 'team'
 const activeTab = ref<TabKey>('market')
 
-// === 我的发布 + 收藏 ===
+// === 我的发布 + 收藏 + 点赞 ===
 const myPlugins = ref<any[]>([])
 const myFavorites = ref<any[]>([])
+const myLiked = ref<any[]>([])
 const myLoading = ref(false)
 
 async function loadMyPlugins() {
@@ -117,8 +118,19 @@ async function loadFavorites() {
   } catch { /* ignore */ }
 }
 
+// 加载点赞列表
+async function loadLiked() {
+  if (!auth.isLoggedIn) return
+  try {
+    const url = serverApi('/api/marketplace/liked')
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: any[] }>(url)
+    if (r.ok) myLiked.value = r.data || []
+  } catch { /* ignore */ }
+}
+
 watch(activeTab, (tab) => {
-  if (tab === 'mine') { loadMyPlugins(); loadFavorites() }
+  if (tab === 'mine') { loadMyPlugins(); loadFavorites(); loadLiked() }
   if (tab === 'team') loadTeams()
 })
 
@@ -472,7 +484,7 @@ onMounted(() => {
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         我的
-        <span class="mkt-tab-badge">{{ myPlugins.length + myFavorites.length }}</span>
+        <span class="mkt-tab-badge">{{ myPlugins.length + myFavorites.length + myLiked.length }}</span>
       </button>
       <button
         type="button"
@@ -812,9 +824,38 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- 我的点赞 -->
+        <div v-if="myLiked.length" class="mkt-mine-section">
+          <h3 class="mkt-mine-title">我的点赞 <span>{{ myLiked.length }}</span></h3>
+          <div class="mkt-grid">
+            <div v-for="p in myLiked" :key="p.id" class="mkt-card">
+              <div class="mkt-card-head">
+                <span class="mkt-card-name">{{ p.name }}</span>
+                <span class="mkt-card-ver">v{{ p.version }}</span>
+              </div>
+              <p class="mkt-card-desc">{{ p.description || '暂无描述' }}</p>
+              <div class="mkt-card-meta">
+                <span>⬇ {{ p.downloads || 0 }}</span>
+                <span>❤ {{ p.likes || 0 }}</span>
+                <span>by {{ p.author }}</span>
+              </div>
+              <div class="mkt-card-actions">
+                <button class="mkt-btn mkt-btn-ghost" :class="{ 'mkt-btn-liked': p.liked }" @click="toggleLike(p); myLiked = myLiked.filter(x => x.id !== p.id)">
+                  <svg viewBox="0 0 24 24" :fill="p.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" style="width:14px;height:14px" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  {{ p.likes || 0 }}
+                </button>
+                <button class="mkt-btn mkt-btn-ghost" :class="{ 'mkt-btn-liked': p.favorited }" @click="toggleFavorite(p)">
+                  <svg viewBox="0 0 24 24" :fill="p.favorited ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" style="width:14px;height:14px" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </button>
+                <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 空状态 -->
-        <div v-if="!myPlugins.length && !myFavorites.length" class="mkt-empty">
-          <p>你还没有发布或收藏任何插件</p>
+        <div v-if="!myPlugins.length && !myFavorites.length && !myLiked.length" class="mkt-empty">
+          <p>你还没有发布、收藏或点赞任何插件</p>
           <p style="font-size:12px;color:var(--text-tertiary)">在插件市场点击星标收藏，或在「插件构建」中创建插件后发布</p>
         </div>
       </template>
