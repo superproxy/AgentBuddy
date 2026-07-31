@@ -529,14 +529,6 @@ watch(
               <div class="brand-name">{{ bg.brand }}</div>
               <div class="brand-vendor">{{ bg.vendor }}</div>
             </div>
-            <div class="brand-stats">
-              <span class="stat installed">
-                <span class="num">{{ bg.installedCount }}</span>已安装
-              </span>
-              <span class="stat">
-                <span class="num">{{ bg.total }}</span>共
-              </span>
-            </div>
           </div>
 
           <!-- 扁平网格：直接平铺所有 IDE -->
