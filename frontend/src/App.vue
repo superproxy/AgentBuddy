@@ -51,7 +51,7 @@ const tabs: TabGroup[] = [
     items: [
       { key: 'env', label: 'LLM 配置' },
       { key: 'mcp', label: 'MCP 配置' },
-      { key: 'skill', label: 'Skills 配置' },
+      { key: 'skill', label: 'Skills 管理' },
       { key: 'command', label: '自定义命令' },
       { key: 'subagent', label: 'Subagent' },
       { key: 'rules', label: 'Rules' },

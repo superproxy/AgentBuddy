@@ -508,7 +508,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   <div class="skill-page">
     <div class="skill-head flex flex-wrap items-start justify-between gap-4">
       <div class="min-w-0">
-        <h1 class="text-[15px] font-semibold text-ink-900 m-0">技能配置</h1>
+        <h1 class="text-[15px] font-semibold text-ink-900 m-0">Skills 管理</h1>
         <p class="text-xs text-ink-500 mt-1 mb-0">管理 Agent Skills · 浏览市场 / 本地预置 / 已安装三源 · 启停与同步到 IDE</p>
       </div>
       <div class="btn-cluster">
