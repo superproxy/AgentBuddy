@@ -87,6 +87,20 @@ hiddenimports = [
     'ai_generator', 'ai_generator.generator',
 ]
 
+# 排除未直接使用的大依赖包，减小体积（~60MB → ~40MB）
+# - numpy / PIL: openai SDK 间接依赖但 AgentBuddy 运行时不使用
+# - cryptography: Flask session 加密用，但 JWT auth 不依赖（可选）
+# - pydantic_core: openai SDK 间接依赖
+# - pythonnet / Pythonwin: pywebview 在 Windows 用 win32 而非 pythonnet
+# - Tcl/Tk: 无 GUI 需求
+EXCLUDES = [
+    'numpy', 'numpy.libs', 'PIL', 'Pillow',
+    'pydantic_core', 'pydantic',
+    'pythonnet', 'Pythonwin',
+    'tkinter', '_tkinter',
+    'matplotlib', 'scipy', 'pandas',
+]
+
 # litellm 不打包进 bundle — 运行时按需 pip install litellm[proxy]
 # （打包 litellm + fastapi/uvicorn/cryptography 等依赖会使体积从 ~10MB 涨到 ~100MB）
 # 用户在 LLM 网关页面点击「启动」时，后端检测 litellm 是否可用，
@@ -100,7 +114,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    excludes=EXCLUDES,
     noarchive=False,
     cipher=block_cipher,
 )
