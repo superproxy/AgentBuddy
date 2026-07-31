@@ -16,6 +16,12 @@ export interface MarketItem {
   published_at: string
   tags: string[]
   downloads: number
+  likes?: number
+  liked?: boolean
+  favorited?: boolean
+  author_id?: number
+  scope?: string
+  team_id?: number | null
 }
 
 /** 虚拟插件：当本地市场无数据时填充，演示用 */
@@ -159,7 +165,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
     try {
       const query = q !== undefined ? q : searchQuery.value
       searchQuery.value = query
-      const params = query.trim() ? '?q=' + encodeURIComponent(query.trim()) : ''
+      const params = query.trim() ? '?q=' + encodeURIComponent(query.trim()) + '&scope=public' : '?scope=public'
       const url = serverApi('/api/marketplace' + params)
       if (!url) {
         // 无 server URL，使用虚拟数据
@@ -274,9 +280,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       }
       // 1. 从远程 server 下载 zip
       const dlUrl = serverApi('/api/marketplace/install?id=' + encodeURIComponent(id))
-      const resp = await fetch(dlUrl)
+      const dlHeaders: Record<string, string> = {}
+      const dlToken = getAuthToken()
+      if (dlToken) dlHeaders['Authorization'] = 'Bearer ' + dlToken
+      const resp = await fetch(dlUrl, { headers: dlHeaders })
       if (!resp.ok) {
-        ui.toast('下载插件失败', 'err')
+        const errText = await resp.text().catch(() => '')
+        ui.toast('下载插件失败: ' + (resp.status === 404 ? '插件包文件丢失' : errText || `HTTP ${resp.status}`), 'err')
         return false
       }
       const zipBlob = await resp.blob()

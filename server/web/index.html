@@ -1136,7 +1136,7 @@ createApp({
       try {
         const q = searchQuery.value.trim()
         const url = '/api/marketplace' + (q ? '?q=' + encodeURIComponent(q) + '&scope=public' : '?scope=public')
-        const r = await fetch(url)
+        const r = await fetch(url, { headers: authHeaders() })
         const d = await r.json()
         if (d.ok) {
           items.value = d.data || []
@@ -1199,6 +1199,7 @@ createApp({
           showLogin.value = false
           loginForm.value = { username: '', password: '', email: '' }
           loadInvitations()
+          doSearch()  // 重新加载市场数据（带 auth，获取 liked/favorited 字段）
         } else {
           loginError.value = d.error || '操作失败'
         }
