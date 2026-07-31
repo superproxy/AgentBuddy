@@ -404,6 +404,8 @@ def plugin_save(entry: dict):
 
 def plugin_delete(plugin_id: str):
     conn = get_db()
+    conn.execute("DELETE FROM plugin_likes WHERE plugin_id = ?", (plugin_id,))
+    conn.execute("DELETE FROM plugin_favorites WHERE plugin_id = ?", (plugin_id,))
     conn.execute("DELETE FROM plugins WHERE id = ?", (plugin_id,))
     conn.commit()
     conn.close()
