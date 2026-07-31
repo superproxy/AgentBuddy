@@ -45,6 +45,12 @@ async function deletePlugin(id: string) {
     if (!url) return
     await fetch(url, { method: 'DELETE', headers: { Authorization: 'Bearer ' + getAuthToken() } })
     myPlugins.value = myPlugins.value.filter((p: any) => p.id !== id)
+    // 同步刷新公共市场列表
+    items.value = items.value.filter((i: any) => i.id !== id)
+    // 如果在团队详情页，同步刷新团队插件
+    if (selectedSpaceId.value) {
+      teamPlugins.value = teamPlugins.value.filter((p: any) => p.id !== id)
+    }
   } catch { /* ignore */ }
 }
 
@@ -224,6 +230,9 @@ async function deleteTeamPlugin(pluginId: string) {
     if (!url) return
     await fetch(url, { method: 'DELETE', headers: { Authorization: 'Bearer ' + getAuthToken() } })
     teamPlugins.value = teamPlugins.value.filter(p => p.id !== pluginId)
+    // 同步刷新公共市场列表和我的发布
+    items.value = items.value.filter((i: any) => i.id !== pluginId)
+    myPlugins.value = myPlugins.value.filter((p: any) => p.id !== pluginId)
   } catch { /* ignore */ }
 }
 
