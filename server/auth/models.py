@@ -280,7 +280,7 @@ def respond_invitation(inv_id: int, user_id: int, accept: bool) -> dict | None:
 
 # ==================== 插件 CRUD ====================
 
-def plugin_list(q: str = "", scope: str = "", team_id: int | None = None) -> list[dict]:
+def plugin_list(q: str = "", scope: str = "", team_id: int | None = None, user_id: int | None = None) -> list[dict]:
     """查询插件列表。"""
     conn = get_db()
     sql = "SELECT * FROM plugins"
@@ -302,14 +302,42 @@ def plugin_list(q: str = "", scope: str = "", team_id: int | None = None) -> lis
     sql += " ORDER BY published_at DESC"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [_plugin_row_to_dict(r) for r in rows]
+    items = [_plugin_row_to_dict(r) for r in rows]
+    # 附加 liked 字段
+    if user_id:
+        liked_ids = _get_liked_ids(conn, [i["id"] for i in items], user_id) if items else set()
+        for it in items:
+            it["liked"] = it["id"] in liked_ids
+    return items
 
 
-def plugin_get(plugin_id: str) -> dict | None:
+def _get_liked_ids(conn, plugin_ids: list[str], user_id: int) -> set[str]:
+    """批量查询用户已点赞的插件 ID。"""
+    if not plugin_ids:
+        return set()
+    placeholders = ",".join("?" * len(plugin_ids))
+    rows = conn.execute(
+        f"SELECT plugin_id FROM plugin_likes WHERE user_id = ? AND plugin_id IN ({placeholders})",
+        [user_id] + plugin_ids,
+    ).fetchall()
+    return {r["plugin_id"] for r in rows}
+
+
+def plugin_get(plugin_id: str, user_id: int | None = None) -> dict | None:
     conn = get_db()
     row = conn.execute("SELECT * FROM plugins WHERE id = ?", (plugin_id,)).fetchone()
+    if not row:
+        conn.close()
+        return None
+    d = _plugin_row_to_dict(row)
+    if user_id:
+        liked = conn.execute(
+            "SELECT 1 FROM plugin_likes WHERE plugin_id = ? AND user_id = ?",
+            (plugin_id, user_id),
+        ).fetchone()
+        d["liked"] = liked is not None
     conn.close()
-    return _plugin_row_to_dict(row) if row else None
+    return d
 
 
 def plugin_save(entry: dict):

@@ -40,10 +40,10 @@ def create_marketplace_bp(marketplace_dir: Path):
         q = (request.args.get("q") or "").strip().lower()
         scope = (request.args.get("scope") or "").strip()
         team_id = request.args.get("team_id", type=int)
+        user = get_current_user()
 
         # 团队插件需要登录 + 成员校验
         if scope == "team":
-            user = get_current_user()
             if not user:
                 return jsonify({"ok": False, "error": "请先登录"}), 401
             if not team_id:
@@ -51,7 +51,7 @@ def create_marketplace_bp(marketplace_dir: Path):
             if not is_team_member(team_id, user["id"]):
                 return jsonify({"ok": False, "error": "无权访问该团队空间"}), 403
 
-        items = plugin_list(q=q, scope=scope, team_id=team_id)
+        items = plugin_list(q=q, scope=scope, team_id=team_id, user_id=user["id"] if user else None)
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/publish", methods=["POST"])
@@ -163,8 +163,15 @@ def create_marketplace_bp(marketplace_dir: Path):
             (user["id"],),
         ).fetchall()
         conn.close()
-        from auth.models import _plugin_row_to_dict
+        from auth.models import _plugin_row_to_dict, _get_liked_ids
         items = [_plugin_row_to_dict(r) for r in rows]
+        # 附加 liked 字段
+        if items:
+            conn2 = get_db()
+            liked_ids = _get_liked_ids(conn2, [i["id"] for i in items], user["id"])
+            conn2.close()
+            for it in items:
+                it["liked"] = it["id"] in liked_ids
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/download", methods=["GET"])

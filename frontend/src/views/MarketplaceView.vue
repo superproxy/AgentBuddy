@@ -54,6 +54,20 @@ async function deletePlugin(id: string) {
   } catch { /* ignore */ }
 }
 
+// 点赞/取消点赞
+async function toggleLike(p: any) {
+  if (!auth.isLoggedIn) { ui.toast('请先登录', 'warn'); auth.openLogin(); return }
+  try {
+    const url = serverApi(`/api/marketplace/${p.id}/like`)
+    if (!url) return
+    const r = await api<{ ok: boolean; data?: { liked: boolean } }>(url, { method: 'POST' })
+    if (r.ok && r.data) {
+      p.liked = r.data.liked
+      p.likes = (p.likes || 0) + (r.data.liked ? 1 : -1)
+    }
+  } catch { /* ignore */ }
+}
+
 watch(activeTab, (tab) => {
   if (tab === 'mine') loadMyPlugins()
   if (tab === 'team') loadTeams()
@@ -588,6 +602,16 @@ onMounted(() => {
             <div class="mkt-actions">
               <button
                 type="button"
+                class="mkt-btn"
+                :class="item.liked ? 'mkt-btn-liked' : 'mkt-btn-ghost'"
+                :title="item.liked ? '取消点赞' : '点赞'"
+                @click="toggleLike(item)"
+              >
+                <svg viewBox="0 0 24 24" :fill="item.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                {{ item.likes || 0 }}
+              </button>
+              <button
+                type="button"
                 class="mkt-btn mkt-btn-primary"
                 :disabled="!!installing || isMock"
                 :title="isMock ? '示例数据，无法真实安装' : ''"
@@ -696,6 +720,10 @@ onMounted(() => {
             <span v-else style="color:var(--brand-500)">公共</span>
           </div>
           <div class="mkt-card-actions">
+            <button class="mkt-btn mkt-btn-ghost" :class="{ 'mkt-btn-liked': p.liked }" @click="toggleLike(p)">
+              <svg viewBox="0 0 24 24" :fill="p.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" style="width:14px;height:14px" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              {{ p.likes || 0 }}
+            </button>
             <button class="mkt-btn-danger" @click="deletePlugin(p.id)">删除</button>
           </div>
         </div>
@@ -1880,6 +1908,9 @@ onMounted(() => {
   padding: 0 6px;
 }
 .mkt-btn-danger:hover { color: #f53f3f; }
+
+.mkt-btn-liked { color: #f53f3f !important; border-color: rgba(245,63,63,0.3) !important; }
+.mkt-btn-liked:hover { background: rgba(245,63,63,0.06); }
 
 .mkt-empty {
   text-align: center;

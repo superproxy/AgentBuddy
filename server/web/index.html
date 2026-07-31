@@ -233,6 +233,8 @@
     border-color: var(--brand-500);
   }
   .card-btn-primary:hover { background: var(--brand-600); border-color: var(--brand-600); }
+  .card-btn-liked { color: #ef4444 !important; border-color: rgba(239,68,68,0.3) !important; }
+  .card-btn-liked:hover { background: rgba(239,68,68,0.06); }
   .card-btn-danger {
     background: transparent; color: #ef4444;
     border-color: rgba(239, 68, 68, 0.3);
@@ -429,6 +431,16 @@
         <span v-for="tag in item.tags" :key="tag" class="card-tag">{{ tag }}</span>
       </div>
       <div class="card-actions">
+        <button
+          class="card-btn"
+          :class="{ 'card-btn-liked': item.liked }"
+          @click="toggleLike(item)"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" :fill="item.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+          {{ item.likes || 0 }}
+        </button>
         <a
           class="card-btn card-btn-primary"
           :href="downloadUrl(item.id)"
@@ -1004,6 +1016,21 @@ createApp({
       return (bytes / 1024 / 1024).toFixed(1) + ' MB'
     }
 
+    // 点赞/取消点赞
+    async function toggleLike(item) {
+      if (!user.value) { alert('请先登录'); return }
+      try {
+        const r = await fetch('/api/marketplace/' + item.id + '/like', {
+          method: 'POST', headers: authHeaders(),
+        })
+        const d = await r.json()
+        if (d.ok) {
+          item.liked = d.data.liked
+          item.likes = (item.likes || 0) + (d.data.liked ? 1 : -1)
+        }
+      } catch (e) { console.error(e) }
+    }
+
     function downloadUrl(id) {
       return '/api/marketplace/download?id=' + encodeURIComponent(id)
     }
@@ -1115,7 +1142,7 @@ createApp({
 
     return {
       items, loading, searchQuery, activeTag, total, totalDownloads, allTags,
-      filteredItems, colorFor, formatSize, downloadUrl, onSearch, doSearch,
+      filteredItems, colorFor, formatSize, downloadUrl, onSearch, doSearch, toggleLike,
       user, showLogin, loginMode, loginForm, loginError, loginLoading,
       doLogin, logout,
       page, goTeams, goMine,
