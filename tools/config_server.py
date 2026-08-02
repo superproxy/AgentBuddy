@@ -1798,7 +1798,23 @@ def list_local_skills():
                             row["repo"] = s_repo
                 rows.append(row)
             else:
-                # CSV 中未登记，用基本信息
+                # CSV 中未登记，用基本信息 + sources_map 合并来源信息
+                author = ""
+                repo = ""
+                source_type = "local"
+                source_str = name
+                src_info = sources_map.get(name) if isinstance(sources_map, dict) else None
+                if src_info and isinstance(src_info, dict):
+                    src_str = src_info.get("source") or ""
+                    source_str = src_str or name
+                    if src_str.startswith("local:"):
+                        source_type = "local"
+                    else:
+                        source_type = "remote"
+                        s_owner, s_repo = resolve_github_owner_repo(src_str)
+                        if s_owner and s_repo:
+                            author = s_owner
+                            repo = s_repo
                 rows.append({
                     "skill_name": name,
                     "category": "",
@@ -1806,8 +1822,10 @@ def list_local_skills():
                     "description": "",
                     "trigger_keywords": "",
                     "installable": "false",
-                    "source_type": "local",
-                    "source": name,
+                    "source_type": source_type,
+                    "source": source_str,
+                    "author": author,
+                    "repo": repo,
                     "url": "",
                     "market_channel": "",
                     "short_name": name,

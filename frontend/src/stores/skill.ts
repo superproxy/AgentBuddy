@@ -100,33 +100,9 @@ export const useSkillStore = defineStore('skill', () => {
   const skillCategories = computed(() => [...new Set(localSkills.value.map((s) => s.category).filter(Boolean))].sort())
   const skillRoles = computed(() => [...new Set(localSkills.value.flatMap((s) => (s.role || '').split('|')).filter(Boolean))].sort())
 
-  /** 合并后的本地 skills（公共数据集）— 把 installedSkills 的源信息合并进 localSkills */
-  const mergedLocalSkills = computed(() => {
-    const map = new Map<string, InstalledSkill>()
-    for (const ins of installedSkills.value) {
-      map.set(ins.name, ins)
-    }
-    return localSkills.value.map((s) => {
-      const ins = map.get(s.skill_name) || map.get(s.name)
-      if (!ins) return s
-      return {
-        ...s,
-        source: ins.source || s.source,
-        author: ins.author || s.author,
-        repo: ins.repo || s.repo,
-        source_type: ins.source_type || s.source_type,
-        github_url: ins.github_url || s.github_url,
-        installed_sha: ins.installed_sha || s.installed_sha,
-        installed_at: ins.installed_at || s.installed_at,
-        installed_ref: ins.installed_ref || s.installed_ref,
-        enabled: ins.enabled ?? s.enabled,
-      }
-    })
-  })
-
   const filteredLocalSkills = computed(() => {
     const q = localFilterQ.value.trim().toLowerCase() || skillFilter.text.trim().toLowerCase()
-    return mergedLocalSkills.value.filter((s) => {
+    return localSkills.value.filter((s) => {
       if (skillFilter.cat && s.category !== skillFilter.cat) return false
       if (skillFilter.role && !(s.role || '').includes(skillFilter.role)) return false
       if (q) {
@@ -153,9 +129,6 @@ export const useSkillStore = defineStore('skill', () => {
   })
 
   async function loadLocalSkills() {
-    // 确保 installedSkills 已加载（用于合并源信息）
-    if (!installedSkills.value.length) await loadInstalledSkills()
-    if (localSkills.value.length) return
     const r = await api<{ ok: boolean; data?: any[] }>('/api/skills/local')
     if (r.ok) localSkills.value = r.data || []
   }
@@ -313,11 +286,6 @@ export const useSkillStore = defineStore('skill', () => {
   async function loadInstalledSkills() {
     const r = await api<{ ok: boolean; data?: InstalledSkill[] }>('/api/skills/installed')
     if (r.ok) installedSkills.value = r.data || []
-    // 如果 localSkills 已加载，同步刷新（来源信息可能已变更）
-    if (localSkills.value.length) {
-      localSkills.value = []
-      await loadLocalSkills()
-    }
   }
 
   /** 可升级的 skill 数量（有 GitHub 来源记录且检查出有更新） */
@@ -625,7 +593,7 @@ export const useSkillStore = defineStore('skill', () => {
     manualSkillInput, manualPreview, manualSelected, manualPreviewing, manualInstalling,
     installedSkills,
     listFilter, listQuery, localFilterQ,
-    skillCategories, skillRoles, filteredLocalSkills, mergedLocalSkills, enabledInstalledCount, disabledInstalledCount,
+    skillCategories, skillRoles, filteredLocalSkills, enabledInstalledCount, disabledInstalledCount,
     filteredInstalled,
     // 升级检查
     updateChecking, updateList, updateCheckedAt, updatableCount, trackedCount, rateLimited,
