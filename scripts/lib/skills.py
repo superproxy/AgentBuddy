@@ -1419,13 +1419,18 @@ def find_source_via_search(skill_name: str, timeout: int = 15) -> dict:
     if not best:
         return {"source": "", "skill_filter": "", "url": "", "method": "",
                 "message": f"未找到精确匹配（搜索到 {len(items)} 项，但 name 均不等于 {skill_name}）"}
-    # 从 install_command 提取 source：npx skills@latest add owner/repo[@skill]
+    # 从 install_command 提取 source：npx --yes skills@latest add owner/repo[@skill] --copy -y
+    # 正则需匹配 "skills@latest add" 和 "skills add" 两种形式
     cmd = (best.get("install_command") or "").strip()
-    m = re.search(r'skills\s+add\s+([^\s]+)', cmd)
+    m = re.search(r'skills\S*\s+add\s+(\S+)', cmd)
     spec = m.group(1) if m else ""
-    # 从 source 字段提取
+    # 从 url 字段提取 GitHub owner/repo
     if not spec:
-        spec = (best.get("source") or "").strip()
+        url_str = (best.get("url") or "").strip()
+        if url_str:
+            s_owner, s_repo = resolve_github_owner_repo(url_str)
+            if s_owner and s_repo:
+                spec = f"{s_owner}/{s_repo}"
     # 从 author/repo 拼接
     if not spec:
         author = (best.get("author") or "").strip()
