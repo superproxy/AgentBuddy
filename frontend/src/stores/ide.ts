@@ -44,6 +44,7 @@ export interface IdeInstallInfo {
   vscode?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
   idea?: { method: string; url?: string; extension_id?: string; note?: string; [k: string]: any }
   acp?: { method: string; url?: string; cmd?: string; note?: string; [k: string]: any }
+  web?: { method: string; url?: string; cmd?: string; note?: string; [k: string]: any }
   homepage?: string
   // 新分类字段：品牌 + 顶层 Code/Work + 形式子集
   brand?: string       // 'Kimi' | 'Claude' | 'Codex' | 'Trae' | 'Qoder' | 'JetBrains' | ...
@@ -56,6 +57,7 @@ export interface IdeInstallInfo {
 // 品牌元数据（厂商、品牌色、Logo 字符）
 export const BRAND_META: Record<string, { vendor: string; color: string; logo: string }> = {
   Kimi:      { vendor: 'Moonshot AI · 月之暗面',  color: '#1a1a2e', logo: 'K' },
+  CherryStudio: { vendor: 'Cherry Studio',        color: '#e11d48', logo: 'CS' },
   Claude:    { vendor: 'Anthropic',                color: '#c75d3a', logo: 'Cl' },
   Codex:     { vendor: 'OpenAI',                   color: '#0a8a6a', logo: 'Co' },
   Trae:      { vendor: '字节跳动 · ByteDance',     color: '#e6492d', logo: 'Tr' },
@@ -68,6 +70,7 @@ export const BRAND_META: Record<string, { vendor: string; color: string; logo: s
   OpenClaw:  { vendor: '开源社区',                 color: '#7c5cf0', logo: 'OC' },
   Hermes:    { vendor: '内部 Agent 平台',          color: '#6b7280', logo: 'He' },
   WorkBuddy: { vendor: '腾讯 CodeBuddy · AI 工作台', color: '#dc2626', logo: 'WB' },
+  CodeBuddy: { vendor: '腾讯云 · Tencent',          color: '#0052d9', logo: 'CB' },
   Pi:        { vendor: 'earendil-works',           color: '#7c3aed', logo: 'Pi' },
   'Trae Work': { vendor: '字节跳动 · ByteDance',   color: '#f59e0b', logo: 'TW' },
   'Command Code': { vendor: 'Command Code',       color: '#0891b2', logo: 'CC' },
@@ -80,6 +83,7 @@ export const FORM_META: Record<string, { label: string; color: string; bg: strin
   vscode:    { label: 'VSCode 插件',    color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',            color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
+  web:       { label: 'Web',            color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色
@@ -247,7 +251,7 @@ export const useIdeStore = defineStore('ide', () => {
     }
 
     // 4. 构造 BrandGroup 列表
-    const FORM_ORDER = ['cli', 'app', 'vscode', 'idea', 'acp']
+    const FORM_ORDER = ['cli', 'app', 'vscode', 'idea', 'acp', 'web']
     const CAT_ORDER = ['code', 'work']
 
     const groups: BrandGroup[] = []

@@ -35,6 +35,37 @@
 # install_meta: IDE 安装元数据
 # ============================================================
 install_meta:
+  CherryStudio:
+    # Cherry Studio（全能 AI 桌面客户端）
+    # 官网：https://cherry-ai.com
+    # GitHub：https://github.com/CherryHQ/cherry-studio
+    # 特性：多模型聚合（OpenAI 兼容）、300+ 智能助手、MCP 服务器支持、知识库、翻译/摘要等
+    # 平台：macOS / Windows / Linux（桌面客户端，无独立 CLI）
+    # 配置：~/.cherrystudio/（macOS/Linux），C:\Users\<用户>\.cherrystudio\（Windows）
+    label: Cherry Studio
+    version: latest
+    homepage: https://cherry-ai.com
+    docs_url: https://github.com/CherryHQ/cherry-studio#readme
+    release_url: https://github.com/CherryHQ/cherry-studio/releases
+    cli_install:
+      method: manual
+      url: https://cherry-ai.com
+    app_install:
+      method: brew_cask
+      url: https://cherry-ai.com/download
+      brew_cask: cherry-studio
+      uninstall_cmd_mac: "rm -rf '/Applications/Cherry Studio.app' ~/.cherrystudio 2>/dev/null; true"
+      uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Cherry Studio\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cherrystudio\" 2>nul & exit /b 0"
+    download_urls:
+      macos_arm64: https://cherry-ai.com/download
+      macos_x64: https://cherry-ai.com/download
+      windows_x64: https://cherry-ai.com/download
+      linux_x64: https://cherry-ai.com/download
+    install_methods: [app]
+    brand: CherryStudio
+    category: work
+    forms: [app]
+
   Claude:
     # Anthropic 官方 Claude Code
     # 最新版本：v2.1.150（2026-05-23）—— native installer 自动更新，无需手动升级
@@ -119,10 +150,19 @@ install_meta:
       url: https://www.jetbrains.com/acp/
       cmd: codex acp
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 codex acp 后连接
-    install_methods: [script, npm, brew, app, vscode, jetbrains, acp]
+    # Codex Web：通过 codexapp 桥接工具把 Codex 桌面 App 的 UI 暴露到浏览器（跨平台访问）。
+    #   npx codexapp 启动后访问 http://localhost:18923（默认端口），需已配置好 Codex app-server 环境。
+    web_install:
+      method: npm
+      package: codexapp
+      url: https://github.com/friuns2/codex-mobile
+      cmd: npx codexapp
+      port: 18923
+      note: npx codexapp 启动 Web UI，浏览器访问 http://localhost:18923（需已配置 Codex app-server）
+    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, web]
     brand: Codex
     category: code
-    forms: [cli, app, vscode, idea, acp]
+    forms: [cli, app, vscode, idea, acp, web]
 
   Cursor:
     # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -317,9 +357,15 @@ install_meta:
       url: https://www.jetbrains.com/acp/
       cmd: opencode acp
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 opencode acp 后连接
+    # OpenCode Web：启动 headless server 并打开 Web 界面（浏览器访问）
+    web_install:
+      method: manual
+      url: https://opencode.ai/docs/
+      cmd: opencode web
+      note: 启动 opencode server 并打开 Web 界面（使用默认端口，浏览器访问）
     brand: OpenCode
     category: code
-    forms: [cli, app, acp]
+    forms: [cli, app, acp, web]
 
   Qoder:
     # Qoder 国际版（阿里云通义灵码升级版）
@@ -488,7 +534,7 @@ install_meta:
   WorkBuddy:
     # WorkBuddy（腾讯 CodeBuddy 团队 AI 智能体桌面工作台）
     # 官网：https://www.workbuddy.cn
-    label: WorkBuddy
+    label: WorkBuddy CN
     version: latest
     release_date: "2026-06-01"
     homepage: https://www.workbuddy.cn
@@ -835,7 +881,7 @@ install_meta:
     #   - CLI: https://www.codebuddy.cn/cli/
     #   - IDE: https://www.codebuddy.cn/ide/
     #   - 插件: https://www.codebuddy.cn/setup/
-    label: CodeBuddy
+    label: CodeBuddy CN
     version: latest
     release_date: "2026-07-01"
     homepage: https://www.codebuddy.cn
@@ -852,7 +898,7 @@ install_meta:
       # CodeBuddy IDE（独立桌面应用，产品+设计+研发一体化）
       method: system_uninstall
       url: https://www.codebuddy.cn/ide/
-      uninstall_cmd_mac: "rm -rf '/Applications/CodeBuddy.app' ~/.codebuddy 2>/dev/null; true"
+      uninstall_cmd_mac: "rm -rf '/Applications/CodeBuddy.app' '/Applications/CodeBuddy CN.app' ~/.codebuddy 2>/dev/null; true"
       uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\CodeBuddy\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.codebuddy\" 2>nul & exit /b 0"
     vscode_install:
       # VS Code 扩展：Tencent Cloud CodeBuddy
@@ -890,6 +936,17 @@ install_meta:
 #   is_tui：CLI 是否为交互式 TUI 应用
 #   protocols：该 IDE 支持的 LLM 协议列表（openaiv1/anthropic），用于 sync 时过滤
 detect_meta:
+  CherryStudio:
+    label: Cherry Studio
+    cli_names: []
+    macos_apps: ["/Applications/Cherry Studio.app"]
+    windows_apps:
+      - "{LOCALAPPDATA}/Programs/Cherry Studio/Cherry Studio.exe"
+      - "{ProgramFiles}/Cherry Studio/Cherry Studio.exe"
+    config_dirs: [".cherrystudio"]
+    is_tui: false
+    protocols: [openaiv1]
+
   Claude:
     label: Claude Code
     cli_names: [claude]
@@ -1040,7 +1097,7 @@ detect_meta:
     protocols: [openaiv1]
 
   WorkBuddy:
-    label: WorkBuddy
+    label: WorkBuddy CN
     cli_names: []
     macos_apps: ["/Applications/WorkBuddy.app"]
     windows_apps:
@@ -1176,13 +1233,16 @@ detect_meta:
     is_tui: false
 
   CodeBuddy:
-    label: CodeBuddy
-    # CLI: codebuddy 命令（npm @tencent-ai/codebuddy-code）
+    label: CodeBuddy CN
+    # CLI: CodeBuddy Code 真 CLI（npm @tencent-ai/codebuddy-code 全局安装，命令 codebuddy，交互式 TUI）。
+    #   注意：CN 版 App 自带的 buddycn（软链到 ~/.codebuddy/bin/buddycn）是 App 桌面版的启动封装，
+    #   打开的是桌面 App 而非交互式 CLI，因此不作为 CLI 检测。
     cli_names: [codebuddy]
-    # App: CodeBuddy IDE（独立桌面应用）
-    macos_apps: ["/Applications/CodeBuddy.app"]
+    # App: CodeBuddy IDE（独立桌面应用）。CN 版 App 名为 "CodeBuddy CN.app"，国际版为 "CodeBuddy.app"
+    macos_apps: ["/Applications/CodeBuddy CN.app", "/Applications/CodeBuddy.app"]
     windows_apps:
       - "{LOCALAPPDATA}/Programs/CodeBuddy/CodeBuddy.exe"
       - "{ProgramFiles}/CodeBuddy/CodeBuddy.exe"
     config_dirs: [.codebuddy, .codebuddy-code]
-    is_tui: false
+    is_tui: true
+    protocols: [openaiv1, anthropic]

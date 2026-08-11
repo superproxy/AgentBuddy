@@ -67,7 +67,7 @@ def _user_bin_dirs() -> list[str]:
     dirs: list[str] = []
     # 通用用户 bin
     for d in [".local/bin", ".cargo/bin", ".deno/bin", ".bun/bin", "go/bin",
-              ".yarn/bin", ".fnm/current/bin", ".volta/bin"]:
+              ".yarn/bin", ".fnm/current/bin", ".volta/bin", ".codebuddy/bin"]:
         p = home / d
         if p.is_dir():
             dirs.append(str(p))

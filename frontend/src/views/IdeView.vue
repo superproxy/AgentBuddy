@@ -145,6 +145,7 @@ const filteredBrandGroups = computed(() => {
 // 品牌元数据（前端本地常量，与 stores/ide.ts 同步）
 const BRAND_META_LOCAL: Record<string, { vendor: string; color: string; logo: string }> = {
   Kimi:      { vendor: 'Moonshot AI · 月之暗面',  color: '#1a1a2e', logo: 'K' },
+  CherryStudio: { vendor: 'Cherry Studio',        color: '#e11d48', logo: 'CS' },
   Claude:    { vendor: 'Anthropic',                color: '#c75d3a', logo: 'Cl' },
   Codex:     { vendor: 'OpenAI',                   color: '#0a8a6a', logo: 'Co' },
   Trae:      { vendor: '字节跳动 · ByteDance',     color: '#e6492d', logo: 'Tr' },
@@ -157,6 +158,7 @@ const BRAND_META_LOCAL: Record<string, { vendor: string; color: string; logo: st
   OpenClaw:  { vendor: '开源社区',                 color: '#7c5cf0', logo: 'OC' },
   Hermes:    { vendor: '内部 Agent 平台',          color: '#6b7280', logo: 'He' },
   WorkBuddy: { vendor: '腾讯 CodeBuddy · AI 工作台', color: '#dc2626', logo: 'WB' },
+  CodeBuddy: { vendor: '腾讯云 · Tencent',          color: '#0052d9', logo: 'CB' },
   Pi:        { vendor: 'earendil-works',           color: '#7c3aed', logo: 'Pi' },
   'Trae Work': { vendor: '字节跳动 · ByteDance',   color: '#f59e0b', logo: 'TW' },
   'Command Code': { vendor: 'Command Code',       color: '#0891b2', logo: 'CC' },
@@ -169,6 +171,7 @@ const FORM_META_LOCAL: Record<string, { label: string; color: string; bg: string
   vscode:    { label: 'VSCode 插件',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',           color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
+  web:       { label: 'Web',           color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色
@@ -229,12 +232,13 @@ function currentInfo(it: any): any {
   if (tab === 'vscode') return info.vscode
   if (tab === 'idea') return info.idea
   if (tab === 'acp') return info.acp
+  if (tab === 'web') return info.web
   return info.cli || info.app
 }
 
 function currentPath(it: any): string {
   const tab = currentTab(it)
-  if (tab === 'cli' || tab === 'acp') return it.exe_path || ''
+  if (tab === 'cli' || tab === 'acp' || tab === 'web') return it.exe_path || ''
   return it.app_path || ''
 }
 
@@ -244,7 +248,7 @@ function currentMethod(it: any): string {
 
 function currentInstalled(it: any): boolean {
   const tab = currentTab(it)
-  if (tab === 'cli' || tab === 'acp') return !!it.exe_path
+  if (tab === 'cli' || tab === 'acp' || tab === 'web') return !!it.exe_path
   return !!it.app_path
 }
 
@@ -257,6 +261,7 @@ function busyKey(it: any): string {
 // IDE 品牌色映射（基于方案 C 设计稿）
 const IDE_BRAND: Record<string, { from: string; to: string }> = {
   Agents:     { from: '#9ca3af', to: '#6b7280' },
+  CherryStudio: { from: '#f43f5e', to: '#e11d48' },
   Claude:     { from: '#e88a5c', to: '#c75d3a' },
   Codex:      { from: '#1ec8a0', to: '#0a8a6a' },
   Cursor:     { from: '#3a3a3a', to: '#0a0a0a' },
@@ -293,7 +298,7 @@ function onIconError(key: string) {
 }
 
 /** IDE 是否支持某安装维度（基于 install info 静态配置） */
-function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp'): boolean {
+function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'): boolean {
   const info = ideInstallInfo.value[it.key]
   if (!info) return false
   if (tab === 'cli') return !!(info.cli && it.cli_names?.length)
@@ -301,13 +306,14 @@ function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp'): b
   if (tab === 'vscode') return !!info.vscode
   if (tab === 'idea') return !!info.idea
   if (tab === 'acp') return !!info.acp
+  if (tab === 'web') return !!info.web
   return false
 }
 
 /** 条目类型：展开条目用 _tab，未展开条目按唯一支持维度推断 */
-function ideType(it: any): 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | '' {
-  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'idea' | 'acp'
-  const tabs: Array<'cli' | 'app' | 'vscode' | 'idea' | 'acp'> = ['cli', 'app', 'vscode', 'idea', 'acp']
+function ideType(it: any): 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web' | '' {
+  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'
+  const tabs: Array<'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'> = ['cli', 'app', 'vscode', 'idea', 'acp', 'web']
   const supported = tabs.filter(t => supportsTab(it, t))
   if (supported.length === 1) return supported[0]
   return ''
@@ -328,7 +334,8 @@ function expandIde(it: any): any[] {
   const vscode = supportsTab(it, 'vscode')
   const idea = supportsTab(it, 'idea')
   const acp = supportsTab(it, 'acp')
-  if (!cli && !app && !vscode && !idea && !acp) return [it]
+  const web = supportsTab(it, 'web')
+  if (!cli && !app && !vscode && !idea && !acp && !web) return [it]
   const entries: any[] = []
   if (cli) {
     entries.push({ ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' })
@@ -345,6 +352,9 @@ function expandIde(it: any): any[] {
   if (acp) {
     entries.push({ ...it, _tab: 'acp', _uid: it.key + ':acp', label: it.label + ' ACP', _expanded: true, exe_path: '', app_path: '' })
   }
+  if (web) {
+    entries.push({ ...it, _tab: 'web', _uid: it.key + ':web', label: it.label + ' Web', _expanded: true, exe_path: '', app_path: '' })
+  }
   return entries
 }
 
@@ -360,6 +370,7 @@ function typeLabel(it: any): string {
   if (t === 'vscode') return 'VSCode'
   if (t === 'idea') return 'IDEA'
   if (t === 'acp') return 'ACP'
+  if (t === 'web') return 'Web'
   return '—'
 }
 
@@ -600,6 +611,18 @@ watch(
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步到 JetBrains' }}
             </button>
             <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
+          </template>
+          <!-- Web 专属按钮：启动本地 Web 服务（如 opencode web，默认端口）+ 同步配置 -->
+          <template v-else-if="currentTab(currentSelectedIde) === 'web'">
+            <button @click="launchIde(currentSelectedIde.key, null, 'web')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Web' }}
+            </button>
+            <button @click="syncIdeConfig(currentSelectedIde.key)" :disabled="ideSyncing === currentSelectedIde.key" class="dock-item" type="button">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              {{ ideSyncing === currentSelectedIde.key ? '...' : '同步' }}
+            </button>
+            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">Web 官网</a>
           </template>
           <template v-else-if="currentInstalled(currentSelectedIde)">
             <button @click="launchIde(currentSelectedIde.key, null, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">
@@ -982,6 +1005,10 @@ watch(
   background: linear-gradient(145deg, #f59e0b, #d97706);
   color: #fff;
 }
+.type-badge.web {
+  background: linear-gradient(145deg, #34d399, #10b981);
+  color: #fff;
+}
 
 /* —— 会话数徽章 —— */
 .badge {
@@ -1084,6 +1111,7 @@ watch(
 .dock-title .type-tag.app { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
 .dock-title .type-tag.both { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
 .dock-title .type-tag.acp { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+.dock-title .type-tag.web { background: rgba(52, 211, 153, 0.12); color: #10b981; }
 
 .dock-tabs {
   display: inline-flex;
@@ -1844,6 +1872,7 @@ watch(
 .brand-view .type-badge.vscode { background: linear-gradient(145deg, #3b82f6, #2563eb); color: #fff; }
 .brand-view .type-badge.idea { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
 .brand-view .type-badge.acp { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
+.brand-view .type-badge.web { background: linear-gradient(145deg, #34d399, #10b981); color: #fff; }
 
 /* 品牌视图下的 grid 横排排列 */
 .brand-view .grid {

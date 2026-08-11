@@ -1,27 +1,32 @@
-"""WorkBuddy IDE 分发器。
+"""CodeBuddy IDE 分发器。
 
-迁移自 scripts/init-ide.py 的 init_workbuddy() 和 generate_workbuddy_models()。
-生成 .workbuddy/models.json（从 llm.yaml 展开模型列表）。
+腾讯云 CodeBuddy（AI 代码编辑器）分发器：
+- init_mcp：复制 mcp.json 到 ~/.codebuddy/mcp.json（标准 mcpServers 格式）
+- init_llm：生成 ~/.codebuddy/models.json（官方 TokenHub 格式 {"models":[...]}）
+
+CodeBuddy models.json 官方格式（腾讯云 TokenHub 文档 product/1823/130068）：
+    {"models": [{"id", "name", "vendor", "apiKey", "url"}, ...]}
+配置文件位于用户级目录 ~/.codebuddy/（macOS/Linux）或 C:\\Users\\<用户>\\.codebuddy\\（Windows）。
 """
 import json
 from pathlib import Path
 
 from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_file_safe
+from lib.mcp import copy_file_safe
 from lib.skills import copy_skills_safe, write_skills_index
 from lib.llm import load_split_env_config
 from .base import IdeTarget
 
 
-def generate_workbuddy_models(env_config: dict | None, target_file: Path, force: bool,
+def generate_codebuddy_models(env_config: dict | None, target_file: Path, force: bool,
                               ide_protocols: list[str] | None = None) -> None:
-    """从 llm.yaml 的 llm 配置生成 .workbuddy/models.json (WorkBuddy 模型列表)。
+    """从 llm.yaml 的 llm 配置生成 ~/.codebuddy/models.json（CodeBuddy 官方格式）。
 
-    遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 所需的模型数组。
+    遍历 llm.<provider>.<protocol>.models，展开为 CodeBuddy 所需的模型数组。
     - 跳过 _ 前缀键（元数据）和 proxy 段
     - 跳过 ~ 前缀 model id（禁用标记）
     - api_key 为空的协议自动剪枝
-    - 同 (model_id, url) 去重
+    - 同一 model_id 去重（优先 active provider 的配置，避免 openai/anthropic 协议重复）
     - ide_protocols 指定时只同步这些协议的模型
     """
     if not env_config:
@@ -38,14 +43,16 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
         return
 
     active_provider = llm_section.get("_active_provider", "")
-    # 协议优先级：openaiv1/openai > responses > anthropic（优先使用 OpenAI 兼容协议）
-    _PROTO_PRIORITY = {"openaiv1": 0, "openai": 0, "responses": 1, "anthropic": 2}
+
+    # 第一遍：先收集 active provider 的模型，保证去重时优先
     models_list = []
     seen = set()
     providers_order = sorted(
         (p for p in llm_section if not p.startswith("_") and p != "proxy"),
         key=lambda p: (p != active_provider),  # active provider 排最前
     )
+    # 协议优先级：openaiv1/openai > responses > anthropic（优先使用 OpenAI 兼容协议）
+    _PROTO_PRIORITY = {"openaiv1": 0, "openai": 0, "responses": 1, "anthropic": 2}
     for provider_name in providers_order:
         provider_value = llm_section[provider_name]
         if not isinstance(provider_value, dict):
@@ -71,7 +78,6 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
             for model_id, model_meta in models_dict.items():
                 if model_id.startswith("~"):
                     continue
-                # 按 model_id 去重（优先 active provider / 优先 openai 协议），避免重复
                 if model_id in seen:
                     continue
                 seen.add(model_id)
@@ -83,50 +89,48 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
                     "id": model_id,
                     "name": model_name,
                     "vendor": provider_name,
-                    "url": base_url,
                     "apiKey": api_key,
-                    "supportsToolCall": True,
-                    "supportsImages": False,
-                    "supportsReasoning": False,
-                    "useCustomProtocol": False,
+                    "url": base_url,
                 })
 
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with open(target_file, "w", encoding="utf-8") as f:
-        json.dump(models_list, f, indent=2, ensure_ascii=False)
+        json.dump({"models": models_list}, f, indent=2, ensure_ascii=False)
         f.write("\n")
     print(f"{COLOR_GREEN}[OK] {target_file} ({len(models_list)} models){COLOR_RESET}")
 
 
-class WorkBuddyTarget(IdeTarget):
-    name = "WorkBuddy"
+class CodeBuddyTarget(IdeTarget):
+    name = "CodeBuddy"
 
     def init_rules(self, source_rules: Path):
-        wb_rules_dir = self.root / ".workbuddy" / "rules"
-        wb_rules_dir.parent.mkdir(parents=True, exist_ok=True)
+        # CodeBuddy rules 同步到用户级 ~/.codebuddy/rules/
+        cb_rules_dir = Path.home() / ".codebuddy" / "rules"
+        cb_rules_dir.parent.mkdir(parents=True, exist_ok=True)
         if source_rules.exists():
-            copy_dir_safe(source_rules, wb_rules_dir, ".workbuddy/rules/", self.force)
+            from lib.mcp import copy_dir_safe
+            copy_dir_safe(source_rules, cb_rules_dir, "~/.codebuddy/rules/", self.force)
         else:
             print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
     def init_mcp(self, source_mcp_file: Path):
-        wb_dir = self.root / ".workbuddy"
-        wb_dir.mkdir(parents=True, exist_ok=True)
-        copy_file_safe(source_mcp_file, wb_dir / "mcp.json",
-                       ".workbuddy/mcp.json", self.force)
+        cb_dir = Path.home() / ".codebuddy"
+        cb_dir.mkdir(parents=True, exist_ok=True)
+        copy_file_safe(source_mcp_file, cb_dir / "mcp.json",
+                       "~/.codebuddy/mcp.json", self.force)
 
     def init_llm(self, source_rules_dirs):
-        # 生成 WorkBuddy 特有的 LLM 模型列表
+        # 生成 CodeBuddy 特有的 LLM 模型列表（~/.codebuddy/models.json，官方 TokenHub 格式）
         first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
         source_dir = first.parent.parent
         env_config = load_split_env_config(source_dir, silent=True)
-        generate_workbuddy_models(env_config, self.root / ".workbuddy" / "models.json",
+        generate_codebuddy_models(env_config, Path.home() / ".codebuddy" / "models.json",
                                   self.force, ide_protocols=self.ide_protocols)
 
     def init_skills(self, source_skills_dir: Path):
-        # 同步到全局目录（~/.workbuddy/skills/）
-        wb_skills_dir = Path.home() / ".workbuddy" / "skills"
-        copy_skills_safe(source_skills_dir, wb_skills_dir, "~/.workbuddy/skills/",
+        # 同步到全局目录（~/.codebuddy/skills/）
+        cb_skills_dir = Path.home() / ".codebuddy" / "skills"
+        copy_skills_safe(source_skills_dir, cb_skills_dir, "~/.codebuddy/skills/",
                          self.force, self.include_skills, link=self.link_skills)
-        write_skills_index(source_skills_dir, wb_skills_dir / "README.md",
-                           "WorkBuddy", self.force, self.include_skills)
+        write_skills_index(source_skills_dir, cb_skills_dir / "README.md",
+                           "CodeBuddy", self.force, self.include_skills)

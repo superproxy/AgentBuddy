@@ -935,6 +935,7 @@ def get_install_info(ide_key: str) -> dict:
     vscode_install = dict(meta.get("vscode_install", {}))
     idea_install = dict(meta.get("idea_install", {}))
     acp_install = dict(meta.get("acp_install", {}))
+    web_install = dict(meta.get("web_install", {}))
     homepage = meta.get("homepage", "")
 
     # 非 macOS 平台：cask/brew/app_cli 降级为 manual + homepage，保留 uninstall_cmd
@@ -973,6 +974,7 @@ def get_install_info(ide_key: str) -> dict:
         "vscode": vscode_install,
         "idea": idea_install,
         "acp": acp_install,
+        "web": web_install,
     }
 
 

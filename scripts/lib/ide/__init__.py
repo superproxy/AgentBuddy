@@ -10,7 +10,9 @@ from .cursor import CursorTarget
 from .codex import CodexTarget
 from .opencode import OpenCodeTarget
 from .trae import TraeTarget, TraeCNTarget, TraeSoloCNTarget
+from .cherrystudio import CherryStudioTarget
 from .claude import ClaudeTarget
+from .codebuddy import CodeBuddyTarget
 from .workbuddy import WorkBuddyTarget
 from .qoder import QoderTarget
 from .qodercn import QoderCNTarget
@@ -29,6 +31,8 @@ from .vscode import VSCodeTarget
 IDE_REGISTRY = {
     "Agents": AgentsTarget,
     "Claude": ClaudeTarget,
+    "CherryStudio": CherryStudioTarget,
+    "CodeBuddy": CodeBuddyTarget,
     "Codex": CodexTarget,
     "CommandCode": CommandCodeTarget,
     "Cursor": CursorTarget,

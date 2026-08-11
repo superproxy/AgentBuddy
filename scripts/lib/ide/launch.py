@@ -359,6 +359,49 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             return {"ok": False, "pid": 0, "cmd": acp_cmd, "error": str(e),
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
 
+    if mode == "web":
+        # Web 模式：启动 IDE 的本地 Web 服务（如 opencode web），在浏览器中访问。
+        # 服务为长期运行进程，优先在终端窗口启动（有 TTY、可查看日志/停止）。
+        meta = IDE_INSTALL_META.get(ide_key, {})
+        web_install = meta.get("web_install", {})
+        web_cmd = web_install.get("cmd", "")
+        if not web_cmd:
+            return {
+                "ok": False, "pid": 0, "cmd": "",
+                "error": f"IDE {ide_key} 无 Web 服务命令配置",
+                "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
+            }
+        # 判断 web 命令是否以 IDE 的 cli_name 开头（如 opencode web）。
+        # 匹配：用检测到的 exe_path + 剩余子命令启动；不匹配（如 Codex 的 npx codexapp 独立命令）：
+        # 整体在 shell 中运行 web_cmd，避免错误拼接成 "codex npx codexapp"。
+        parts = web_cmd.split()
+        cli_names = IDE_DETECT_META.get(ide_key, {}).get("cli_names", [])
+        if exe_path and parts and any(parts[0] == cn for cn in cli_names):
+            args = parts[1:]
+            result = _launch_cli_in_terminal(
+                exe_path, args, cwd,
+                title=f"{meta.get('label', ide_key)} Web - {cwd or 'Home'}",
+            )
+            result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "web"})
+            return result
+        # 独立命令（npx codexapp 等）或无 exe_path：在 shell 中运行整个 web_cmd
+        try:
+            if sys.platform == "win32":
+                proc = subprocess.Popen(
+                    web_cmd, cwd=cwd or None, shell=True,
+                    creationflags=0x08000000,
+                )
+            else:
+                proc = subprocess.Popen(
+                    web_cmd, cwd=cwd or None, shell=True,
+                    start_new_session=True,
+                )
+            return {"ok": True, "pid": proc.pid, "cmd": web_cmd, "error": "",
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "web"}
+        except Exception as e:
+            return {"ok": False, "pid": 0, "cmd": web_cmd, "error": str(e),
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
+
     # 自动模式：App 会话直接走 App 启动（不走 CLI resume）
     if source != "app":
         result = _try_cli()

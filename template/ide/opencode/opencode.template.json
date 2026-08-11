@@ -6,69 +6,16 @@
     "mdns": true
   },
   "provider": {
-    "openicu": {
+    "${LLM_ACTIVE_PROVIDER}": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "OpenICU",
+      "name": "${LLM_ACTIVE_PROVIDER}",
       "options": {
-        "baseURL": "${LLM_OPENICU_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_OPENICU_OPENAI_API_KEY}"
-      }
-    },
-    "openai": {
-      "options": {
-        "baseURL": "${LLM_OPENAI_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_OPENAI_OPENAI_API_KEY}"
-      }
-    },
-    "anthropic": {
-      "name": "Anthropic",
-      "options": {
-        "baseURL": "${LLM_ANTHROPIC_ANTHROPIC_BASE_URL}",
-        "apiKey": "${LLM_ANTHROPIC_ANTHROPIC_API_KEY}"
-      }
-    },
-    "openrouter": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "OpenRouter",
-      "options": {
-        "baseURL": "${LLM_OPENROUTER_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_OPENROUTER_OPENAI_API_KEY}"
-      }
-    },
-    "deepseek": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "DeepSeek",
-      "options": {
-        "baseURL": "${LLM_DEEPSEEK_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_DEEPSEEK_OPENAI_API_KEY}"
-      }
-    },
-    "volcengine": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Volcengine Ark",
-      "options": {
-        "baseURL": "${LLM_VOLCENGINE_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_VOLCENGINE_OPENAI_API_KEY}"
-      }
-    },
-    "volcengineCoding": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Volcengine Coding",
-      "options": {
-        "baseURL": "${LLM_VOLCENGINECODING_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_VOLCENGINECODING_OPENAI_API_KEY}"
-      }
-    },
-    "volcengineAgent": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Volcengine Agent",
-      "options": {
-        "baseURL": "${LLM_VOLCENGINEAGENT_OPENAI_BASE_URL}",
-        "apiKey": "${LLM_VOLCENGINEAGENT_OPENAI_API_KEY}"
+        "baseURL": "${LLM_ACTIVE_BASE_URL}",
+        "apiKey": "${LLM_ACTIVE_API_KEY}"
       }
     }
   },
-  "model": "${ANTHROPIC_MODEL:-anthropic/claude-sonnet-4}",
+  "model": "${LLM_ACTIVE_PROVIDER}/${LLM_ACTIVE_MODEL}",
   "small_model": "openai/gpt-4o-mini",
   "mcp": {},
 
