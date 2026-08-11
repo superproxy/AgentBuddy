@@ -912,15 +912,28 @@ install_meta:
       url: jetbrains://plugin/24778
       extension_id: "24778"
       note: 点击安装将在 JetBrains IDE 中打开插件安装页面（腾讯云代码助手）
+    # CodeBuddy Web UI：codebuddy --serve 启动浏览器界面（随 CLI 内置）
+    # 来源：https://www.codebuddy.ai/docs/cli/web-ui
+    # 认证：CODEBUDDY_GATEWAY_AUTH=password + CODEBUDDY_GATEWAY_PASSWORD=<随机密码>，
+    #       启动时自动注入随机密码，浏览器用 http://127.0.0.1:7890?password=xxx 免登录
+    web_install:
+      method: cli
+      url: https://www.codebuddy.ai/docs/cli/web-ui
+      cmd: codebuddy --serve --port 7890
+      port: 7890
+      auth: password
+      auth_env: CODEBUDDY_GATEWAY_PASSWORD
+      auth_mode_env: CODEBUDDY_GATEWAY_AUTH
+      note: codebuddy --serve 启动 Web UI，自动注入随机密码，浏览器访问 http://127.0.0.1:7890（可用带密码链接免登录）
     download_urls:
       macos_arm64: https://www.codebuddy.cn/ide/
       macos_x64: https://www.codebuddy.cn/ide/
       windows_x64: https://www.codebuddy.cn/ide/
       linux_x64: https://www.codebuddy.cn/ide/
-    install_methods: [npm, app, vscode, jetbrains]
+    install_methods: [npm, app, vscode, jetbrains, web]
     brand: CodeBuddy
     category: code
-    forms: [cli, app, vscode, idea]
+    forms: [cli, app, vscode, idea, web]
 
 
 # ============================================================

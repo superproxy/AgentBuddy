@@ -1025,6 +1025,10 @@ def get_llm():
                 migrated = True
         if migrated:
             save_env_config_file(path, data)
+        # 归一化 _enabled（内存）：旧格式缺失字段时按"有 api_key 视为启用"补默认，
+        # 保证前端开关状态与后端同步过滤一致
+        from lib.llm import normalize_provider_enabled
+        normalize_provider_enabled(data.get("llm"))
         return jsonify({
             "ok": True,
             "data": data,
@@ -1042,6 +1046,10 @@ def save_llm():
         return jsonify({"ok": False, "error": "data 必须是对象"}), 400
     try:
         path = _ensure_llm_file()
+        # 保存时补默认 _enabled 字段：缺失的按"有 api_key 视为启用"补 True/False，
+        # 确保旧格式配置保存一次后过滤即可生效
+        from lib.llm import normalize_provider_enabled
+        normalize_provider_enabled(data.get("llm"))
         save_env_config_file(path, data)
         return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
     except Exception as e:
@@ -1149,6 +1157,9 @@ def apply_llm_provider():
             base_url_override=base_url,
             protocol=protocol,
         )
+        # 保存时补默认 _enabled 字段（旧格式缺失的按有 key 视为启用）
+        from lib.llm import normalize_provider_enabled
+        normalize_provider_enabled(env_data.get("llm"))
         save_env_config_file(path, env_data)
         return jsonify({
             "ok": True,
@@ -4732,6 +4743,46 @@ def api_ide_launch():
         return jsonify(result)
     except Exception as e:
         print(f"[ide-launch] error={e!r}", flush=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _web_credentials(ide_key: str, regenerate: bool = False) -> dict:
+    """查询/重置某 IDE Web 服务的随机密码（仅 auth=password 的 web_install 有效）。"""
+    from lib.ide.webpass import get_or_create_password, regenerate_password, web_urls
+    web_install = IDE_INSTALL_META.get(ide_key, {}).get("web_install", {})
+    port = web_install.get("port")
+    auth = web_install.get("auth")
+    if not port or auth != "password":
+        return {"ok": False, "error": f"IDE {ide_key} 无密码认证的 Web 服务"}
+    password = regenerate_password(ide_key) if regenerate else get_or_create_password(ide_key)
+    result = web_urls(port, password)
+    result.update({"ok": True, "ide": ide_key, "port": port,
+                   "password": password, "auth": auth})
+    return result
+
+
+@app.route("/api/ide/web/credentials", methods=["GET"])
+def api_ide_web_credentials():
+    """查询 IDE Web 服务的随机密码与带密码链接。Query: ?ide=CodeBuddy"""
+    ide_key = request.args.get("ide", "")
+    if not ide_key:
+        return jsonify({"ok": False, "error": "ide 参数缺失"}), 400
+    try:
+        return jsonify(_web_credentials(ide_key))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/ide/web/credentials/regenerate", methods=["POST"])
+def api_ide_web_credentials_regenerate():
+    """重置 IDE Web 服务密码（旧链接立即失效）。Body: {ide: <key>}"""
+    body = request.get_json(silent=True) or {}
+    ide_key = body.get("ide", "")
+    if not ide_key:
+        return jsonify({"ok": False, "error": "ide 参数缺失"}), 400
+    try:
+        return jsonify(_web_credentials(ide_key, regenerate=True))
+    except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

@@ -377,8 +377,10 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
 
     if mode == "web":
-        # Web 模式：启动 IDE 的本地 Web 服务（如 opencode web），在浏览器中访问。
+        # Web 模式：启动 IDE 的本地 Web 服务（如 opencode web / codebuddy --serve），在浏览器中访问。
         # 服务为长期运行进程，优先在终端窗口启动（有 TTY、可查看日志/停止）。
+        # 密码认证：web_install.auth == "password" 时，自动生成随机密码并通过环境变量
+        # （auth_env / auth_mode_env）注入服务进程，浏览器用 ?password= 链接免登录。
         meta = IDE_INSTALL_META.get(ide_key, {})
         web_install = meta.get("web_install", {})
         web_cmd = web_install.get("cmd", "")
@@ -390,7 +392,24 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             }
         # 服务启动后自动打开浏览器（web_install.port 指定本地端口）
         port = web_install.get("port")
-        browser_url = f"http://localhost:{int(port)}" if port else ""
+        base_url = f"http://localhost:{int(port)}" if port else ""
+        # 生成/注入随机密码（auth=password 时）
+        web_env: dict | None = None
+        password = ""
+        auth_env = web_install.get("auth_env")
+        if web_install.get("auth") == "password" and auth_env and base_url:
+            try:
+                from .webpass import get_or_create_password
+                password = get_or_create_password(ide_key)
+                web_env = {auth_env: password}
+                auth_mode_env = web_install.get("auth_mode_env")
+                if auth_mode_env:
+                    web_env[auth_mode_env] = "password"
+            except Exception:
+                web_env = None
+                password = ""
+        # 带密码的免登录 URL（?password= 对首页生效，换取 session cookie）
+        browser_url = f"{base_url}?password={password}" if (password and base_url) else base_url
         # 判断 web 命令是否以 IDE 的 cli_name 开头（如 opencode web）。
         # 匹配：用检测到的 exe_path + 剩余子命令启动；不匹配（如 Codex 的 npx codexapp 独立命令）：
         # 整体在 shell 中运行 web_cmd，避免错误拼接成 "codex npx codexapp"。
@@ -399,29 +418,38 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
         if exe_path and parts and any(parts[0] == cn for cn in cli_names):
             args = parts[1:]
             result = _launch_cli_in_terminal(
-                exe_path, args, cwd,
+                exe_path, args, cwd, env=web_env,
                 title=f"{meta.get('label', ide_key)} Web - {cwd or 'Home'}",
             )
             result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "web"})
             if result.get("ok") and browser_url:
                 _open_browser(browser_url)
+            if result.get("ok"):
+                result.update({
+                    "web_url": base_url,
+                    "web_password": password,
+                    "web_url_with_password": browser_url,
+                })
             return result
         # 独立命令（npx codexapp 等）或无 exe_path：在 shell 中运行整个 web_cmd
         try:
+            proc_env = {**os.environ, **(web_env or {})}
             if sys.platform == "win32":
                 proc = subprocess.Popen(
                     web_cmd, cwd=cwd or None, shell=True,
-                    creationflags=0x08000000,
+                    creationflags=0x08000000, env=proc_env,
                 )
             else:
                 proc = subprocess.Popen(
                     web_cmd, cwd=cwd or None, shell=True,
-                    start_new_session=True,
+                    start_new_session=True, env=proc_env,
                 )
             if browser_url:
                 _open_browser(browser_url)
             return {"ok": True, "pid": proc.pid, "cmd": web_cmd, "error": "",
-                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "web"}
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "web",
+                    "web_url": base_url, "web_password": password,
+                    "web_url_with_password": browser_url}
         except Exception as e:
             return {"ok": False, "pid": 0, "cmd": web_cmd, "error": str(e),
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}

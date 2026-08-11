@@ -5,6 +5,7 @@ import { useIdeStore } from '../stores/ide'
 import { useSyncStore } from '../stores/sync'
 import { useUiStore } from '../stores/ui'
 import { useBrandOrderStore } from '../stores/brandOrder'
+import { api } from '../api/client'
 
 const ide = useIdeStore()
 const sync = useSyncStore()
@@ -208,6 +209,87 @@ async function copyPath(path: string | undefined) {
   } catch {
     ui.toast('复制失败', 'err')
   }
+}
+
+// ===== Web 服务密码/链接（auth=password 的 web_install，如 CodeBuddy --serve） =====
+const webCreds = reactive<Record<string, { password: string; url: string; url_with_password: string; reveal: boolean }>>({})
+const webCredsLoading = ref<string>('')
+
+/** 该 IDE 的 Web 服务是否启用密码认证 */
+function webAuth(it: any): boolean {
+  return ideInstallInfo.value[it.key]?.web?.auth === 'password'
+}
+
+/** 查询（或创建）Web 服务密码与带密码链接 */
+async function loadWebCreds(key: string) {
+  if (webCredsLoading.value) return
+  webCredsLoading.value = key
+  try {
+    const r = await api<{ ok: boolean; password?: string; url?: string; url_with_password?: string; error?: string }>(
+      `/api/ide/web/credentials?ide=${encodeURIComponent(key)}`,
+    )
+    if (r?.ok) {
+      webCreds[key] = {
+        password: r.password || '',
+        url: r.url || '',
+        url_with_password: r.url_with_password || '',
+        reveal: webCreds[key]?.reveal ?? false,
+      }
+    } else {
+      ui.toast(r?.error || '获取 Web 凭据失败', 'err')
+    }
+  } finally {
+    webCredsLoading.value = ''
+  }
+}
+
+/** 查看/隐藏密码 */
+function toggleRevealWebPassword(key: string) {
+  if (!webCreds[key]) return
+  webCreds[key].reveal = !webCreds[key].reveal
+}
+
+/** 复制带密码链接（免登录） */
+async function copyWebLink(key: string) {
+  if (!webCreds[key]?.url_with_password) await loadWebCreds(key)
+  if (!webCreds[key]?.url_with_password) return
+  try {
+    await navigator.clipboard.writeText(webCreds[key].url_with_password)
+    ui.toast('已复制带密码链接', 'ok')
+  } catch {
+    ui.toast('复制失败', 'err')
+  }
+}
+
+/** 重置密码（旧链接立即失效） */
+async function regenerateWebPassword(key: string) {
+  if (webCredsLoading.value) return
+  webCredsLoading.value = key
+  try {
+    const r = await api<{ ok: boolean; password?: string; url_with_password?: string; error?: string }>(
+      '/api/ide/web/credentials/regenerate',
+      { method: 'POST', body: JSON.stringify({ ide: key }) },
+    )
+    if (r?.ok) {
+      webCreds[key] = {
+        password: r.password || '',
+        url: webCreds[key]?.url || '',
+        url_with_password: r.url_with_password || '',
+        reveal: true,
+      }
+      ui.toast('已重置密码（旧链接失效）', 'ok')
+    } else {
+      ui.toast(r?.error || '重置密码失败', 'err')
+    }
+  } finally {
+    webCredsLoading.value = ''
+  }
+}
+
+/** 启动 Web 服务并加载密码凭据 */
+async function launchWebWithCreds(key: string) {
+  await launchIde(key, null, 'web')
+  await loadWebCreds(key)
 }
 
 /** 生成图标首字母（最多 2 个字符） */
@@ -630,12 +712,26 @@ watch(
             </button>
             <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
           </template>
-          <!-- Web 专属按钮：启动本地 Web 服务（如 opencode web，默认端口）+ 同步配置 -->
+          <!-- Web 专属按钮：启动本地 Web 服务（如 opencode web / codebuddy --serve）+ 密码查看/复制链接/重置 + 同步配置 -->
           <template v-else-if="currentTab(currentSelectedIde) === 'web'">
-            <button @click="launchIde(currentSelectedIde.key, null, 'web')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
+            <button @click="launchWebWithCreds(currentSelectedIde.key)" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Web' }}
             </button>
+            <template v-if="webAuth(currentSelectedIde)">
+              <button v-if="webCreds[currentSelectedIde.key]" @click="toggleRevealWebPassword(currentSelectedIde.key)" class="dock-item" type="button" :title="webCreds[currentSelectedIde.key].reveal ? '隐藏密码' : '查看密码'">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                {{ webCreds[currentSelectedIde.key].reveal ? webCreds[currentSelectedIde.key].password : '••••••••' }}
+              </button>
+              <button @click="copyWebLink(currentSelectedIde.key)" :disabled="webCredsLoading === currentSelectedIde.key" class="dock-item" type="button" title="复制带密码的免登录链接">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                复制链接
+              </button>
+              <button @click="regenerateWebPassword(currentSelectedIde.key)" :disabled="webCredsLoading === currentSelectedIde.key" class="dock-item" type="button" title="重置密码（旧链接立即失效）">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                重置
+              </button>
+            </template>
             <button @click="syncIdeConfig(currentSelectedIde.key)" :disabled="ideSyncing === currentSelectedIde.key" class="dock-item" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步' }}

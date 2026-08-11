@@ -43,6 +43,34 @@ PROTOCOL_ENV_MAP = {
 DIRECT_FIELD_KEYS = {"base_url", "api_key", "models"}
 
 
+def normalize_provider_enabled(llm_section: dict | None) -> dict | None:
+    """归一化 llm 段各 provider 的 _enabled 字段（与前端 enabledProviderNames 一致）。
+
+    规则：
+      - _enabled 显式为 True / False → 保留用户设置
+      - 缺失 _enabled（旧格式配置）→ 任一协议配置了非空、非 "${" 占位符的
+        api_key 视为启用（补 True），否则补 False
+    原地修改并返回 llm_section。
+    """
+    if not isinstance(llm_section, dict):
+        return llm_section
+    for name, provider in llm_section.items():
+        if name.startswith("_") or not isinstance(provider, dict):
+            continue
+        if provider.get("_enabled") is not None:
+            continue
+        enabled = False
+        for proto, cfg in provider.items():
+            if proto.startswith("_") or not isinstance(cfg, dict):
+                continue
+            key = cfg.get("api_key")
+            if isinstance(key, str) and key.strip() and not key.lstrip().startswith("${"):
+                enabled = True
+                break
+        provider["_enabled"] = enabled
+    return llm_section
+
+
 def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
     """从 llm.yaml + mcp.yaml + keys.yaml 加载并合并配置（向后兼容 env.yaml）。
 
@@ -128,13 +156,17 @@ def load_split_env_config(project_root: Path, silent: bool = False) -> dict:
                     gateway["api_key"] = llm_proxy["api_key"]
                 del llm_section["proxy"]
 
+        # 归一化 _enabled：旧格式配置缺失时按"有 api_key 视为启用"补默认
+        normalize_provider_enabled(merged.get("llm"))
         return merged
 
     if env_file.exists():
         # 向后兼容：直接读 env.yaml
         if not silent:
             print(f"{COLOR_GREEN}[READ] {env_file}{COLOR_RESET}")
-        return load_env_config_file(env_file)
+        env_data = load_env_config_file(env_file)
+        normalize_provider_enabled(env_data.get("llm") if isinstance(env_data, dict) else None)
+        return env_data
 
     # 都没有
     print(f"{COLOR_RED}[ERROR] Config files not found.{COLOR_RESET}")
