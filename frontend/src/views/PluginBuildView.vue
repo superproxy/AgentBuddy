@@ -22,7 +22,7 @@ const { dialogOpen, prompt, level, generating, output, generatedConfig } = store
 
 const {
   pluginForm, selectedSkills, selectedMcp, selectedLlm,
-  selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled,
+  selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
   availableSubagents, availableRules, availableCommands,
   ideImport, ideImportStats, importedIdeMcp, wizardStep, buildMode, mcpFilterText, importing,
 } = storeToRefs(pb)
@@ -109,7 +109,8 @@ const counts = computed(() => ({
 const totalSelected = computed(() =>
   counts.value.llm + counts.value.mcp + counts.value.skill + counts.value.key
   + counts.value.agent + counts.value.rule + counts.value.cmd
-  + (hooksEnabled.value ? 1 : 0),
+  + (hooksEnabled.value ? 1 : 0)
+  + (memoryEnabled.value ? 1 : 0),
 )
 
 const filledLayers = computed(() =>
@@ -117,8 +118,8 @@ const filledLayers = computed(() =>
 )
 
 const completeness = computed(() => {
-  const filled = filledLayers.value + (hooksEnabled.value ? 1 : 0)
-  return Math.round((filled / 7) * 100)
+  const filled = filledLayers.value + (hooksEnabled.value ? 1 : 0) + (memoryEnabled.value ? 1 : 0)
+  return Math.round((filled / 8) * 100)
 })
 
 const canGenerate = computed(() => completeness.value >= 70 && !!pluginForm.value.name.trim())
@@ -452,6 +453,7 @@ onMounted(() => {
         <span class="pb-chip" :class="{ has: counts.rule }">Rule {{ counts.rule }}</span>
         <span class="pb-chip" :class="{ has: counts.cmd }">Cmd {{ counts.cmd }}</span>
         <span v-if="hooksEnabled" class="pb-chip on">Hooks</span>
+        <span v-if="memoryEnabled" class="pb-chip on">记忆</span>
         <span class="pb-chip-meta" :title="`已填充类型 ${filledLayers}/6 · 装箱完整度 ${completeness}%`">
           {{ filledLayers }}/6 · {{ completeness }}%
         </span>
@@ -856,6 +858,11 @@ onMounted(() => {
             <span>打包 Hooks 配置</span>
             <span class="hook-meta">hooks.json</span>
           </label>
+          <label class="pb-hooks" :class="{ on: memoryEnabled }">
+            <input v-model="memoryEnabled" type="checkbox">
+            <span>打包记忆配置</span>
+            <span class="hook-meta">memory.json</span>
+          </label>
         </div>
 
         <div class="pb-manifest-foot">
@@ -1063,6 +1070,10 @@ onMounted(() => {
           <label class="pb-hooks" :class="{ on: hooksEnabled }">
             <input v-model="hooksEnabled" type="checkbox">
             <span>打包 Hooks 配置（config/hooks/hooks.json）</span>
+          </label>
+          <label class="pb-hooks" :class="{ on: memoryEnabled }">
+            <input v-model="memoryEnabled" type="checkbox">
+            <span>打包记忆配置（config/memory/memory.json）</span>
           </label>
         </div>
 

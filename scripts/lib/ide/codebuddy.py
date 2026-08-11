@@ -18,6 +18,19 @@ from lib.llm import load_split_env_config
 from .base import IdeTarget
 
 
+def _completions_url(base_url: str, protocol_name: str) -> str:
+    """CodeBuddy/WorkBuddy 官方要求 url 为完整端点（以 /chat/completions 结尾）。
+
+    - OpenAI 兼容协议：base_url 若不以 /chat/completions 结尾则补全
+    - anthropic 协议：保留 base_url 原样
+    """
+    if protocol_name in ("openaiv1", "openai", "responses"):
+        if base_url.endswith("/chat/completions"):
+            return base_url
+        return base_url.rstrip("/") + "/chat/completions"
+    return base_url
+
+
 def generate_codebuddy_models(env_config: dict | None, target_file: Path, force: bool,
                               ide_protocols: list[str] | None = None) -> None:
     """从 llm.yaml 的 llm 配置生成 ~/.codebuddy/models.json（CodeBuddy 官方格式）。
@@ -90,7 +103,7 @@ def generate_codebuddy_models(env_config: dict | None, target_file: Path, force:
                     "name": model_name,
                     "vendor": provider_name,
                     "apiKey": api_key,
-                    "url": base_url,
+                    "url": _completions_url(base_url, protocol_name),
                 })
 
     target_file.parent.mkdir(parents=True, exist_ok=True)

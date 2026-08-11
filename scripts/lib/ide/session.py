@@ -771,6 +771,7 @@ IDE_SESSION_SCANNERS = {
     "Claude": scan_claude_sessions,
     "Codex": scan_codex_sessions,
     "Cursor": scan_cursor_sessions,
+    "CodeBuddy": lambda d, k="CodeBuddy": scan_generic_sessions(d, k),
     "KimiCLI": lambda d, k="KimiCLI": scan_kimi_sessions(d, k),
     "KimiCode": scan_kimi_sessions,
     "WorkBuddy": lambda d, k="WorkBuddy": scan_generic_sessions(d, k),
@@ -823,6 +824,7 @@ IDE_RESUME_COMMANDS = {
     "Qoder": "{exe} -r {session_id}",                         # qodercli -r <id>      (docs.qoder.com)
     "QoderCN": "{exe} -r {session_id}",                       # qoderclicn -r <id>    (help.aliyun.com)
     "WorkBuddy": "{exe} --resume {session_id}",               # codebuddy --resume <id>  (codebuddy.ai/docs)
+    "CodeBuddy": "{exe} --resume {session_id}",               # codebuddy --resume <id>  (codebuddy.cn/docs/cli/headless)
     "TraeCN": "{exe} --resume {session_id}",                  # traecli --resume <id> (docs.trae.cn)
 }
 

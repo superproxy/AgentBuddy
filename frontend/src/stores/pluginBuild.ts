@@ -41,6 +41,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   const selectedCommands = ref<string[]>([])
   const selectedKeys = ref<string[]>([])
   const hooksEnabled = ref(false)
+  const memoryEnabled = ref(false)
   // 源数据
   const availableSubagents = ref<any[]>([])
   const availableRules = ref<any[]>([])
@@ -96,6 +97,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     selectedSubagents.value = []; selectedRules.value = []; selectedCommands.value = []
     selectedKeys.value = []
     hooksEnabled.value = false
+    memoryEnabled.value = false
     wizardStep.value = 0
   }
   /** 加载 Subagent / Rules / Commands 源数据（并行） */
@@ -183,6 +185,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     selectedCommands.value = [...(d.commands || [])]
     selectedKeys.value = [...(d.keys || [])]
     hooksEnabled.value = !!d.hooks
+    memoryEnabled.value = !!d.memory
     // 保留标准元数据字段（load → edit → save 不丢失）
     const metaKeys = ['license', 'keywords', 'categories', 'homepage', 'repository', 'icon',
                       'defaultEnabled', 'dependencies', 'userConfig', 'interface', 'apps', 'channels']
@@ -225,6 +228,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       commands: selectedCommands.value,
       keys: selectedKeys.value,
       hooks: hooksEnabled.value,
+      memory: memoryEnabled.value,
       scripts: pluginForm.install_script.trim() ? { install: pluginForm.install_script.trim() } : {},
     }
   }
@@ -255,7 +259,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
 
   return {
     pluginForm, selectedSkills, selectedMcp, selectedLlm,
-    selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled,
+    selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
     availableSubagents, availableRules, availableCommands,
     ideImport, ideImportStats, importedIdeMcp, importedIdeSkills, wizardStep, buildMode, mcpFilterText, importing,
     toggleSkill, toggleMcp, toggleLlm, toggleSubagent, toggleRule, toggleCommand, toggleKey,

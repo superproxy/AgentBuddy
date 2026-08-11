@@ -248,6 +248,11 @@ HOOKS_DIR = PROJECT_ROOT / "config" / "hooks"
 HOOKS_FILE = HOOKS_DIR / "hooks.json"
 HOOKS_TEMPLATE_DIR = PROJECT_ROOT / "template" / "hooks"
 HOOKS_EXAMPLE = HOOKS_TEMPLATE_DIR / "hooks.json"
+# Memory：config/memory/memory.json（用户编辑）+ template/memory/memory.json（模板）
+MEMORY_DIR = PROJECT_ROOT / "config" / "memory"
+MEMORY_FILE = MEMORY_DIR / "memory.json"
+MEMORY_TEMPLATE_DIR = PROJECT_ROOT / "template" / "memory"
+MEMORY_EXAMPLE = MEMORY_TEMPLATE_DIR / "memory.json"
 # 自建市场：config/marketplace/（索引 + zip 包）
 MARKETPLACE_DIR = PROJECT_ROOT / "config" / "marketplace"
 MARKETPLACE_PACKAGES_DIR = MARKETPLACE_DIR / "packages"
@@ -284,6 +289,7 @@ def _ensure_config_dirs() -> None:
         PROJECT_ROOT / "config" / "subagent",
         PROJECT_ROOT / "config" / "rules",
         PROJECT_ROOT / "config" / "hooks",
+        PROJECT_ROOT / "config" / "memory",
         PROJECT_ROOT / "config" / "ide",
         PROJECT_ROOT / "config" / "ide" / "claude",
         PROJECT_ROOT / "config" / "ide" / "codex",
@@ -3104,6 +3110,20 @@ def _collect_plugin_hooks(cfg: dict) -> Path | None:
     return None
 
 
+def _collect_plugin_memory(cfg: dict) -> Path | None:
+    """如果 plugin 声明了 memory=true，返回 memory.json 路径。"""
+    memory_flag = cfg.get("memory")
+    if not memory_flag:
+        return None
+    try:
+        path = _ensure_memory_file()
+        if path.exists():
+            return path
+    except Exception:
+        pass
+    return None
+
+
 def _rewrite_plugin_for_file_export(cfg: dict, extras: set[str] | None) -> dict:
     """导出 zip 时重写 plugin.yaml：把内联 mcpServers/llm 改为文件引用。
 
@@ -3139,7 +3159,7 @@ def _rewrite_plugin_for_file_export(cfg: dict, extras: set[str] | None) -> dict:
 
 def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | None = None,
                              key_mode: str = "plain", extras: set[str] | None = None) -> None:
-    """将 plugin 关联的 llm/subagents/rules/commands/hooks 打包到 zip。
+    """将 plugin 关联的 llm/subagents/rules/commands/hooks/memory 打包到 zip。
 
     Args:
         seen: 多插件导出时传入的去重集合，避免 llm.yaml / subagents.yaml 等
@@ -3148,7 +3168,7 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
           - plain: 原样导出 llm.yaml（含 api_key），不导出 keys.yaml
           - vault: 明文替换为 ${KEY} 引用 + keys.yaml（含被引用密钥的明文值）
           - redacted: 脱敏 llm.yaml（api_key 置空）+ keys.yaml（仅结构与描述）
-        extras: 选择性导出哪些配置文件，集合元素为 'llm'/'mcp'/'subagents'/'rules'/'commands'/'hooks'/'keys'。
+        extras: 选择性导出哪些配置文件，集合元素为 'llm'/'mcp'/'subagents'/'rules'/'commands'/'hooks'/'memory'/'keys'。
                 None 表示全部导出（向后兼容）。
     """
     def _should_write(name: str) -> bool:
@@ -3213,6 +3233,12 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
         hooks_path = _collect_plugin_hooks(cfg)
         if hooks_path and _should_write("hooks/hooks.json"):
             zf.write(hooks_path, arcname="hooks/hooks.json")
+
+    # memory/memory.json
+    if _extra_on("memory"):
+        memory_path = _collect_plugin_memory(cfg)
+        if memory_path and _should_write("memory/memory.json"):
+            zf.write(memory_path, arcname="memory/memory.json")
 
     # 密钥库 keys.yaml：vault / redacted 模式下导出被引用的密钥
     if key_mode in ("vault", "redacted") and _extra_on("keys"):
@@ -3292,6 +3318,7 @@ def save_plugin():
         if k in body:
             config[k] = body[k] if body[k] is not None else ([] if k in ("skills", "llm", "subagents", "rules", "commands", "keys") else {})
     config["hooks"] = bool(body.get("hooks", False))
+    config["memory"] = bool(body.get("memory", False))
     # scripts 对齐 npm 生命周期（install/postinstall/preinstall/preuninstall/uninstall/postuninstall/prepare）
     scripts = body.get("scripts")
     if isinstance(scripts, dict) and scripts:
@@ -3652,6 +3679,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
         rules_entries: list[tuple[str, bytes]] = []  # (rel_path, content)
         commands_content: bytes | None = None
         hooks_content: bytes | None = None
+        memory_content: bytes | None = None
         keys_content: bytes | None = None
 
         for info in zf.infolist():
@@ -3680,6 +3708,8 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 rules_entries.append((rel, zf.read(name)))
             elif name == "hooks/hooks.json":
                 hooks_content = zf.read(name)
+            elif name == "memory/memory.json":
+                memory_content = zf.read(name)
             elif name in ("keys/keys.yaml", "keys.yaml"):
                 keys_content = zf.read(name)
 
@@ -3857,6 +3887,15 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 imported_extras.append("hooks/hooks.json")
             except Exception as e:
                 skipped.append({"file": "hooks/hooks.json", "reason": str(e)})
+
+        # 导入 memory/memory.json → config/memory/memory.json
+        if memory_content:
+            try:
+                memory_path = _ensure_memory_file()
+                memory_path.write_bytes(memory_content)
+                imported_extras.append("memory/memory.json")
+            except Exception as e:
+                skipped.append({"file": "memory/memory.json", "reason": str(e)})
 
         # 导入 keys.yaml → 合并到 config/keys.yaml（不覆盖已有值）
         # 兼容两种格式：
@@ -5613,6 +5652,118 @@ def import_hooks():
         return jsonify({"ok": False, "error": "JSON 顶层应为 dict"}), 400
     try:
         path = _ensure_hooks_file()
+        save_env_config_file(path, data)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ============================================================
+# Memory API（config/memory/memory.json 单文件，JSON 格式）
+# ============================================================
+def _ensure_memory_file() -> Path:
+    """确保 config/memory/memory.json 存在，不存在则从模板复制。"""
+    if MEMORY_FILE.exists():
+        return MEMORY_FILE
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    if MEMORY_EXAMPLE.exists():
+        import shutil
+        shutil.copy2(MEMORY_EXAMPLE, MEMORY_FILE)
+    else:
+        MEMORY_FILE.write_text(
+            json.dumps({"description": "AgentBuddy Memory 配置", "memories": []}, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    return MEMORY_FILE
+
+
+@app.route("/api/memory", methods=["GET"])
+def get_memory():
+    """获取 memory.json 配置。"""
+    path = _ensure_memory_file()
+    try:
+        data = load_env_config_file(path)
+        return jsonify({"ok": True, "data": data, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/memory", methods=["POST"])
+def save_memory():
+    """保存 memory.json 配置。Body: {data: {...}}"""
+    body = request.get_json(force=True)
+    data = body.get("data")
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "data 必须是对象"}), 400
+    try:
+        path = _ensure_memory_file()
+        save_env_config_file(path, data)
+        return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/memory/sync", methods=["POST"])
+def sync_memory():
+    """同步 memory.json 到各 IDE 的记忆目录。
+
+    各 IDE 目标：
+    - TraeCN: ~/.trae-cn/memory/memory.json
+    - ZCode: ~/.zcode/memory/memory.json
+    - OpenCode: ~/.config/opencode/memory/memory.json
+    - Claude: .claude/memory/memory.json
+    - Cursor: .cursor/memory/memory.json
+    - CodeBuddy: .codebuddy/memory/memory.json
+    """
+    from pathlib import Path as _Path
+    import shutil
+    try:
+        path = _ensure_memory_file()
+        # 各 IDE 的 memory 目录
+        targets = [
+            ("TraeCN", _Path.home() / ".trae-cn" / "memory"),
+            ("ZCode", _Path.home() / ".zcode" / "memory"),
+            ("OpenCode", _Path.home() / ".config" / "opencode" / "memory"),
+            ("Claude", PROJECT_ROOT / ".claude" / "memory"),
+            ("Cursor", PROJECT_ROOT / ".cursor" / "memory"),
+            ("CodeBuddy", PROJECT_ROOT / ".codebuddy" / "memory"),
+        ]
+        results = {}
+        for ide_name, memory_dir in targets:
+            memory_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(path), str(memory_dir / "memory.json"))
+            results[ide_name] = 1
+        total_ides = len(results)
+        return jsonify({
+            "ok": True,
+            "results": results,
+            "message": f"已同步 memory.json 到 {total_ides} 个 IDE",
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/memory/export", methods=["GET"])
+def export_memory():
+    """导出 memory.json。"""
+    path = _ensure_memory_file()
+    return send_file(path, as_attachment=True, download_name="memory.json",
+                     mimetype="application/json")
+
+
+@app.route("/api/memory/import", methods=["POST"])
+def import_memory():
+    """导入 memory.json。Body: {content: '...'}"""
+    body = request.get_json(force=True)
+    content = body.get("content", "")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as e:
+        return jsonify({"ok": False, "error": f"JSON 解析失败: {e}"}), 400
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "error": "JSON 顶层应为 dict"}), 400
+    try:
+        path = _ensure_memory_file()
         save_env_config_file(path, data)
         return jsonify({"ok": True})
     except Exception as e:

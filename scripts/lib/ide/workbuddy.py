@@ -1,7 +1,13 @@
 """WorkBuddy IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_workbuddy() 和 generate_workbuddy_models()。
-生成 .workbuddy/models.json（从 llm.yaml 展开模型列表）。
+生成 ~/.workbuddy/models.json（从 llm.yaml 展开模型列表）。
+
+WorkBuddy models.json 官方格式（腾讯云文档 product/1749/116119）：
+    {"models": [{"id", "name", "vendor", "apiKey", "url", ...}], "availableModels": [...]}
+- 顶层必须是 {"models": [...]} 对象，而非裸数组
+- url 必须是完整端点，以 /chat/completions 结尾（OpenAI 兼容协议）
+- 配置文件位于用户级目录 ~/.workbuddy/（macOS/Linux）
 """
 import json
 from pathlib import Path
@@ -13,16 +19,32 @@ from lib.llm import load_split_env_config
 from .base import IdeTarget
 
 
+def _completions_url(base_url: str, protocol_name: str) -> str:
+    """WorkBuddy/CodeBuddy 官方要求 url 为完整端点（以 /chat/completions 结尾）。
+
+    - OpenAI 兼容协议：base_url 若不以 /chat/completions 结尾则补全
+      （如 https://api.example.com/v1 → https://api.example.com/v1/chat/completions）
+    - anthropic 协议：保留 base_url 原样（官方 models.json 仅声明 OpenAI 格式，
+      anthropic 端点由 WorkBuddy 内部处理）
+    """
+    if protocol_name in ("openaiv1", "openai", "responses"):
+        if base_url.endswith("/chat/completions"):
+            return base_url
+        return base_url.rstrip("/") + "/chat/completions"
+    return base_url
+
+
 def generate_workbuddy_models(env_config: dict | None, target_file: Path, force: bool,
                               ide_protocols: list[str] | None = None) -> None:
-    """从 llm.yaml 的 llm 配置生成 .workbuddy/models.json (WorkBuddy 模型列表)。
+    """从 llm.yaml 的 llm 配置生成 ~/.workbuddy/models.json (WorkBuddy 模型列表)。
 
-    遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 所需的模型数组。
+    遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 官方格式 {"models": [...]}。
     - 跳过 _ 前缀键（元数据）和 proxy 段
     - 跳过 ~ 前缀 model id（禁用标记）
     - api_key 为空的协议自动剪枝
-    - 同 (model_id, url) 去重
+    - 同一 model_id 去重
     - ide_protocols 指定时只同步这些协议的模型
+    - OpenAI 兼容协议 url 补全 /chat/completions 完整端点
     """
     if not env_config:
         print(f"{COLOR_YELLOW}[!] llm.yaml not found, skip models.json{COLOR_RESET}")
@@ -79,21 +101,26 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
                     model_name = str(model_meta.get("name", "")).strip() or model_id
                 else:
                     model_name = str(model_meta).strip() or model_id
-                models_list.append({
+                model_entry = {
                     "id": model_id,
                     "name": model_name,
                     "vendor": provider_name,
-                    "url": base_url,
                     "apiKey": api_key,
+                    "url": _completions_url(base_url, protocol_name),
                     "supportsToolCall": True,
                     "supportsImages": False,
                     "supportsReasoning": False,
-                    "useCustomProtocol": False,
-                })
+                }
+                if isinstance(model_meta, dict):
+                    for token_key in ("maxInputTokens", "maxOutputTokens"):
+                        token_val = model_meta.get(token_key)
+                        if token_val is not None:
+                            model_entry[token_key] = token_val
+                models_list.append(model_entry)
 
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with open(target_file, "w", encoding="utf-8") as f:
-        json.dump(models_list, f, indent=2, ensure_ascii=False)
+        json.dump({"models": models_list}, f, indent=2, ensure_ascii=False)
         f.write("\n")
     print(f"{COLOR_GREEN}[OK] {target_file} ({len(models_list)} models){COLOR_RESET}")
 
@@ -116,11 +143,11 @@ class WorkBuddyTarget(IdeTarget):
                        ".workbuddy/mcp.json", self.force)
 
     def init_llm(self, source_rules_dirs):
-        # 生成 WorkBuddy 特有的 LLM 模型列表
+        # 生成 WorkBuddy 特有的 LLM 模型列表（用户级 ~/.workbuddy/models.json，与 CodeBuddy 一致）
         first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
         source_dir = first.parent.parent
         env_config = load_split_env_config(source_dir, silent=True)
-        generate_workbuddy_models(env_config, self.root / ".workbuddy" / "models.json",
+        generate_workbuddy_models(env_config, Path.home() / ".workbuddy" / "models.json",
                                   self.force, ide_protocols=self.ide_protocols)
 
     def init_skills(self, source_skills_dir: Path):

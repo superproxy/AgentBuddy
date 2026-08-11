@@ -1,0 +1,40 @@
+{
+  "description": "AgentBuddy Memory 配置 — 注入 AI 对话上下文的持久记忆",
+  "memories": [
+    {
+      "id": "user-profile",
+      "name": "用户身份",
+      "type": "user",
+      "content": "我是全栈开发者，擅长 Python / Vue 3 / TypeScript，偏好简洁可维护的代码风格。",
+      "enabled": true
+    },
+    {
+      "id": "coding-style",
+      "name": "编码风格",
+      "type": "user",
+      "content": "代码风格偏好：TypeScript 前端优先、Python 后端优先、命名使用 camelCase (TS) / snake_case (Python)、注释用中文。",
+      "enabled": true
+    },
+    {
+      "id": "project-tech-stack",
+      "name": "项目技术栈",
+      "type": "project",
+      "content": "当前项目使用 Python Flask + Vue 3 + Vite + Pinia，桌面版通过 pywebview 打包。",
+      "enabled": true
+    },
+    {
+      "id": "project-conventions",
+      "name": "项目约定",
+      "type": "project",
+      "content": "修改代码前先理解现有文件，使用 replace_in_file 而非重写大文件，生成代码后可立即运行。",
+      "enabled": true
+    },
+    {
+      "id": "language-preference",
+      "name": "语言偏好",
+      "type": "user",
+      "content": "使用中文回复，代码变量名使用英文。",
+      "enabled": true
+    }
+  ]
+}

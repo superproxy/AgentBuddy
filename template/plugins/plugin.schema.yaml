@@ -12,14 +12,14 @@
 #      - interface{displayName,shortDescription,longDescription,developerName,category,capabilities,
 #         websiteURL,privacyPolicyURL,termsOfServiceURL,defaultPrompt,brandColor,composerIcon,logo,logoDark,screenshots}
 #      - apps/mcpServers(string|object)/skills(string)/hooks(string)
-#   3. AgentBuddy 扩展（多 IDE 同步能力）：llm/subagents/rules/commands/envVars/scripts(npm lifecycle)
+#   3. AgentBuddy 扩展（多 IDE 同步能力）：llm/subagents/rules/commands/hooks/memory/envVars/scripts(npm lifecycle)
 $schema: http://json-schema.org/draft-07/schema#
 title: Plugin Configuration
 description: |
   通用插件配置格式（元清单）。
   对齐 Claude Code `.claude-plugin/plugin.json` 与 Codex CLI `.codex-plugin/plugin.json`
   的标准字段（name/version/description/author/license/keywords/homepage/repository/icon/categories），
-  扩展字段（llm/subagents/rules/commands/hooks/envVars）为 AgentBuddy 多 IDE 同步能力。
+  扩展字段（llm/subagents/rules/commands/hooks/memory/envVars）为 AgentBuddy 多 IDE 同步能力。
   scripts 字段对齐 npm 生命周期（preinstall/install/postinstall/preuninstall/uninstall/postuninstall/prepare）。
   Claude Code 会忽略未识别字段，因此 AgentBuddy 扩展字段在跨 IDE 导出时安全。
 type: object
@@ -261,6 +261,18 @@ properties:
             type: array
             description: 启用的 hook 事件类型（如 SessionStart, PreToolUse, PostToolUse 等）
             items: { type: string }
+        additionalProperties: true
+  memory:
+    description: |
+      Memory 配置（AgentBuddy 扩展，注入 AI 对话上下文的持久记忆）。
+      - false（简写，表示不启用）
+      - true（简写，表示启用，使用插件 config/memory/memory.json）
+      - 对象（详细配置）
+    oneOf:
+      - type: boolean
+      - type: object
+        properties:
+          enabled: { type: boolean, description: 是否启用 memory }
         additionalProperties: true
 
   # ============================================================

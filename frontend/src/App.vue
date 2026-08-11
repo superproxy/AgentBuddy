@@ -17,6 +17,7 @@ import PluginView from './views/PluginView.vue'
 import PluginBuildView from './views/PluginBuildView.vue'
 import RulesView from './views/RulesView.vue'
 import HooksView from './views/HooksView.vue'
+import MemoryView from './views/MemoryView.vue'
 import MarketplaceView from './views/MarketplaceView.vue'
 import TerminalView from './views/TerminalView.vue'
 import { useIdeStore } from './stores/ide'
@@ -56,6 +57,7 @@ const tabs: TabGroup[] = [
       { key: 'subagent', label: 'Subagent' },
       { key: 'rules', label: 'Rules' },
       { key: 'hooks', label: 'Hooks' },
+      { key: 'memory', label: '记忆' },
     ],
   },
   { group: 'tools', label: '工具', items: [{ key: 'terminal', label: '终端测试' }] },
@@ -97,6 +99,7 @@ onBeforeUnmount(() => {})
       <PluginBuildView v-else-if="tab === 'plugin-build'" />
       <RulesView v-else-if="tab === 'rules'" />
       <HooksView v-else-if="tab === 'hooks'" />
+      <MemoryView v-else-if="tab === 'memory'" />
       <MarketplaceView v-else-if="tab === 'marketplace'" />
       <TerminalView v-else-if="tab === 'terminal'" />
     </main>

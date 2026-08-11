@@ -11,6 +11,7 @@ Cherry Studio 是一个 AI 桌面客户端（支持多模型、MCP、Skills）�
      写入 agents.db 的 skills 表（folder_name 唯一，UPSERT）
 """
 import hashlib
+import json
 import os
 import re
 import sqlite3
@@ -121,8 +122,73 @@ class CherryStudioTarget(IdeTarget):
         pass
 
     def init_llm(self, source_rules_dirs):
-        # Cherry Studio 模型服务商由 GUI 管理，跳过
-        pass
+        """同步 LLM 配置到 Cherry Studio。
+
+        Cherry Studio 的模型服务商由 GUI 管理（provider 存于 IndexedDB，无法文件级注入），
+        因此这里从 config/llm/llm.yaml 读取 provider/protocol/model，
+        生成一个 Cherry Studio 可导入的 provider JSON（config/ide/cherrystudio/providers.json），
+        并给出导入指引。
+        """
+        from lib.config_io import load_env_config_file
+        first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
+        project_root = first.parent.parent
+        llm_yaml = project_root / "config" / "llm" / "llm.yaml"
+        if not llm_yaml.exists():
+            return
+        try:
+            llm_data = load_env_config_file(llm_yaml)
+        except Exception:
+            return
+        llm = llm_data.get("llm", {}) if isinstance(llm_data, dict) else {}
+
+        providers = []
+        for provider_name, provider_value in llm.items():
+            if provider_name.startswith("_") or provider_name == "proxy":
+                continue
+            if not isinstance(provider_value, dict):
+                continue
+            for protocol, cfg in provider_value.items():
+                if not isinstance(cfg, dict) or protocol.startswith("_"):
+                    continue
+                # 兼容旧协议名 openai → openaiv1（与 llm.flatten_env_config 一致）
+                proto_key = "openaiv1" if protocol == "openai" else protocol
+                if self.ide_protocols is not None and proto_key not in self.ide_protocols:
+                    continue
+                api_key = cfg.get("api_key", "") or ""
+                if not api_key:
+                    continue
+                pid = f"custom-{provider_name}-{protocol}"
+                # Cherry Studio Provider 结构：type 决定兼容协议
+                ptype = "anthropic" if protocol == "anthropic" else "openai"
+                models = []
+                for model_id, model_cfg in (cfg.get("models") or {}).items():
+                    m_name = (model_cfg.get("name") if isinstance(model_cfg, dict) else None) or model_id
+                    models.append({
+                        "id": model_id,
+                        "name": m_name,
+                        "type": "text",
+                    })
+                providers.append({
+                    "id": pid,
+                    "name": f"{provider_name} ({protocol})",
+                    "type": ptype,
+                    "apiKey": api_key,
+                    "baseUrl": cfg.get("base_url", ""),
+                    "models": models,
+                    "enabled": provider_value.get("_enabled", False) or provider_name == "openrouter",
+                })
+        if not providers:
+            return
+
+        out_path = project_root / "config" / "ide" / "cherrystudio" / "providers.json"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(providers, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        rel = out_path.relative_to(project_root)
+        print(f"{COLOR_GREEN}[OK] Cherry Studio providers.json 已生成: {rel} ({len(providers)} providers){COLOR_RESET}")
+        print(f"{COLOR_YELLOW}   Cherry Studio 模型服务商由 GUI 管理，请手动导入:")
+        print(f"   设置 → 模型服务商 → 添加自定义服务商 → 导入 providers.json{COLOR_RESET}")
 
     def init_skills(self, source_skills_dir: Path):
         data_dir = cherry_data_dir()

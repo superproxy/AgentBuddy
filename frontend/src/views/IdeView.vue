@@ -568,7 +568,8 @@ watch(
                     </div>
                     <span v-if="sessionCount(it)" class="badge">{{ sessionCount(it) }}</span>
                   </div>
-                  <div class="label" :title="it.label + ' ' + formLabel(fg.form)">{{ it.label }} {{ formLabel(fg.form) }}</div>
+                  <div class="label" :title="it.label">{{ it.label }}</div>
+                  <div v-if="fg.form" class="form-tag" :title="formLabel(fg.form)">{{ formLabel(fg.form) }}</div>
                 </div>
               </div>
             </template>
@@ -586,7 +587,7 @@ watch(
     <Transition name="dock">
       <div v-if="currentSelectedIde" class="dock" @click.stop>
         <div class="dock-title">
-          <span class="dock-name">{{ currentSelectedIde.label }}</span>
+          <span class="dock-name" :title="currentSelectedIde.label">{{ currentSelectedIde.label }}</span>
           <span v-if="ideType(currentSelectedIde)" :class="['type-tag', ideType(currentSelectedIde)]">{{ typeLabel(currentSelectedIde) }}</span>
         </div>
 
@@ -1037,9 +1038,12 @@ watch(
   color: var(--text-primary);
   line-height: 1.3;
   max-width: 110px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 .sublabel {
   font-size: 10px;
@@ -1048,6 +1052,25 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.form-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-tertiary);
+  background: var(--bg-soft);
+  border: 1px solid var(--border-base);
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-top: 2px;
+  max-width: 88px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sublabel .dot {
   width: 3px;

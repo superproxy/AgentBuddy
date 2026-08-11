@@ -83,3 +83,17 @@ template/plugins/Plugin.plugin.yaml
 .zcode/
 # .workbuddy 运行态目录（含 mcp.json / models.json 等，由应用运行时生成）
 .workbuddy/
+# 各 IDE 运行时 skills 缓存目录（npx skills add 安装，与 /skills/ 同类）
+.codebuddy/
+.continue/
+.junie/
+.lingma/
+.pi/
+.windsurf/
+
+# 服务端运行态数据（SQLite 数据库等，由运行时生成）
+server/data/
+
+# 设计预览 mockup（仅本地参考，不发布）
+frontend/aide-redesign-mockup.html
+frontend/menu-mockup.html

@@ -9,6 +9,7 @@ from .base import IdeTarget, DEFAULT_SCOPE, get_ide_user_dir
 from .cursor import CursorTarget
 from .codex import CodexTarget
 from .opencode import OpenCodeTarget
+from .openworker import OpenWorkerTarget
 from .trae import TraeTarget, TraeCNTarget, TraeSoloCNTarget
 from .cherrystudio import CherryStudioTarget
 from .claude import ClaudeTarget
@@ -42,6 +43,7 @@ IDE_REGISTRY = {
     "KimiWork": KimiWorkTarget,
     "OpenClaw": OpenClawTarget,
     "OpenCode": OpenCodeTarget,
+    "OpenWorker": OpenWorkerTarget,
     "Pi": PiTarget,
     "Qoder": QoderTarget,
     "QoderCN": QoderCNTarget,
