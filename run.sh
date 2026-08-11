@@ -11,13 +11,27 @@ cd "$(dirname "$0")"
 VENV_DIR=".venv"
 VENV_PY="$VENV_DIR/bin/python"
 
+# 校验虚拟环境 Python 是否真实可用（软链可能指向已卸载的解释器导致断链）
+venv_python_works() {
+    [ -x "$VENV_PY" ] && "$VENV_PY" -V >/dev/null 2>&1
+}
+
 # 优先使用项目虚拟环境 .venv（避免 Homebrew Python 的 externally-managed 限制）
-if [ -x "$VENV_PY" ]; then
+if venv_python_works; then
     PY="$VENV_PY"
 elif command -v python3 >/dev/null 2>&1; then
-    echo "[INFO] 未找到 .venv，正在创建虚拟环境..."
+    if [ -d "$VENV_DIR" ] && [ ! -x "$VENV_PY" ]; then
+        echo "[INFO] 检测到 .venv 损坏（python 断链），正在重建虚拟环境..."
+        rm -rf "$VENV_DIR"
+    else
+        echo "[INFO] 未找到 .venv，正在创建虚拟环境..."
+    fi
     python3 -m venv "$VENV_DIR"
     PY="$VENV_PY"
+    if ! venv_python_works; then
+        echo "[ERROR] 虚拟环境创建后仍不可用，请检查 Python 3.13+ 安装"
+        exit 1
+    fi
 elif command -v python >/dev/null 2>&1; then
     PY=python
 else
