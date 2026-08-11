@@ -40,6 +40,7 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
 
     遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 官方格式 {"models": [...]}。
     - 跳过 _ 前缀键（元数据）和 proxy 段
+    - 跳过 _enabled === false 的 provider（未启用）
     - 跳过 ~ 前缀 model id（禁用标记）
     - api_key 为空的协议自动剪枝
     - 同一 model_id 去重
@@ -71,6 +72,9 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
     for provider_name in providers_order:
         provider_value = llm_section[provider_name]
         if not isinstance(provider_value, dict):
+            continue
+        # 跳过被禁用的 provider（_enabled === false），与 flatten_env_config 保持一致
+        if provider_value.get("_enabled") is False:
             continue
         protocol_items = sorted(
             (p for p in provider_value.items()

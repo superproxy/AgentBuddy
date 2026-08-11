@@ -27,7 +27,12 @@ class OpenCodeTarget(IdeTarget):
         for src in srcs:
             copy_dir_safe(src, oc_rules_dir, "~/.config/opencode/rules/", self.force)
 
-    def init_mcp(self, source_mcp_file: Path):
+    def _sync_opencode_config(self, source_mcp_file: Path):
+        """同步 opencode.json 到 ~/.config/opencode/。
+
+        opencode.json 同时承载 MCP（mcpServers）与 LLM（provider/models）配置，
+        因此 mcp 和 llm 两个 scope 都触发本方法。
+        """
         # 优先从 config/ide/opencode/opencode.json 复制（由 generate 生成）
         source_dir = self.root
         generated = source_dir / "config" / "ide" / "opencode" / "opencode.json"
@@ -47,9 +52,14 @@ class OpenCodeTarget(IdeTarget):
                                     self.force, opencode_template, env_config,
                                     ide_protocols=self.ide_protocols)
 
+    def init_mcp(self, source_mcp_file: Path):
+        self._sync_opencode_config(source_mcp_file)
+
     def init_llm(self, source_rules_dir: Path):
-        # OpenCode 的 LLM 配置已在 init_mcp 中合并生成（opencode.json 含 models）
-        pass
+        # OpenCode 的 LLM 配置（provider/models）在 opencode.json 中，
+        # llm scope 同步时必须重新同步该文件，否则 LLM 配置不生效
+        source_mcp_file = self.root / "config" / "mcp" / "mcp.json"
+        self._sync_opencode_config(source_mcp_file)
 
     def init_skills(self, source_skills_dir: Path):
         opencode_skills_dir = Path.home() / ".config" / "opencode" / "skills"

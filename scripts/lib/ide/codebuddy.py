@@ -70,6 +70,9 @@ def generate_codebuddy_models(env_config: dict | None, target_file: Path, force:
         provider_value = llm_section[provider_name]
         if not isinstance(provider_value, dict):
             continue
+        # 跳过被禁用的 provider（_enabled === false），与 flatten_env_config 保持一致
+        if provider_value.get("_enabled") is False:
+            continue
         protocol_items = sorted(
             (p for p in provider_value.items()
              if not p[0].startswith("_") and isinstance(p[1], dict)),

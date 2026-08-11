@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { onMounted, computed, ref, reactive, watch } from 'vue'
+import { onMounted, onUnmounted, computed, ref, reactive, watch } from 'vue'
 import { useIdeStore } from '../stores/ide'
 import { useSyncStore } from '../stores/sync'
 import { useUiStore } from '../stores/ui'
@@ -29,6 +29,8 @@ const activeBrandChip = ref<string>('all')
 // 常用品牌排序复用 brandOrder store（常用区 + 更多区 + 后端持久化）
 const DEFAULT_BRAND_COUNT = 5
 const showMoreBrands = ref(false)
+// 更多下拉面板容器（用于点击外部关闭）
+const brandMoreWrap = ref<HTMLElement | null>(null)
 
 // 品牌拖拽状态
 const draggingBrand = ref<string | null>(null)
@@ -104,6 +106,16 @@ const visibleBrandChips = computed(() => {
 const addToFavorite = (brand: string) => {
   if (!brandOrder.favoriteKeys.includes(brand)) {
     brandOrder.moveToFavorites(brand)
+  }
+  showMoreBrands.value = false
+}
+
+// 点击更多下拉外部时关闭
+function onGlobalClick(e: MouseEvent) {
+  if (!showMoreBrands.value) return
+  const el = brandMoreWrap.value
+  if (el && !el.contains(e.target as Node)) {
+    showMoreBrands.value = false
   }
 }
 
@@ -417,9 +429,14 @@ const currentSelectedIde = computed(() => {
 
 // 进入 AIDE 管理页时自动检测（首次无数据才检测，避免重复请求）
 onMounted(async () => {
+  window.addEventListener('click', onGlobalClick)
   if (!ide.ideDetects.length) await loadIdeDetect()
   // 初始化常用品牌（默认前 N 个）
   initFavoriteBrands()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', onGlobalClick)
 })
 
 // brandGroups 异步加载完成后，如果常用品牌未初始化，自动初始化
@@ -482,7 +499,7 @@ watch(
           </button>
 
           <!-- 更多收起区 -->
-          <div v-if="moreBrands.length > 0" class="brand-more-wrap">
+          <div v-if="moreBrands.length > 0" ref="brandMoreWrap" class="brand-more-wrap">
             <button
               type="button"
               :class="['brand-chip brand-more-trigger', { 'brand-more-open': showMoreBrands, 'is-active': moreBrands.includes(activeBrandChip) }]"

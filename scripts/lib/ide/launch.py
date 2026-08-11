@@ -16,7 +16,9 @@ import os
 import shlex
 import subprocess
 import sys
+import threading
 import time
+import webbrowser
 from pathlib import Path
 
 from .detect import detect_ide, IDE_DETECT_META
@@ -190,6 +192,21 @@ def _launch_cli_in_terminal(exe_path: str, args: list[str], cwd: str = "",
         }
     except Exception as e:
         return {"ok": False, "pid": 0, "cmd": " ".join(full_cmd), "error": str(e)}
+
+
+def _open_browser(url: str, delay: float = 3.0) -> None:
+    """延迟打开默认浏览器访问指定 URL（不阻塞启动流程）。
+
+    Web 服务进程刚启动时端口可能未就绪，延迟数秒再打开浏览器避免 404。
+    """
+    def _open():
+        try:
+            webbrowser.open(url, new=2)
+            _log(f"open_browser: opened {url}")
+        except Exception as e:
+            _log(f"open_browser({url}) error: {e}")
+
+    threading.Timer(delay, _open).start()
 
 
 def _launch_macos_app(app_path: str, cwd: str = "") -> dict:
@@ -371,6 +388,9 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                 "error": f"IDE {ide_key} 无 Web 服务命令配置",
                 "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none",
             }
+        # 服务启动后自动打开浏览器（web_install.port 指定本地端口）
+        port = web_install.get("port")
+        browser_url = f"http://localhost:{int(port)}" if port else ""
         # 判断 web 命令是否以 IDE 的 cli_name 开头（如 opencode web）。
         # 匹配：用检测到的 exe_path + 剩余子命令启动；不匹配（如 Codex 的 npx codexapp 独立命令）：
         # 整体在 shell 中运行 web_cmd，避免错误拼接成 "codex npx codexapp"。
@@ -383,6 +403,8 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                 title=f"{meta.get('label', ide_key)} Web - {cwd or 'Home'}",
             )
             result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "web"})
+            if result.get("ok") and browser_url:
+                _open_browser(browser_url)
             return result
         # 独立命令（npx codexapp 等）或无 exe_path：在 shell 中运行整个 web_cmd
         try:
@@ -396,6 +418,8 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                     web_cmd, cwd=cwd or None, shell=True,
                     start_new_session=True,
                 )
+            if browser_url:
+                _open_browser(browser_url)
             return {"ok": True, "pid": proc.pid, "cmd": web_cmd, "error": "",
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "web"}
         except Exception as e:

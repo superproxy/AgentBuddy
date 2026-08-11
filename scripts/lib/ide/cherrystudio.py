@@ -147,6 +147,9 @@ class CherryStudioTarget(IdeTarget):
                 continue
             if not isinstance(provider_value, dict):
                 continue
+            # 跳过被禁用的 provider（_enabled === false），与 flatten_env_config 保持一致
+            if provider_value.get("_enabled") is False:
+                continue
             for protocol, cfg in provider_value.items():
                 if not isinstance(cfg, dict) or protocol.startswith("_"):
                     continue
