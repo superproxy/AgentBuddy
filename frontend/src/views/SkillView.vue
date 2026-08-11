@@ -107,12 +107,34 @@ async function copyExport() {
     ui.toast('已复制到剪贴板')
   } catch { /* fallback */ }
 }
-function downloadExport() {
+async function downloadExport() {
+  const filename = 'skills.json'
+  const pw = (window as any).pywebview
+  if (pw?.api?.save_file) {
+    // pywebview 桌面模式：走 JS-Python 桥接弹原生保存对话框（pywebview 不处理附件下载）
+    try {
+      const blob = new Blob([exportJson.value], { type: 'application/json;charset=utf-8' })
+      const b64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      const raw = await pw.api.save_file(filename, b64)
+      const res = raw?.result ?? raw
+      if (res?.ok) ui.toast(`已保存到: ${res.path}`)
+      else if (res?.error !== 'cancelled') ui.toast('导出失败: ' + (res?.error || JSON.stringify(raw)), 'err')
+    } catch (e: any) {
+      ui.toast('导出失败: ' + (e?.message || e), 'err')
+    }
+    return
+  }
+  // 浏览器模式：用 a 标签触发下载
   const blob = new Blob([exportJson.value], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'skills.json'
+  a.download = filename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)

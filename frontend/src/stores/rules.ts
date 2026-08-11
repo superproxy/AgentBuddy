@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
+import { downloadFile } from '../api/download'
 import { useUiStore } from './ui'
 
 export interface RuleItem {
@@ -281,8 +282,10 @@ export const useRulesStore = defineStore('rules', () => {
     else ui.toast('同步失败: ' + (r.error || ''), 'err')
   }
 
-  function exportRules() {
-    window.location.href = '/api/rules/export'
+  async function exportRules() {
+    const ok = await downloadFile('/api/rules/export', 'rules-export.zip')
+    if (ok) ui.toast('rules 已导出')
+    else ui.toast('导出失败或已取消', 'err')
   }
 
   async function importRules(e: Event) {

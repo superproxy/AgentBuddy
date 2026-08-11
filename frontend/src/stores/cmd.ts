@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import { api } from '../api/client'
+import { downloadFile } from '../api/download'
 import { useUiStore } from './ui'
 
 export interface CmdItem {
@@ -24,7 +25,11 @@ export const useCmdStore = defineStore('cmd', () => {
   }
   function addCmd() { cmdData.commands.unshift({ name: '', description: '', prompt: '' }) }
   function deleteCmd(idx: number) { cmdData.commands.splice(idx, 1) }
-  function exportCmd() { window.location.href = '/api/cmd/export' }
+  async function exportCmd() {
+    const ok = await downloadFile('/api/cmd/export', 'cmd.yaml')
+    if (ok) ui.toast('commands 已导出')
+    else ui.toast('导出失败或已取消', 'err')
+  }
   async function importCmd(content: string) {
     const r = await api<{ ok: boolean; error?: string }>('/api/cmd/import', { method: 'POST', body: JSON.stringify({ content }) })
     if (r.ok) { await loadCmd(); ui.toast('导入成功') }

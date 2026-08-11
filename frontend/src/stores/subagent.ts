@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
 import { api } from '../api/client'
+import { downloadFile } from '../api/download'
 import { useUiStore } from './ui'
 
 export interface SubagentItem {
@@ -40,7 +41,11 @@ export const useSubagentStore = defineStore('subagent', () => {
     if (idx < 0 || idx >= subagentData.subagents.length) return
     subagentData.subagents[idx] = { ...item }
   }
-  function exportSubagent() { window.location.href = '/api/subagent/export' }
+  async function exportSubagent() {
+    const ok = await downloadFile('/api/subagent/export', 'subagent.yaml')
+    if (ok) ui.toast('subagent 已导出')
+    else ui.toast('导出失败或已取消', 'err')
+  }
   async function importSubagent(content: string) {
     const r = await api<{ ok: boolean; error?: string }>('/api/subagent/import', { method: 'POST', body: JSON.stringify({ content }) })
     if (r.ok) { await loadSubagent(); ui.toast('导入成功') }

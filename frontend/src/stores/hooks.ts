@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '../api/client'
+import { downloadFile } from '../api/download'
 import { useUiStore } from './ui'
 
 /** Hook 事件类型 */
@@ -156,8 +157,10 @@ export const useHooksStore = defineStore('hooks', () => {
     else ui.toast('同步失败: ' + (r.error || ''), 'err')
   }
 
-  function exportHooks() {
-    window.location.href = '/api/hooks/export'
+  async function exportHooks() {
+    const ok = await downloadFile('/api/hooks/export', 'hooks.json')
+    if (ok) ui.toast('hooks 已导出')
+    else ui.toast('导出失败或已取消', 'err')
   }
 
   async function importHooks(content: string) {
