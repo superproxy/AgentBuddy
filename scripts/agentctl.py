@@ -168,6 +168,11 @@ def cmd_generate(args):
         opencode_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, opencode_template, opencode_output)
         mcp._inject_opencode_models(opencode_output, env_config)
+        # 两维度模型：网关兼容、原生仅直连。
+        # 有具体 active provider 且 gateway 关闭时，生成 opencode 原生双协议 provider
+        # （openai→@ai-sdk/openai, anthropic→@ai-sdk/anthropic，anthropic 不注入 models）
+        llm.inject_opencode_native_providers(opencode_output, env_config,
+                                             active_provider, active_protocols)
 
     # 3. 生成 codex auth.json + config.toml（从模板）→ config/ide/codex/
     # Codex 使用 responses 协议，需要专用 flat_config

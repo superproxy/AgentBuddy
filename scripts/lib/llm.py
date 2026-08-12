@@ -509,6 +509,22 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
             # 确保 LLM_ACTIVE_PROVIDER 在非 gateway 模式下始终设置
             flat.setdefault("LLM_ACTIVE_PROVIDER", active_provider_name)
 
+            # 独立 provider 直连：Claude CLI 需要 ANTHROPIC_MODEL 指向激活默认模型。
+            # 从 provider 的 anthropic 协议模型里取 _active_model（用户选择）或第一条。
+            anthropic_cfg = active_provider_data.get("anthropic")
+            if isinstance(anthropic_cfg, dict):
+                am_models = anthropic_cfg.get("models", {})
+                if isinstance(am_models, dict) and am_models:
+                    am_override = llm.get("_active_model", "") if isinstance(llm, dict) else ""
+                    if am_override and am_override in am_models:
+                        am_default = am_override
+                    else:
+                        suffix = "/" + am_override
+                        matched = [k for k in am_models if k.endswith(suffix)]
+                        am_default = matched[0] if matched else next(iter(am_models))
+                    flat["ANTHROPIC_MODEL"] = am_default
+                    print(f"    {COLOR_GREEN}anthropic models -> ANTHROPIC_MODEL = {am_default}{COLOR_RESET}")
+
             # Codex 使用 responses 协议（兼容旧 codex 协议名）
             responses_protocol = active_provider_data.get("responses") or active_provider_data.get("codex")
             if isinstance(responses_protocol, dict):
@@ -672,6 +688,111 @@ def list_protocols(env_config: dict, provider: str) -> list[str]:
     if not isinstance(provider_cfg, dict):
         return []
     return [k for k in provider_cfg.keys() if not k.startswith("_")]
+
+
+# ============================================================
+# 两维度模型：协议层 + IDE 落点（原生协议能力表）
+# ============================================================
+# 生成时先判断 IDE 是否原生支持某协议：命中则生成该协议的原生结构（原生 SDK），
+# 未命中则回退通用 @ai-sdk/openai-compatible 兼容层。
+# key = IDE 名（与 ide.yaml 的 name 对齐）；value = {协议名: 原生 npm SDK}
+IDE_NATIVE_PROTOCOLS = {
+    "OpenCode": {
+        "openai": "@ai-sdk/openai",
+        "anthropic": "@ai-sdk/anthropic",
+    },
+}
+
+# anthropic 协议特殊：无模型列表。中转站（如 openicu）默认支持其能支持的模型，
+# 因此生成原生 provider 时不为 anthropic 注入 models 段（不写 = 用默认全部）。
+NATIVE_PROTOCOLS_WITHOUT_MODELS = {"anthropic"}
+
+
+def build_native_providers(env_config: dict, active_provider: str,
+                           active_protocols: list[str],
+                           native_map: dict) -> dict:
+    """为 active provider 构建 IDE 原生协议 provider。
+
+    native_map: {协议名: 原生 npm SDK}——只生成 IDE 原生支持的协议。
+    anthropic 协议不注入 models（中转站默认支持全部模型）。
+    返回 {协议名: provider 配置}；active provider 无有效数据时返回空 dict。
+    """
+    providers = {}
+    llm = env_config.get("llm", {})
+    if not isinstance(llm, dict) or not active_provider:
+        return providers
+    provider_cfg = llm.get(active_provider)
+    if not isinstance(provider_cfg, dict):
+        return providers
+
+    for proto, npm in native_map.items():
+        # openai ↔ openaiv1 为同一协议（active_protocols 中已被归一化为 openaiv1）
+        in_active = proto in active_protocols or (
+            proto == "openai" and "openaiv1" in active_protocols
+        )
+        if not in_active:
+            continue
+        pv = provider_cfg.get(proto)
+        if not isinstance(pv, dict):
+            continue
+        base_url = pv.get("base_url")
+        api_key = pv.get("api_key")
+        if not base_url or not api_key:
+            continue
+        entry = {
+            "npm": npm,
+            "options": {"baseURL": base_url, "apiKey": api_key},
+        }
+        # anthropic 无模型列表，不注入 models
+        if proto not in NATIVE_PROTOCOLS_WITHOUT_MODELS:
+            models = pv.get("models")
+            if isinstance(models, dict) and models:
+                filtered = {
+                    mk: ({"name": mv.get("name")} if isinstance(mv, dict) and mv.get("name") else mv)
+                    for mk, mv in models.items()
+                    if not (isinstance(mv, dict) and mv.get("_enabled") is False)
+                }
+                if filtered:
+                    entry["models"] = filtered
+        providers[proto] = entry
+    return providers
+
+
+def inject_opencode_native_providers(opencode_file: Path, env_config: dict,
+                                     active_provider: str,
+                                     active_protocols: list[str]) -> None:
+    """网关兼容、原生仅直连：为 opencode 生成原生双协议 provider。
+
+    - gateway 开启时保持现状（LLM_ACTIVE_* 指向网关的兼容层），不覆盖。
+    - 有具体 active provider 且 gateway 关闭时，用其协议数据生成 opencode 原生
+      provider（openai→@ai-sdk/openai, anthropic→@ai-sdk/anthropic）。
+    """
+    if not opencode_file.exists():
+        return
+    # gateway 开启 → 兼容层，跳过
+    gateway = env_config.get("proxy", {}).get("gateway", {})
+    if isinstance(gateway, dict) and gateway.get("enabled"):
+        return
+    native_map = IDE_NATIVE_PROTOCOLS.get("OpenCode", {})
+    providers = build_native_providers(env_config, active_provider, active_protocols, native_map)
+    if not providers:
+        return
+
+    with open(opencode_file, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    config["provider"] = providers
+
+    # 默认模型：第一个协议的默认模型（anthropic 无 models → 跳过 model 字段）
+    first_proto = next(iter(providers))
+    first_models = providers[first_proto].get("models", {})
+    default_model = next(iter(first_models), "")
+    if default_model:
+        config["model"] = f"{first_proto}/{default_model}"
+
+    with open(opencode_file, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    print(f"  {COLOR_GREEN}[MODELS] Injected native dual-protocol providers into {opencode_file}{COLOR_RESET}")
 
 
 def switch_provider(env_config: dict, provider: str, protocol, env_file: Path) -> dict:
