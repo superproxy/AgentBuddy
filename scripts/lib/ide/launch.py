@@ -379,8 +379,8 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
     if mode == "remote":
         # 远程控制模式：启动 IDE 的本地 Web 服务（如 opencode web / codebuddy --serve），在浏览器中访问。
         # 服务为长期运行进程，优先在终端窗口启动（有 TTY、可查看日志/停止）。
-        # 密码认证：web_install.auth == "password" 时，自动生成随机密码并通过环境变量
-        # （auth_env / auth_mode_env）注入服务进程，浏览器用 ?password= 链接免登录。
+        # 密码认证（web_install.auth == "password"）：取/生成随机密码，按配置通过
+        # password_arg 参数或 password_env 环境变量注入服务，并生成带密码链接。
         meta = IDE_INSTALL_META.get(ide_key, {})
         web_install = meta.get("web_install", {})
         web_cmd = web_install.get("cmd", "")
@@ -393,23 +393,23 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
         # 服务启动后自动打开浏览器（web_install.port 指定本地端口）
         port = web_install.get("port")
         base_url = f"http://localhost:{int(port)}" if port else ""
-        # 生成/注入随机密码（auth=password 时）
-        web_env: dict | None = None
         password = ""
-        auth_env = web_install.get("auth_env")
-        if web_install.get("auth") == "password" and auth_env and base_url:
-            try:
-                from .webpass import get_or_create_password
-                password = get_or_create_password(ide_key)
-                web_env = {auth_env: password}
-                auth_mode_env = web_install.get("auth_mode_env")
-                if auth_mode_env:
-                    web_env[auth_mode_env] = "password"
-            except Exception:
-                web_env = None
-                password = ""
-        # 带密码的免登录 URL（?password= 对首页生效，换取 session cookie）
-        browser_url = f"{base_url}?password={password}" if (password and base_url) else base_url
+        password_arg = web_install.get("password_arg", "")
+        web_env: dict | None = None
+        browser_url = base_url
+        if web_install.get("auth") == "password" and base_url:
+            from .webpass import get_or_create_password, build_auth_url
+            password = get_or_create_password(ide_key)
+            password_env = web_install.get("password_env", "")
+            if password_env:
+                web_env = {password_env: password}
+                username_env = web_install.get("username_env", "")
+                if username_env:
+                    web_env[username_env] = web_install.get("username", "opencode")
+            browser_url = build_auth_url(
+                base_url, password,
+                web_install.get("url_style", "query"),
+                web_install.get("username", ""))
         # 判断 web 命令是否以 IDE 的 cli_name 开头（如 opencode web）。
         # 匹配：用检测到的 exe_path + 剩余子命令启动；不匹配（如 Codex 的 npx codexapp 独立命令）：
         # 整体在 shell 中运行 web_cmd，避免错误拼接成 "codex npx codexapp"。
@@ -417,6 +417,8 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
         cli_names = IDE_DETECT_META.get(ide_key, {}).get("cli_names", [])
         if exe_path and parts and any(parts[0] == cn for cn in cli_names):
             args = parts[1:]
+            if password and password_arg:
+                args += [password_arg, password]
             result = _launch_cli_in_terminal(
                 exe_path, args, cwd, env=web_env,
                 title=f"{meta.get('label', ide_key)} Web - {cwd or 'Home'}",
@@ -432,21 +434,24 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                 })
             return result
         # 独立命令（npx codexapp 等）或无 exe_path：在 shell 中运行整个 web_cmd
+        run_cmd = web_cmd
+        if password and password_arg:
+            run_cmd = f"{web_cmd} {password_arg} {shlex.quote(password)}"
+        popen_env = {**os.environ, **web_env} if web_env else None
         try:
-            proc_env = {**os.environ, **(web_env or {})}
             if sys.platform == "win32":
                 proc = subprocess.Popen(
-                    web_cmd, cwd=cwd or None, shell=True,
-                    creationflags=0x08000000, env=proc_env,
+                    run_cmd, cwd=cwd or None, shell=True,
+                    creationflags=0x08000000, env=popen_env,
                 )
             else:
                 proc = subprocess.Popen(
-                    web_cmd, cwd=cwd or None, shell=True,
-                    start_new_session=True, env=proc_env,
+                    run_cmd, cwd=cwd or None, shell=True,
+                    start_new_session=True, env=popen_env,
                 )
             if browser_url:
                 _open_browser(browser_url)
-            return {"ok": True, "pid": proc.pid, "cmd": web_cmd, "error": "",
+            return {"ok": True, "pid": proc.pid, "cmd": run_cmd, "error": "",
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "remote",
                     "web_url": base_url, "web_password": password,
                     "web_url_with_password": browser_url}

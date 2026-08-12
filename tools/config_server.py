@@ -4755,7 +4755,9 @@ def _web_credentials(ide_key: str, regenerate: bool = False) -> dict:
     if not port or auth != "password":
         return {"ok": False, "error": f"IDE {ide_key} 无密码认证的 Web 服务"}
     password = regenerate_password(ide_key) if regenerate else get_or_create_password(ide_key)
-    result = web_urls(port, password)
+    result = web_urls(port, password,
+                      web_install.get("url_style", "query"),
+                      web_install.get("username", ""))
     result.update({"ok": True, "ide": ide_key, "port": port,
                    "password": password, "auth": auth})
     return result
@@ -4775,7 +4777,7 @@ def api_ide_web_credentials():
 
 @app.route("/api/ide/web/credentials/regenerate", methods=["POST"])
 def api_ide_web_credentials_regenerate():
-    """重置 IDE Web 服务密码（旧链接立即失效）。Body: {ide: <key>}"""
+    """重置 IDE Web 服务密码（重启服务后生效，旧链接失效）。Body: {ide: <key>}"""
     body = request.get_json(silent=True) or {}
     ide_key = body.get("ide", "")
     if not ide_key:

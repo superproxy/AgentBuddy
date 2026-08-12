@@ -277,7 +277,7 @@ async function regenerateWebPassword(key: string) {
         url_with_password: r.url_with_password || '',
         reveal: true,
       }
-      ui.toast('已重置密码（旧链接失效）', 'ok')
+      ui.toast('已重置密码，重启服务后生效（旧链接失效）', 'ok')
     } else {
       ui.toast(r?.error || '重置密码失败', 'err')
     }
