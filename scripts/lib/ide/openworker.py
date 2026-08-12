@@ -68,12 +68,21 @@ def _set_toml_model(toml_file: Path, model: str) -> None:
 class OpenWorkerTarget(IdeTarget):
     name = "OpenWorker"
 
+    def __init__(self, project_root: Path, force: bool = False,
+                 include_skills=None, scope=None, link_skills=None,
+                 ide_protocols=None):
+        super().__init__(project_root, force, include_skills, scope,
+                         link_skills, ide_protocols)
+        self.base = openworker_state_dir()
+        self.secrets_file = self.base / "secrets.json"
+        self.config_file = self.base / "config.toml"
+
     def init_rules(self, source_rules: Path):
         # OpenWorker 无 rules 概念，跳过
         pass
 
     def init_mcp(self, source_mcp_file: Path):
-        ow_dir = openworker_state_dir()
+        ow_dir = self.base
         ow_dir.mkdir(parents=True, exist_ok=True)
         copy_file_safe(source_mcp_file, ow_dir / "mcp.json",
                        "~/.config/coworker/mcp.json", self.force)
@@ -88,7 +97,7 @@ class OpenWorkerTarget(IdeTarget):
         - config.toml：model = "<默认模型>" 指定会话默认模型。
         """
         from lib.llm import load_split_env_config
-        ow_dir = openworker_state_dir()
+        ow_dir = self.base
         ow_dir.mkdir(parents=True, exist_ok=True)
 
         env_config = load_split_env_config(self.root, silent=True)
@@ -177,7 +186,7 @@ class OpenWorkerTarget(IdeTarget):
               f"({shown}){COLOR_RESET}")
 
     def init_skills(self, source_skills_dir: Path):
-        ow_skills_dir = openworker_state_dir() / "skills"
+        ow_skills_dir = self.base / "skills"
         copy_skills_safe(source_skills_dir, ow_skills_dir, "~/.config/coworker/skills/",
                          self.force, self.include_skills, link=self.link_skills)
         write_skills_index(source_skills_dir, ow_skills_dir / "README.md",

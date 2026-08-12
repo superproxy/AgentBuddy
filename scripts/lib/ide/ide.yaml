@@ -548,8 +548,8 @@ install_meta:
     app_install:
       method: system_uninstall
       url: https://openworker.com/
-      uninstall_cmd_mac: "rm -rf '/Applications/OpenWork.app' '/Applications/OpenWorker.app' ~/.openworker 2>/dev/null; true"
-      uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\openworker\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.openworker\" 2>nul & exit /b 0"
+      uninstall_cmd_mac: "rm -rf '/Applications/OpenWork.app' '/Applications/OpenWorker.app' \"${COWORKER_STATE_DIR:-$HOME/.config/coworker}\" 2>/dev/null; true"
+      uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\openworker\" 2>nul & if defined COWORKER_STATE_DIR (rmdir /s /q \"%COWORKER_STATE_DIR%\" 2>nul) else (rmdir /s /q \"%APPDATA%\\coworker\" 2>nul) & exit /b 0"
     download_urls:
       macos_arm64: https://download.openworker.com/mac
       macos_x64: https://download.openworker.com/mac
@@ -1133,7 +1133,7 @@ detect_meta:
     windows_apps:
       - "{LOCALAPPDATA}/Programs/openworker/OpenWorker.exe"
       - "{ProgramFiles}/openworker/OpenWorker.exe"
-    config_dirs: [".openworker"]
+    config_dirs: [".config/coworker"]
     sessions_subdir: sessions
     is_tui: false
     protocols: [openaiv1]

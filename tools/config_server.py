@@ -136,6 +136,28 @@ def _script_run_shell_cmd(script_name: str, args: list) -> str:
     # 给含空格/特殊字符的路径加引号
     return " ".join(f'"{p}"' if (" " in p or '"' in p) else p for p in parts)
 
+
+def _sync_llm_to_all_ides() -> None:
+    """保存 LLM 后同步到所有 IDE；失败时抛错，禁止返回虚假成功。"""
+    result = subprocess.run(
+        _script_run_cmd("agentctl", [
+            "sync", "--ide", "All", "--force", "--scope", "llm,mcp",
+        ]),
+        cwd=str(PROJECT_ROOT),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="ignore",
+        timeout=300,
+    )
+    if result.returncode != 0:
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        detail = lines[-1] if lines else f"returncode={result.returncode}"
+        raise RuntimeError(f"LLM 配置已保存，但同步失败: {detail}")
+
+
 try:
     from flask import Flask, Response, jsonify, request, send_file, stream_with_context
 except ImportError:
@@ -1050,8 +1072,10 @@ def save_llm():
         # 确保旧格式配置保存一次后过滤即可生效
         from lib.llm import normalize_provider_enabled
         normalize_provider_enabled(data.get("llm"))
+        # 保存后必须 generate + sync，不能依赖前端再发第二个请求。
         save_env_config_file(path, data)
-        return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT))})
+        _sync_llm_to_all_ides()
+        return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT)), "synced": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
