@@ -376,8 +376,8 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             return {"ok": False, "pid": 0, "cmd": acp_cmd, "error": str(e),
                     "ide": ide_key, "exe_path": "", "app_path": "", "mode": "none"}
 
-    if mode == "web":
-        # Web 模式：启动 IDE 的本地 Web 服务（如 opencode web / codebuddy --serve），在浏览器中访问。
+    if mode == "remote":
+        # 远程控制模式：启动 IDE 的本地 Web 服务（如 opencode web / codebuddy --serve），在浏览器中访问。
         # 服务为长期运行进程，优先在终端窗口启动（有 TTY、可查看日志/停止）。
         # 密码认证：web_install.auth == "password" 时，自动生成随机密码并通过环境变量
         # （auth_env / auth_mode_env）注入服务进程，浏览器用 ?password= 链接免登录。
@@ -421,7 +421,7 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                 exe_path, args, cwd, env=web_env,
                 title=f"{meta.get('label', ide_key)} Web - {cwd or 'Home'}",
             )
-            result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "web"})
+            result.update({"ide": ide_key, "exe_path": exe_path, "app_path": "", "mode": "remote"})
             if result.get("ok") and browser_url:
                 _open_browser(browser_url)
             if result.get("ok"):
@@ -447,7 +447,7 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
             if browser_url:
                 _open_browser(browser_url)
             return {"ok": True, "pid": proc.pid, "cmd": web_cmd, "error": "",
-                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "web",
+                    "ide": ide_key, "exe_path": "", "app_path": "", "mode": "remote",
                     "web_url": base_url, "web_password": password,
                     "web_url_with_password": browser_url}
         except Exception as e:

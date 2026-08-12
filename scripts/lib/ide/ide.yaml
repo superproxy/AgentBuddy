@@ -96,16 +96,32 @@ install_meta:
       macos_x64: https://claude.ai/api/desktop/darwin/x64/dmg/latest/redirect
       windows_x64: https://claude.ai/download
       windows_arm64: https://claude.ai/download
+    # Claude Code VSCode 扩展：anthropic.claude-code（发布者 anthropic）
+    # 来源：https://code.claude.com/docs/en/vs-code（需 VS Code 1.94+）
+    vscode_install:
+      method: extension
+      url: vscode:extension/anthropic.claude-code
+      extension_id: anthropic.claude-code
+      note: 点击安装将在 VS Code 中打开 Claude Code 扩展页面（需 VS Code 1.94+）
     # Claude Code ACP：通过 ACP 协议接入 JetBrains IDE
     acp_install:
       method: manual
       url: https://www.jetbrains.com/acp/
       cmd: claude acp
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 claude acp 后连接
-    install_methods: [script, npm, brew, winget, acp]
+    # Claude Code Remote Control（远程控制）：服务端模式，长驻终端等待远程连接
+    # 来源：https://code.claude.com/docs/en/remote-control
+    # 需 claude.ai 登录（Pro/Max/Team/Enterprise 订阅），服务端无本地端口，
+    # 会话在 https://claude.ai/code 查看/连接，终端可按空格显示二维码
+    web_install:
+      method: cli
+      url: https://claude.ai/code
+      cmd: claude remote-control
+      note: claude remote-control 启动 Remote Control 服务端（需 claude.ai 登录），终端按空格显示二维码，另一设备打开 claude.ai/code 连接
+    install_methods: [script, npm, brew, winget, acp, vscode, web]
     brand: Claude
     category: code
-    forms: [cli, app, acp]
+    forms: [cli, app, acp, vscode, remote]
 
   Codex:
     # OpenAI Codex CLI + Desktop App
@@ -136,9 +152,11 @@ install_meta:
       windows_x64: https://get.microsoft.com/installer/download/9PLM9XGG6VKS?cid=website_cta_psi
     # Codex VSCode 扩展：openai.chatgpt（发布者 openai）
     vscode_install:
-      method: manual
-      url: https://marketplace.visualstudio.com/items?itemName=openai.chatgpt
-      note: "在 VS Code 扩展市场搜索 ChatGPT（扩展 ID: openai.chatgpt）安装"
+      # Codex VSCode 扩展：openai.chatgpt（发布者 openai），仿照 Trae CN 用 extension 深链一键安装
+      method: extension
+      url: vscode:extension/openai.chatgpt
+      extension_id: openai.chatgpt
+      note: 点击安装将在 VS Code 中打开扩展页面（ChatGPT by OpenAI，需 VS Code 1.93+）
     # Codex JetBrains：2025.3+ 原生集成（无需插件）
     idea_install:
       method: manual
@@ -159,10 +177,10 @@ install_meta:
       cmd: npx codexapp --no-password
       port: 5900
       note: npx codexapp 启动 Web UI（禁用密码保护），浏览器访问 http://localhost:5900（需已配置 Codex app-server）
-    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, web]
+    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, remote]
     brand: Codex
     category: code
-    forms: [cli, app, vscode, idea, acp, web]
+    forms: [cli, app, vscode, idea, acp, remote]
 
   Cursor:
     # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -365,7 +383,7 @@ install_meta:
       note: 启动 opencode server 并打开 Web 界面（使用默认端口，浏览器访问）
     brand: OpenCode
     category: code
-    forms: [cli, app, acp, web]
+    forms: [cli, app, acp, remote]
 
   Qoder:
     # Qoder 国际版（阿里云通义灵码升级版）
@@ -930,10 +948,10 @@ install_meta:
       macos_x64: https://www.codebuddy.cn/ide/
       windows_x64: https://www.codebuddy.cn/ide/
       linux_x64: https://www.codebuddy.cn/ide/
-    install_methods: [npm, app, vscode, jetbrains, web]
+    install_methods: [npm, app, vscode, jetbrains, remote]
     brand: CodeBuddy
     category: code
-    forms: [cli, app, vscode, idea, web]
+    forms: [cli, app, vscode, idea, remote]
 
 
 # ============================================================

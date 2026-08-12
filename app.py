@@ -462,6 +462,53 @@ class _DownloadApi:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
 
+    def select_directory(self, default_dir: str = "") -> dict:
+        """弹原生目录选择对话框，返回选中的工作目录。
+
+        用于 IDE 管理页 CLI 启动时选择工作目录。返回 {ok, path}；
+        用户取消返回 {ok: False, error: "cancelled"}。
+        """
+        import sys as _sys
+        import subprocess as _sp
+        import os as _os
+
+        # macOS：用 osascript choose folder 弹原生目录选择
+        if _sys.platform == "darwin":
+            default_part = ""
+            if default_dir and _os.path.isdir(default_dir):
+                default_part = f'default location "{default_dir}"'
+            script = (
+                f'set chosen to choose folder {default_part}\n'
+                f'return POSIX path of chosen'
+            )
+            try:
+                r = _sp.run(["osascript", "-e", script],
+                            capture_output=True, text=True, timeout=120)
+            except Exception as e:
+                return {"ok": False, "error": f"目录选择对话框失败: {e}"}
+            if r.returncode != 0:
+                return {"ok": False, "error": "cancelled"}
+            path = (r.stdout or "").strip()
+            if not path:
+                return {"ok": False, "error": "cancelled"}
+            return {"ok": True, "path": path}
+
+        # Windows/Linux：尝试 tkinter 原生目录选择，回退到失败
+        try:
+            import tkinter as _tk
+            from tkinter import filedialog as _fd
+            root = _tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            path = _fd.askdirectory(initialdir=default_dir or None,
+                                    parent=root, title="选择工作目录")
+            root.destroy()
+            if not path:
+                return {"ok": False, "error": "cancelled"}
+            return {"ok": True, "path": path}
+        except ImportError:
+            return {"ok": False, "error": "目录选择不可用（缺少 tkinter）"}
+
     def open_external(self, url: str) -> dict:
         """用系统默认浏览器打开外部 URL（pywebview 下 window.open 会被忽略）。
 

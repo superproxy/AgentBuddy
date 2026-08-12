@@ -184,7 +184,7 @@ const FORM_META_LOCAL: Record<string, { label: string; color: string; bg: string
   vscode:    { label: 'VSCode 插件',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',           color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
-  web:       { label: 'Web',           color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
+  remote:    { label: 'Remote Control by Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色
@@ -236,7 +236,7 @@ async function loadWebCreds(key: string) {
         reveal: webCreds[key]?.reveal ?? false,
       }
     } else {
-      ui.toast(r?.error || '获取 Web 凭据失败', 'err')
+      ui.toast(r?.error || '获取 Remote Control by Web 凭据失败', 'err')
     }
   } finally {
     webCredsLoading.value = ''
@@ -288,8 +288,39 @@ async function regenerateWebPassword(key: string) {
 
 /** 启动 Web 服务并加载密码凭据 */
 async function launchWebWithCreds(key: string) {
-  await launchIde(key, null, 'web')
+  await launchIde(key, null, 'remote', cliCwd.value)
+  if (cliCwd.value) localStorage.setItem('agentbuddy.ide.lastCwd', cliCwd.value)
   await loadWebCreds(key)
+}
+
+/** CLI 工作目录：默认记住上次使用的路径（localStorage 持久化） */
+const cliCwd = ref(localStorage.getItem('agentbuddy.ide.lastCwd') || '')
+
+/** 是否为 CLI 执行类型（cli/acp/web 均会运行 CLI 命令） */
+function isCliExec(tab: string): boolean {
+  return tab === 'cli' || tab === 'acp' || tab === 'remote'
+}
+
+/** 弹原生目录选择对话框，选中后写入并记住 */
+async function pickCliCwd() {
+  const pw = (window as any).pywebview
+  if (pw?.api?.select_directory) {
+    try {
+      const res = await pw.api.select_directory(cliCwd.value || '')
+      if (res?.path) {
+        cliCwd.value = res.path
+        localStorage.setItem('agentbuddy.ide.lastCwd', res.path)
+      }
+    } catch {
+      /* 取消或异常，忽略 */
+    }
+  }
+}
+
+/** 以指定工作目录启动 CLI，并记住上次路径 */
+async function openIdeCli(ideKey: string, tab: string) {
+  await launchIde(ideKey, null, tab, cliCwd.value)
+  if (cliCwd.value) localStorage.setItem('agentbuddy.ide.lastCwd', cliCwd.value)
 }
 
 /** 生成图标首字母（最多 2 个字符） */
@@ -326,13 +357,13 @@ function currentInfo(it: any): any {
   if (tab === 'vscode') return info.vscode
   if (tab === 'idea') return info.idea
   if (tab === 'acp') return info.acp
-  if (tab === 'web') return info.web
+  if (tab === 'remote') return info.web
   return info.cli || info.app
 }
 
 function currentPath(it: any): string {
   const tab = currentTab(it)
-  if (tab === 'cli' || tab === 'acp' || tab === 'web') return it.exe_path || ''
+  if (tab === 'cli' || tab === 'acp' || tab === 'remote') return it.exe_path || ''
   return it.app_path || ''
 }
 
@@ -342,7 +373,7 @@ function currentMethod(it: any): string {
 
 function currentInstalled(it: any): boolean {
   const tab = currentTab(it)
-  if (tab === 'cli' || tab === 'acp' || tab === 'web') return !!it.exe_path
+  if (tab === 'cli' || tab === 'acp' || tab === 'remote') return !!it.exe_path
   return !!it.app_path
 }
 
@@ -392,7 +423,7 @@ function onIconError(key: string) {
 }
 
 /** IDE 是否支持某安装维度（基于 install info 静态配置） */
-function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'): boolean {
+function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'remote'): boolean {
   const info = ideInstallInfo.value[it.key]
   if (!info) return false
   if (tab === 'cli') return !!(info.cli && it.cli_names?.length)
@@ -400,14 +431,14 @@ function supportsTab(it: any, tab: 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | '
   if (tab === 'vscode') return !!info.vscode
   if (tab === 'idea') return !!info.idea
   if (tab === 'acp') return !!info.acp
-  if (tab === 'web') return !!info.web
+  if (tab === 'remote') return !!info.web
   return false
 }
 
 /** 条目类型：展开条目用 _tab，未展开条目按唯一支持维度推断 */
-function ideType(it: any): 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web' | '' {
-  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'
-  const tabs: Array<'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'web'> = ['cli', 'app', 'vscode', 'idea', 'acp', 'web']
+function ideType(it: any): 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'remote' | '' {
+  if (it._tab) return it._tab as 'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'remote'
+  const tabs: Array<'cli' | 'app' | 'vscode' | 'idea' | 'acp' | 'remote'> = ['cli', 'app', 'vscode', 'idea', 'acp', 'remote']
   const supported = tabs.filter(t => supportsTab(it, t))
   if (supported.length === 1) return supported[0]
   return ''
@@ -428,8 +459,8 @@ function expandIde(it: any): any[] {
   const vscode = supportsTab(it, 'vscode')
   const idea = supportsTab(it, 'idea')
   const acp = supportsTab(it, 'acp')
-  const web = supportsTab(it, 'web')
-  if (!cli && !app && !vscode && !idea && !acp && !web) return [it]
+  const remote = supportsTab(it, 'remote')
+  if (!cli && !app && !vscode && !idea && !acp && !remote) return [it]
   const entries: any[] = []
   if (cli) {
     entries.push({ ...it, _tab: 'cli', _uid: it.key + ':cli', label: it.label + ' CLI', _expanded: true, app_path: '' })
@@ -446,8 +477,8 @@ function expandIde(it: any): any[] {
   if (acp) {
     entries.push({ ...it, _tab: 'acp', _uid: it.key + ':acp', label: it.label + ' ACP', _expanded: true, exe_path: '', app_path: '' })
   }
-  if (web) {
-    entries.push({ ...it, _tab: 'web', _uid: it.key + ':web', label: it.label + ' Web', _expanded: true, exe_path: '', app_path: '' })
+  if (remote) {
+    entries.push({ ...it, _tab: 'remote', _uid: it.key + ':remote', label: it.label + ' Remote Control by Web', _expanded: true, exe_path: '', app_path: '' })
   }
   return entries
 }
@@ -464,7 +495,7 @@ function typeLabel(it: any): string {
   if (t === 'vscode') return 'VSCode'
   if (t === 'idea') return 'IDEA'
   if (t === 'acp') return 'ACP'
-  if (t === 'web') return 'Web'
+  if (t === 'remote') return 'Remote Control by Web'
   return '—'
 }
 
@@ -695,10 +726,17 @@ watch(
           <span @dblclick="copyPath(currentPath(currentSelectedIde))">{{ currentPath(currentSelectedIde) || (currentInfo(currentSelectedIde) ? '未安装' : '—') }}</span>
         </div>
 
+        <!-- CLI 工作目录：可输入或选择，记住上次路径 -->
+        <div v-if="isCliExec(currentTab(currentSelectedIde))" class="dock-cwd">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          <input v-model="cliCwd" type="text" placeholder="工作目录（留空用默认）" spellcheck="false" @keyup.enter="openIdeCli(currentSelectedIde.key, currentTab(currentSelectedIde))" />
+          <button class="dock-item" type="button" @click="pickCliCwd" title="选择工作目录">选择</button>
+        </div>
+
         <div class="dock-actions">
           <!-- ACP 专属按钮：启动 ACP 命令 + 同步到 JetBrains + 打开 IDEA -->
           <template v-if="currentTab(currentSelectedIde) === 'acp'">
-            <button @click="launchIde(currentSelectedIde.key, null, 'acp')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
+            <button @click="openIdeCli(currentSelectedIde.key, 'acp')" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 ACP' }}
             </button>
@@ -713,10 +751,10 @@ watch(
             <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">ACP 官网</a>
           </template>
           <!-- Web 专属按钮：启动本地 Web 服务（如 opencode web / codebuddy --serve）+ 密码查看/复制链接/重置 + 同步配置 -->
-          <template v-else-if="currentTab(currentSelectedIde) === 'web'">
+          <template v-else-if="currentTab(currentSelectedIde) === 'remote'">
             <button @click="launchWebWithCreds(currentSelectedIde.key)" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Web' }}
+              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Remote Control by Web' }}
             </button>
             <template v-if="webAuth(currentSelectedIde)">
               <button v-if="webCreds[currentSelectedIde.key]" @click="toggleRevealWebPassword(currentSelectedIde.key)" class="dock-item" type="button" :title="webCreds[currentSelectedIde.key].reveal ? '隐藏密码' : '查看密码'">
@@ -736,10 +774,10 @@ watch(
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步' }}
             </button>
-            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">Web 官网</a>
+            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">Remote Control by Web 官网</a>
           </template>
           <template v-else-if="currentInstalled(currentSelectedIde)">
-            <button @click="launchIde(currentSelectedIde.key, null, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">
+            <button @click="openIdeCli(currentSelectedIde.key, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '打开' }}
             </button>
@@ -1119,7 +1157,7 @@ watch(
   background: linear-gradient(145deg, #f59e0b, #d97706);
   color: #fff;
 }
-.type-badge.web {
+.type-badge.remote {
   background: linear-gradient(145deg, #34d399, #10b981);
   color: #fff;
 }
@@ -1247,7 +1285,7 @@ watch(
 .dock-title .type-tag.app { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
 .dock-title .type-tag.both { background: rgba(139, 92, 246, 0.12); color: #7c3aed; }
 .dock-title .type-tag.acp { background: rgba(245, 158, 11, 0.12); color: #d97706; }
-.dock-title .type-tag.web { background: rgba(52, 211, 153, 0.12); color: #10b981; }
+.dock-title .type-tag.remote { background: rgba(52, 211, 153, 0.12); color: #10b981; }
 
 .dock-tabs {
   display: inline-flex;
@@ -1296,6 +1334,29 @@ watch(
   cursor: text;
   user-select: text;
 }
+
+.dock-cwd {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.dock-cwd svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--text-tertiary); }
+.dock-cwd input {
+  width: 250px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  outline: none;
+}
+.dock-cwd input::placeholder { color: var(--text-tertiary); }
+.dock-cwd .dock-item { padding: 4px 10px; font-size: 11px; }
 
 .dock-actions {
   display: inline-flex;
@@ -2008,7 +2069,7 @@ watch(
 .brand-view .type-badge.vscode { background: linear-gradient(145deg, #3b82f6, #2563eb); color: #fff; }
 .brand-view .type-badge.idea { background: linear-gradient(145deg, #8b5cf6, #7c3aed); color: #fff; }
 .brand-view .type-badge.acp { background: linear-gradient(145deg, #f59e0b, #d97706); color: #fff; }
-.brand-view .type-badge.web { background: linear-gradient(145deg, #34d399, #10b981); color: #fff; }
+.brand-view .type-badge.remote { background: linear-gradient(145deg, #34d399, #10b981); color: #fff; }
 
 /* 品牌视图下的 grid 横排排列 */
 .brand-view .grid {

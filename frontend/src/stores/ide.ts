@@ -83,7 +83,7 @@ export const FORM_META: Record<string, { label: string; color: string; bg: strin
   vscode:    { label: 'VSCode 插件',    color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',            color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
-  web:       { label: 'Web',            color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
+  remote:    { label: 'Remote Control by Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色
@@ -251,7 +251,7 @@ export const useIdeStore = defineStore('ide', () => {
     }
 
     // 4. 构造 BrandGroup 列表
-    const FORM_ORDER = ['cli', 'app', 'vscode', 'idea', 'acp', 'web']
+    const FORM_ORDER = ['cli', 'app', 'vscode', 'idea', 'acp', 'remote']
     const CAT_ORDER = ['code', 'work']
 
     const groups: BrandGroup[] = []
@@ -409,7 +409,7 @@ export const useIdeStore = defineStore('ide', () => {
     sessionDrawerOpen.value = false
   }
 
-  async function launchIde(ideKey: string, session: IdeSession | null = null, mode?: string) {
+  async function launchIde(ideKey: string, session: IdeSession | null = null, mode?: string, cwd?: string) {
     const key = session ? `${ideKey}:${session.id}` : ideKey
     if (ideLaunching.value || ideResuming.value) return
     if (session) ideResuming.value = key
@@ -418,6 +418,7 @@ export const useIdeStore = defineStore('ide', () => {
       const body: Record<string, string> = session
         ? { ide: ideKey, session_id: session.id, cwd: session.cwd || '' }
         : { ide: ideKey }
+      if (cwd) body.cwd = cwd
       if (mode) body.mode = mode
       const r = await api<{ ok: boolean; mode?: string; pid?: number; error?: string }>(
         '/api/ide/launch',
