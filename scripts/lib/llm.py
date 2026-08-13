@@ -449,8 +449,8 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
         listener_url = gateway_config.get("base_url", "http://127.0.0.1:4000/v1")
         # 网关 api_key：未配置时用占位符（litellm 本地网关默认不校验）
         gateway_api_key = gateway_config.get("api_key", "") or "sk-agentbuddy-gateway"
-        # 网关是个 provider：用户选了 active provider 就用，没选才用网关
-        flat["LLM_ACTIVE_PROVIDER"] = active_provider_name or "agentbuddy-gateway"
+        # 网关启用时，IDE 默认来源必须固定指向网关。
+        flat["LLM_ACTIVE_PROVIDER"] = "agentbuddy-gateway"
         flat["LLM_ACTIVE_BASE_URL"] = listener_url
         flat["LLM_ACTIVE_API_KEY"] = gateway_api_key
         flat["LLM_CODEX_BASE_URL"] = listener_url
@@ -758,23 +758,74 @@ def build_native_providers(env_config: dict, active_provider: str,
     return providers
 
 
+def _filtered_opencode_models(models: object) -> dict:
+    if not isinstance(models, dict):
+        return {}
+    filtered = {}
+    for model_id, model_cfg in models.items():
+        if isinstance(model_cfg, dict):
+            if model_cfg.get("_enabled") is False:
+                continue
+            filtered[model_id] = {k: v for k, v in model_cfg.items() if k != "_enabled"}
+        else:
+            filtered[model_id] = model_cfg
+    return filtered
+
+
+def _build_opencode_providers(env_config: dict) -> tuple[dict, dict]:
+    """Build every enabled OpenCode provider while preserving its configured name."""
+    llm_section = env_config.get("llm", {})
+    native_map = IDE_NATIVE_PROTOCOLS.get("OpenCode", {})
+    if not isinstance(llm_section, dict):
+        return {}, {}
+
+    providers = {}
+    provider_entries = {}
+    for provider_name, provider_cfg in llm_section.items():
+        if provider_name.startswith("_") or not isinstance(provider_cfg, dict):
+            continue
+        if provider_cfg.get("_enabled") is False:
+            continue
+
+        entries = []
+        for protocol_name, protocol_cfg in provider_cfg.items():
+            if protocol_name.startswith("_") or not isinstance(protocol_cfg, dict):
+                continue
+            canonical_protocol = "openai" if protocol_name in ("openai", "responses") else protocol_name
+            npm = native_map.get(canonical_protocol, "@ai-sdk/openai-compatible")
+            base_url = protocol_cfg.get("base_url")
+            api_key = protocol_cfg.get("api_key")
+            if not npm or not base_url or not api_key:
+                continue
+
+            entry = {
+                "npm": npm,
+                "options": {"baseURL": base_url, "apiKey": api_key},
+            }
+            models = _filtered_opencode_models(protocol_cfg.get("models"))
+            if models:
+                entry["models"] = models
+            entries.append((canonical_protocol, entry))
+
+        for index, (protocol_name, entry) in enumerate(entries):
+            entry_name = provider_name if index == 0 else f"{provider_name}-{protocol_name}"
+            providers[entry_name] = entry
+            provider_entries.setdefault(provider_name, []).append((entry_name, entry))
+
+    return providers, provider_entries
+
+
 def inject_opencode_native_providers(opencode_file: Path, env_config: dict,
                                      active_provider: str,
                                      active_protocols: list[str]) -> None:
-    """网关兼容、原生仅直连：为 opencode 生成原生双协议 provider。
-
-    - gateway 开启时保持现状（LLM_ACTIVE_* 指向网关的兼容层），不覆盖。
-    - 有具体 active provider 且 gateway 关闭时，用其协议数据生成 opencode 原生
-      provider（openai→@ai-sdk/openai, anthropic→@ai-sdk/anthropic）。
-    """
+    """Inject all enabled direct providers into OpenCode using stable provider names."""
     if not opencode_file.exists():
         return
-    # gateway 开启 → 兼容层，跳过
     gateway = env_config.get("proxy", {}).get("gateway", {})
     if isinstance(gateway, dict) and gateway.get("enabled"):
         return
-    native_map = IDE_NATIVE_PROTOCOLS.get("OpenCode", {})
-    providers = build_native_providers(env_config, active_provider, active_protocols, native_map)
+
+    providers, provider_entries = _build_opencode_providers(env_config)
     if not providers:
         return
 
@@ -782,17 +833,32 @@ def inject_opencode_native_providers(opencode_file: Path, env_config: dict,
         config = json.load(f)
     config["provider"] = providers
 
-    # 默认模型：第一个协议的默认模型（anthropic 无 models → 跳过 model 字段）
-    first_proto = next(iter(providers))
-    first_models = providers[first_proto].get("models", {})
-    default_model = next(iter(first_models), "")
+    llm_section = env_config.get("llm", {})
+    active_model = llm_section.get("_active_model", "") if isinstance(llm_section, dict) else ""
+    default_entry = ""
+    default_model = ""
+    for entry_name, entry in provider_entries.get(active_provider, []):
+        models = entry.get("models", {})
+        if active_model in models:
+            default_entry, default_model = entry_name, active_model
+            break
+        suffix_matches = [model_id for model_id in models if active_model and model_id.endswith("/" + active_model)]
+        if suffix_matches:
+            default_entry, default_model = entry_name, suffix_matches[0]
+            break
+    if not default_model:
+        for entry_name, entry in provider_entries.get(active_provider, []):
+            models = entry.get("models", {})
+            if models:
+                default_entry, default_model = entry_name, next(iter(models))
+                break
     if default_model:
-        config["model"] = f"{first_proto}/{default_model}"
+        config["model"] = f"{default_entry}/{default_model}"
 
     with open(opencode_file, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    print(f"  {COLOR_GREEN}[MODELS] Injected native dual-protocol providers into {opencode_file}{COLOR_RESET}")
+    print(f"  {COLOR_GREEN}[MODELS] Injected {len(providers)} enabled provider(s) into {opencode_file}{COLOR_RESET}")
 
 
 def switch_provider(env_config: dict, provider: str, protocol, env_file: Path) -> dict:

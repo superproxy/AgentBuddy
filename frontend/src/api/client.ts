@@ -62,3 +62,10 @@ export async function api<T = any>(url: string, opts?: RequestInit): Promise<T> 
   const r = await fetch(url, { ...opts, headers })
   return (await r.json()) as T
 }
+
+/** LLM 配置 API 封装（读取/保存 llm.yaml） */
+export const llmApi = {
+  fetch: () => api('/api/llm'),
+  save: (data: unknown) =>
+    api('/api/llm', { method: 'POST', body: JSON.stringify({ data }) }),
+}

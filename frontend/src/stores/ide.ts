@@ -83,7 +83,7 @@ export const FORM_META: Record<string, { label: string; color: string; bg: strin
   vscode:    { label: 'VSCode 插件',    color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',            color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
-  remote:    { label: 'Remote Control by Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
+  remote:    { label: 'Remote Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色

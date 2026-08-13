@@ -97,8 +97,8 @@ class ProviderCatalogTests(unittest.TestCase):
         self.assertIn("openrouter", names)
         self.assertIn("anthropic", names)
         big = next(c for c in self.catalog if c["provider"] == "bigmodel")
-        self.assertIn("openai", big["protocols"])
-        self.assertTrue(big["protocols"]["openai"]["base_url"])
+        self.assertIn("openaiv1", big["protocols"])
+        self.assertTrue(big["protocols"]["openaiv1"]["base_url"])
 
     def test_fingerprint_openai_proj(self):
         fp = provider_catalog.classify_api_key("sk-proj-" + "A" * 40)
@@ -169,7 +169,7 @@ class ProviderCatalogTests(unittest.TestCase):
             probe=False,
         )
         self.assertEqual(hits[0]["provider"], "volcengine")
-        self.assertEqual(hits[0]["detected_protocol"], "openai")
+        self.assertEqual(hits[0]["detected_protocol"], "openaiv1")
         self.assertEqual(len(hits), 1)
 
     def test_detect_volcengine_family_ambiguous(self):
@@ -197,13 +197,13 @@ class ProviderCatalogTests(unittest.TestCase):
     def test_apply_writes_key_and_active(self):
         env = {"llm": {}}
         cand = next(c for c in self.catalog if c["provider"] == "deepseek")
-        cand = {**cand, "score": 100, "reason": "test", "detected_protocol": "openai"}
+        cand = {**cand, "score": 100, "reason": "test", "detected_protocol": "openaiv1"}
         applied = provider_catalog.apply_provider_to_env(env, cand, "sk-test")
         self.assertEqual(applied["provider"], "deepseek")
         self.assertEqual(env["llm"]["_active_provider"], "deepseek")
-        self.assertEqual(env["llm"]["_active_protocol"], "openai")
-        self.assertEqual(env["llm"]["deepseek"]["openai"]["api_key"], "sk-test")
-        self.assertTrue(env["llm"]["deepseek"]["openai"]["base_url"])
+        self.assertEqual(env["llm"]["_active_protocol"], "openaiv1")
+        self.assertEqual(env["llm"]["deepseek"]["openaiv1"]["api_key"], "sk-test")
+        self.assertTrue(env["llm"]["deepseek"]["openaiv1"]["base_url"])
 
     def test_detect_protocol_from_anthropic_url(self):
         hits = provider_catalog.detect_providers(
@@ -229,7 +229,7 @@ class ProviderCatalogTests(unittest.TestCase):
             probe=False,
         )
         self.assertEqual(hits[0]["provider"], "bigmodel")
-        self.assertEqual(hits[0]["detected_protocol"], "openai")
+        self.assertEqual(hits[0]["detected_protocol"], "openaiv1")
 
     def test_detect_endpoint_exact_match(self):
         hits = provider_catalog.detect_providers(
@@ -239,7 +239,7 @@ class ProviderCatalogTests(unittest.TestCase):
             probe=False,
         )
         self.assertEqual(hits[0]["provider"], "zaiCoding")
-        self.assertEqual(hits[0]["detected_protocol"], "openai")
+        self.assertEqual(hits[0]["detected_protocol"], "openaiv1")
 
     def test_infer_protocol_openrouter_anthropic_path(self):
         proto, _ = provider_catalog.infer_protocol(
@@ -264,22 +264,22 @@ class ProviderCatalogTests(unittest.TestCase):
     def test_apply_without_override_keeps_catalog_url(self):
         env = {"llm": {}}
         cand = next(c for c in self.catalog if c["provider"] == "openrouter")
-        cand = {**cand, "detected_protocol": "openai", "score": 100, "reason": "test"}
-        catalog_url = cand["protocols"]["openai"]["base_url"]
+        cand = {**cand, "detected_protocol": "openaiv1", "score": 100, "reason": "test"}
+        catalog_url = cand["protocols"]["openaiv1"]["base_url"]
         applied = provider_catalog.apply_provider_to_env(
             env, cand, "sk-or-test", base_url_override="",
         )
         self.assertEqual(applied["base_url"], catalog_url)
-        self.assertEqual(env["llm"]["openrouter"]["openai"]["base_url"], catalog_url)
+        self.assertEqual(env["llm"]["openrouter"]["openaiv1"]["base_url"], catalog_url)
 
     def test_catalog_official_base_urls(self):
         """官方厂商 catalog URL 必须是可探测的权威域名。"""
-        openai = next(c for c in self.catalog if c["provider"] == "openai")
-        self.assertIn("api.openai.com", openai["protocols"]["openai"]["base_url"])
+        openai = next(c for c in self.catalog if c["provider"] == "openaiv1")
+        self.assertIn("api.openai.com", openai["protocols"]["openaiv1"]["base_url"])
         anthropic = next(c for c in self.catalog if c["provider"] == "anthropic")
         self.assertIn("api.anthropic.com", anthropic["protocols"]["anthropic"]["base_url"])
         deepseek = next(c for c in self.catalog if c["provider"] == "deepseek")
-        self.assertIn("api.deepseek.com", deepseek["protocols"]["openai"]["base_url"])
+        self.assertIn("api.deepseek.com", deepseek["protocols"]["openaiv1"]["base_url"])
 
     def test_probe_endpoints_prefer_authoritative_urls(self):
         openai_urls = provider_catalog._probe_urls_for_provider("openai")

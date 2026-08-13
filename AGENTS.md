@@ -99,6 +99,16 @@ cd frontend && npx vite build
 
 以上验证全部通过后，方可 `git tag` 发布。
 
+### 8. 旧品牌目录迁移 — 只执行一次，禁止每次启动覆盖用户配置
+
+**问题**：`app.py` 的 `_migrate_legacy_data_dir()` 每次启动都会执行，只要旧品牌目录 `~/Library/Application Support/AdeBuddy/` 存在，就用旧目录的 `llm.yaml` 无条件覆盖新目录的 `llm.yaml`，导致用户在新版本里设置的 Provider `_enabled` 开关在重启后消失。
+
+**规则**：
+- 迁移只执行一次：迁移前检查标记文件 `.migrated_from_adebuddy`，已迁移则直接跳过
+- 迁移成功后必须写入标记文件 `(PROJECT_ROOT / ".migrated_from_adebuddy")`
+- 禁止在迁移逻辑中无条件 `shutil.copy2` 覆盖 `USER_DATA_FILES`（含 `llm.yaml` / `mcp.yaml` / `keys.yaml` 等）——旧目录只应作为一次性数据源，不能反复覆盖新目录中用户的最新修改
+- 新增/修改任何"启动时同步/迁移用户数据"的逻辑时，必须保证幂等（只执行一次或只合并缺失项），并补充回归测试（见 `tests/test_legacy_migration_once.py`）
+
 ## 文档导航
 
 | 文档 | 内容 |

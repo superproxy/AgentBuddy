@@ -232,6 +232,31 @@ def _warn_if_mcp_stale(mcp_json: Path) -> None:
               f"Run `agentctl generate` before sync to include latest plugin mcpServers.{COLOR_RESET}")
 
 
+def _validate_default_llm_selection(env_config, targets):
+    """Codex/Claude 同步前必须明确选择唯一默认 LLM 源和模型。"""
+    target_names = {getattr(target, "name", "") for target in targets}
+    if not target_names.intersection({"Codex", "Claude"}):
+        return None
+
+    llm_config = env_config.get("llm", {}) if isinstance(env_config, dict) else {}
+    gateway = env_config.get("proxy", {}).get("gateway", {}) if isinstance(env_config, dict) else {}
+    gateway_enabled = bool(gateway.get("enabled")) if isinstance(gateway, dict) else False
+    active_provider = llm_config.get("_active_provider", "") if isinstance(llm_config, dict) else ""
+    active_model = llm_config.get("_active_model", "") if isinstance(llm_config, dict) else ""
+    active_provider = active_provider.strip() if isinstance(active_provider, str) else ""
+    active_model = active_model.strip() if isinstance(active_model, str) else ""
+
+    if gateway_enabled == bool(active_provider):
+        return "同步 Codex/Claude 前必须选择且只能选择一个默认 LLM Provider 或 LLM 网关"
+    if active_provider:
+        provider_config = llm_config.get(active_provider)
+        if not isinstance(provider_config, dict) or provider_config.get("_enabled") is False:
+            return f"默认 LLM Provider '{active_provider}' 不存在或未启用，请重新选择"
+    if not active_model:
+        return "同步 Codex/Claude 前必须选择默认模型"
+    return None
+
+
 def cmd_sync(args):
     """同步 rules/mcp/skills 到各 IDE。
 
@@ -259,8 +284,15 @@ def cmd_sync(args):
                       include_skills=include, scope=scope,
                       env_config=_env_config_for_ide)
 
-    # 始终包含 Agents（.agents/ 公共 IDE 规范目录），即使不在用户选择的 IDE 列表中
-    if ide_name != "All" and ide_name != "Agents":
+    if "llm" in scope:
+        validation_error = _validate_default_llm_selection(_env_config_for_ide, targets)
+        if validation_error:
+            print(f"{COLOR_RED}[ERROR] {validation_error}{COLOR_RESET}")
+            return False
+
+    # Agents 仅承载公共 rules/mcp/skills；纯 llm 同步不应触碰 .agents/。
+    agents_scopes = {"rules", "mcp", "skill"}
+    if scope.intersection(agents_scopes) and ide_name not in ("All", "Agents"):
         if not any(getattr(t, 'name', '') == 'Agents' for t in targets):
             agents_targets = get_ide("Agents", project_root=PROJECT_ROOT, force=args.force,
                                      include_skills=include, scope=scope)

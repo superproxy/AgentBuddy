@@ -7,7 +7,7 @@ import { useUiStore } from '../stores/ui'
 import { useCmdStore } from '../stores/cmd'
 import { useSubagentStore } from '../stores/subagent'
 import { runSse } from '../api/sse'
-import { api } from '../api/client'
+import { api, llmApi } from '../api/client'
 
 const props = defineProps<{ tab: string }>()
 const sync = useSyncStore()
@@ -182,6 +182,34 @@ function setAutoSync(v: boolean) {
   autoSync.value = v
 }
 
+async function validateDefaultLlmSelection(targetIdes: string[]): Promise<boolean> {
+  if (!targetIdes.some((ide) => ide === 'Codex' || ide === 'Claude')) return true
+
+  const response = await llmApi.fetch()
+  const config = response.data as Record<string, any>
+  const llm = config.llm && typeof config.llm === 'object' ? config.llm : {}
+  const gatewayEnabled = Boolean(config.proxy?.gateway?.enabled)
+  const activeProvider = typeof llm._active_provider === 'string' ? llm._active_provider.trim() : ''
+  const activeModel = typeof llm._active_model === 'string' ? llm._active_model.trim() : ''
+
+  if (gatewayEnabled === Boolean(activeProvider)) {
+    ui.toast('同步 Codex/Claude 前必须选择且只能选择一个默认 LLM Provider 或 LLM 网关', 'warn')
+    return false
+  }
+  if (activeProvider) {
+    const provider = llm[activeProvider]
+    if (!provider || typeof provider !== 'object' || provider._enabled === false) {
+      ui.toast(`默认 LLM Provider「${activeProvider}」不存在或未启用，请重新选择`, 'warn')
+      return false
+    }
+  }
+  if (!activeModel) {
+    ui.toast('同步 Codex/Claude 前必须选择默认模型', 'warn')
+    return false
+  }
+  return true
+}
+
 async function syncCurrentScope() {
   if (syncing.value) return
   const meta = currentScope.value
@@ -192,6 +220,14 @@ async function syncCurrentScope() {
   if (meta.kind === 'init-ide' && !syncTargetIdes.value.length) {
     ui.toast('请先选择目标 IDE', 'warn')
     return
+  }
+  if (meta.kind === 'init-ide' && meta.key === 'llm') {
+    try {
+      if (!(await validateDefaultLlmSelection(syncTargetIdes.value))) return
+    } catch (error: any) {
+      ui.toast(error?.message || '读取 LLM 配置失败', 'err')
+      return
+    }
   }
 
   syncing.value = true
@@ -222,10 +258,18 @@ async function syncCurrentScope() {
       else ui.toast('同步失败: ' + (r.error || ''), 'err')
     } else {
       for (const ide of syncTargetIdes.value) {
+        let syncError = ''
         await runSse(
           '/api/sync?ide=' + encodeURIComponent(ide) + '&scope=' + meta.key,
-          (line) => ui.appendLog(line),
+          (line) => {
+            ui.appendLog(line)
+            const exitMatch = line.match(/^\[EXIT\]\s+returncode=(\d+)/)
+            if (exitMatch && exitMatch[1] !== '0') syncError = line
+            if (line.startsWith('[ERROR]') || line.startsWith('[TIMEOUT]')) syncError = line
+          },
+          { onError: () => { syncError = '连接中断' } },
         )
+        if (syncError) throw new Error(`${ide}: ${syncError}`)
       }
       ui.toast('同步完成')
     }

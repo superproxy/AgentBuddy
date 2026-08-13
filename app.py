@@ -92,6 +92,10 @@ def _migrate_legacy_data_dir() -> None:
     需迁移到新目录，避免用户密钥等数据丢失。
     迁移后不删除旧目录（留作备份）。
 
+    只迁移一次：迁移完成后写入标记文件 .migrated_from_adebuddy，
+    之后每次启动跳过迁移，避免旧目录的 llm.yaml 等用户数据文件
+    反复覆盖新目录中用户的最新修改（如 Provider 的 _enabled 开关）。
+
     平台差异：
     - macOS: 旧 ~/Library/Application Support/AdeBuddy/ → 新 .../AgentBuddy/
     - Windows: 旧 C:\\Program Files\\AdeBuddy\\ → 新 C:\\Program Files\\AgentBuddy\\
@@ -101,6 +105,10 @@ def _migrate_legacy_data_dir() -> None:
         return
 
     current = PROJECT_ROOT
+
+    # 已迁移过：跳过，避免旧目录覆盖新配置
+    if (current / ".migrated_from_adebuddy").exists():
+        return
 
     # 定位旧品牌数据目录
     legacy_candidates: list = []
@@ -168,6 +176,11 @@ def _migrate_legacy_data_dir() -> None:
         if legacy_agents.exists():
             _merge_dir(legacy_agents, dst_agents)
             print(f"[migrate] 已从旧目录迁移 .agents/: {legacy_agents} → {dst_agents}", file=sys.stderr)
+        # 迁移完成：写入标记，确保只迁移一次
+        try:
+            (current / ".migrated_from_adebuddy").write_text("1", encoding="utf-8")
+        except Exception:
+            pass
     except Exception as e:
         print(f"[migrate][WARN] 迁移旧数据失败: {e}", file=sys.stderr)
 

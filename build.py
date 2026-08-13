@@ -106,6 +106,34 @@ def fail(msg: str) -> None:
     sys.exit(1)
 
 
+def install_pre_commit_hook() -> None:
+    """Keep the current clone's pre-commit hook aligned with the tracked hook."""
+    source = PROJECT_ROOT / ".githooks" / "pre-commit"
+    git_dir = PROJECT_ROOT / ".git"
+    if not source.is_file() or not git_dir.is_dir():
+        return
+
+    target = git_dir / "hooks" / "pre-commit"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    target.chmod(target.stat().st_mode | 0o111)
+    info("已安装提交前自动测试 Hook: .git/hooks/pre-commit")
+
+
+def run_tests() -> None:
+    """Run the repository regression suite before every package build."""
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        fail("pytest 未安装，请执行: python -m pip install -r requirements-build.txt")
+
+    cmd = [sys.executable, "-m", "pytest", "-q"]
+    info(f"执行自动测试: {' '.join(cmd)}")
+    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+    if rc != 0:
+        fail(f"自动测试失败，已停止构建 (exit={rc})")
+
+
 def ensure_pyinstaller() -> None:
     try:
         import PyInstaller  # noqa: F401
@@ -503,6 +531,9 @@ def main():
     if args.no_installer:
         info("已启用 --no-installer：跳过 .dmg/.pkg 生成（开发迭代模式）")
 
+    install_pre_commit_hook()
+    with _step_timer("自动测试"):
+        run_tests()
     ensure_pyinstaller()
     with _step_timer("写版本号"):
         write_version(args.version)

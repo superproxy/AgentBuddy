@@ -184,7 +184,7 @@ const FORM_META_LOCAL: Record<string, { label: string; color: string; bg: string
   vscode:    { label: 'VSCode 插件',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.15)',  border: 'rgba(16,185,129,0.3)' },
   idea: { label: 'IDEA 插件', color: '#fca5a5', bg: 'rgba(239,68,68,0.15)',  border: 'rgba(239,68,68,0.3)' },
   acp:       { label: 'ACP',           color: '#fcd34d', bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.3)' },
-  remote:    { label: 'Remote Control by Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
+  remote:    { label: 'Remote Web',       color: '#34d399', bg: 'rgba(52,211,153,0.15)',  border: 'rgba(52,211,153,0.3)' },
 }
 
 // 顶层分类配色
@@ -236,7 +236,7 @@ async function loadWebCreds(key: string) {
         reveal: webCreds[key]?.reveal ?? false,
       }
     } else {
-      ui.toast(r?.error || '获取 Remote Control by Web 凭据失败', 'err')
+      ui.toast(r?.error || '获取 Remote Web 凭据失败', 'err')
     }
   } finally {
     webCredsLoading.value = ''
@@ -478,7 +478,7 @@ function expandIde(it: any): any[] {
     entries.push({ ...it, _tab: 'acp', _uid: it.key + ':acp', label: it.label + ' ACP', _expanded: true, exe_path: '', app_path: '' })
   }
   if (remote) {
-    entries.push({ ...it, _tab: 'remote', _uid: it.key + ':remote', label: it.label + ' Remote Control by Web', _expanded: true, exe_path: '', app_path: '' })
+    entries.push({ ...it, _tab: 'remote', _uid: it.key + ':remote', label: it.label + ' Remote Web', _expanded: true, exe_path: '', app_path: '' })
   }
   return entries
 }
@@ -495,7 +495,7 @@ function typeLabel(it: any): string {
   if (t === 'vscode') return 'VSCode'
   if (t === 'idea') return 'IDEA'
   if (t === 'acp') return 'ACP'
-  if (t === 'remote') return 'Remote Control by Web'
+  if (t === 'remote') return 'Remote Web'
   return '—'
 }
 
@@ -754,7 +754,7 @@ watch(
           <template v-else-if="currentTab(currentSelectedIde) === 'remote'">
             <button @click="launchWebWithCreds(currentSelectedIde.key)" :disabled="ideLaunching === currentSelectedIde.key" class="dock-item primary" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Remote Control by Web' }}
+              {{ ideLaunching === currentSelectedIde.key ? '...' : '启动 Remote Web' }}
             </button>
             <template v-if="webAuth(currentSelectedIde)">
               <button v-if="webCreds[currentSelectedIde.key]" @click="toggleRevealWebPassword(currentSelectedIde.key)" class="dock-item" type="button" :title="webCreds[currentSelectedIde.key].reveal ? '隐藏密码' : '查看密码'">
@@ -774,7 +774,7 @@ watch(
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步' }}
             </button>
-            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">Remote Control by Web 官网</a>
+            <a v-if="currentInfo(currentSelectedIde)?.url" href="javascript:void(0)" @click.prevent="openIdeUrl(currentInfo(currentSelectedIde).url)" class="dock-item">Remote Web 官网</a>
           </template>
           <template v-else-if="currentInstalled(currentSelectedIde)">
             <button @click="openIdeCli(currentSelectedIde.key, currentTab(currentSelectedIde))" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item primary" type="button">

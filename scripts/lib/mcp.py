@@ -350,19 +350,18 @@ def copy_file_safe(src: Path, dst: Path, label: str, force: bool) -> None:
         return
 
     if dst.exists() or dst.is_symlink():
-        if force:
-            print(f"{COLOR_YELLOW}[!] Removing existing {label} ...{COLOR_RESET}")
-            if dst.is_dir() and not dst.is_symlink():
-                shutil.rmtree(str(dst), ignore_errors=True)
-            else:
-                dst.unlink(missing_ok=True)
-        else:
+        if not force:
             print(f"{COLOR_YELLOW}[!] {label} already exists, use --force to overwrite{COLOR_RESET}")
             return
+        if dst.is_dir() and not dst.is_symlink():
+            print(f"{COLOR_YELLOW}[!] Removing existing directory {label} ...{COLOR_RESET}")
+            shutil.rmtree(str(dst), ignore_errors=True)
+        else:
+            print(f"{COLOR_YELLOW}[!] Overwriting existing {label} ...{COLOR_RESET}")
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
-        shutil.copy2(str(src), str(dst))
+        shutil.copy2(str(src), str(dst), follow_symlinks=False)
         print(f"{COLOR_GREEN}[OK] Copied file: {label} <- {src}{COLOR_RESET}")
     except Exception as e:
         print(f"{COLOR_RED}[!] Failed to copy file {label}: {e}{COLOR_RESET}")
