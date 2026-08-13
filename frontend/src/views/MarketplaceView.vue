@@ -19,7 +19,9 @@ const auth = useAuthStore()
 
 // === Tab 切换 ===
 type TabKey = 'market' | 'mine' | 'team'
-const activeTab = ref<TabKey>('market')
+// 支持从独立菜单（我的发布）进入时直接定位到对应 Tab
+const props = defineProps<{ initialTab?: TabKey }>()
+const activeTab = ref<TabKey>(props.initialTab || 'market')
 
 // === 我的发布 + 收藏 + 点赞 ===
 const myPlugins = ref<any[]>([])
@@ -454,6 +456,8 @@ onMounted(() => {
   mkt.browse()
   refreshPluginList()
   if (auth.isLoggedIn) loadTeams()
+  // 从独立菜单（我的发布）进入时，初始 Tab 为 mine，需主动加载
+  if (activeTab.value === 'mine') { loadMyPlugins(); loadFavorites(); loadLiked() }
 })
 </script>
 

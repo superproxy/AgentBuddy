@@ -311,6 +311,34 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         ui.toast('安装成功' + detail + skippedNote)
         plugin.refreshPluginList()
         skill.loadInstalledSkills()
+
+        // 3. 环境变量自动生效到操作系统（跨平台：Windows 写注册表 / macOS 写 .zshrc / Linux 写 .bashrc）
+        try {
+          const envResp = await api<{ ok: boolean; applied?: any[]; skipped?: any[]; note?: string }>('/api/keys/apply-env', {
+            method: 'POST',
+            body: JSON.stringify({ include_empty: false }),
+          })
+          if (envResp.ok && envResp.applied?.length) {
+            ui.toast(`已设置 ${envResp.applied.length} 个环境变量到系统`)
+          }
+        } catch (envErr: any) {
+          ui.toast('环境变量设置失败: ' + (envErr?.message || ''), 'warn')
+        }
+
+        // 4. 同步到 IDE（generate + sync）
+        try {
+          const syncResp = await api<{ ok: boolean; error?: string }>('/api/sync', {
+            method: 'POST',
+          })
+          if (syncResp.ok) {
+            ui.toast('已同步到 IDE')
+          } else {
+            ui.toast('同步到 IDE 失败: ' + (syncResp.error || ''), 'warn')
+          }
+        } catch (syncErr: any) {
+          ui.toast('同步到 IDE 失败: ' + (syncErr?.message || ''), 'warn')
+        }
+
         const item = items.value.find(i => i.id === id)
         if (item) item.downloads = (item.downloads || 0) + 1
         return true

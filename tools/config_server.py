@@ -3751,6 +3751,8 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
         # 导入 plugin yaml
         # 同时收集所有插件的 envVars，统一合并到 keys.yaml（仅初始化未存在的变量）
         plugin_envvars_list: list[dict] = []
+        # 收集 plugin.yaml 内联的 mcpServers（兼容无独立 mcp.yaml 的插件包）
+        inline_mcp_servers: dict = {}
         for arc, content in plugin_entries:
             fname = Path(arc).name
             try:
@@ -3768,10 +3770,19 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(content)
             imported_plugins.append({"file": fname, "name": data["name"]})
+            # 注册到已安装清单（让 sync 时 refresh_mcp_json 合并该插件的 mcpServers）
+            try:
+                add_to_installed(PROJECT_ROOT, data["name"])
+            except Exception:
+                pass  # 注册失败不阻塞导入
             # 收集 envVars（dict 类型，含 default/description/required 等元信息）
             ev = data.get("envVars")
             if isinstance(ev, dict) and ev:
                 plugin_envvars_list.append(ev)
+            # 收集内联 mcpServers（兼容无独立 mcp.yaml 的插件包）
+            inline = data.get("mcpServers")
+            if isinstance(inline, dict) and inline:
+                inline_mcp_servers.update(inline)
 
         # 将插件 envVars 初始化到 keys.yaml.mcp（不覆盖已有值）
         if plugin_envvars_list:
@@ -3846,19 +3857,31 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 skipped.append({"file": "llm.yaml", "reason": str(e)})
 
         # 导入 mcp.yaml（合并 mcpServers 到 config/mcp/mcp.yaml）
+        # 优先使用独立 mcp.yaml；若无（插件包未单独导出），回退到 plugin.yaml 内联的 mcpServers
+        mcp_to_import: dict | None = None
+        mcp_source_label = ""
         if mcp_content:
             try:
                 imported_mcp = yaml.safe_load(mcp_content.decode("utf-8"))
                 if isinstance(imported_mcp, dict) and isinstance(imported_mcp.get("mcpServers"), dict):
-                    full = _load_mcp_yaml_full()
-                    if not isinstance(full.get("mcpServers"), dict):
-                        full["mcpServers"] = {}
-                    for sname, scfg in imported_mcp["mcpServers"].items():
-                        full["mcpServers"][sname] = scfg  # 覆盖同名
-                    _save_mcp_yaml_full(full)
-                    imported_extras.append("mcp.yaml")
+                    mcp_to_import = imported_mcp["mcpServers"]
+                    mcp_source_label = "mcp.yaml"
             except Exception as e:
                 skipped.append({"file": "mcp.yaml", "reason": str(e)})
+        if not mcp_to_import and inline_mcp_servers:
+            mcp_to_import = inline_mcp_servers
+            mcp_source_label = "plugin.yaml (inline mcpServers)"
+        if mcp_to_import:
+            try:
+                full = _load_mcp_yaml_full()
+                if not isinstance(full.get("mcpServers"), dict):
+                    full["mcpServers"] = {}
+                for sname, scfg in mcp_to_import.items():
+                    full["mcpServers"][sname] = scfg  # 覆盖同名
+                _save_mcp_yaml_full(full)
+                imported_extras.append(mcp_source_label)
+            except Exception as e:
+                skipped.append({"file": mcp_source_label, "reason": str(e)})
 
         # 导入 subagents.yaml（合并到 config/subagent/subagent.yaml）
         if subagent_content:

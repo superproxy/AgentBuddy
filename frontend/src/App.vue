@@ -51,15 +51,9 @@ const tabs: TabGroup[] = [
       { key: 'memory', label: '记忆' },
     ],
   },
-  {
-    group: 'plugin',
-    label: '插件',
-    items: [
-      { key: 'marketplace', label: '插件市场' },
-      { key: 'plugin', label: '插件管理' },
-      { key: 'plugin-build', label: '插件构建' },
-    ],
-  },
+  { group: 'plugin', label: '插件管理', items: [{ key: 'plugin', label: '插件管理' }] },
+  { group: 'marketplace', label: '插件市场', items: [{ key: 'marketplace', label: '插件市场' }] },
+  { group: 'plugin-build', label: '插件构建', items: [{ key: 'plugin-build', label: '插件构建' }] },
   { group: 'tools', label: '工具', items: [{ key: 'terminal', label: '终端测试' }] },
 ]
 // 扁平化（用于查找）
