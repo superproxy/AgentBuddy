@@ -789,6 +789,10 @@ onMounted(() => {
                   <svg viewBox="0 0 24 24" :fill="p.liked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" style="width:14px;height:14px" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                   {{ p.likes || 0 }}
                 </button>
+                <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
+                <button class="mkt-btn mkt-btn-ghost" :disabled="mkt.installing === p.id" @click="mkt.install(p.id)">
+                  {{ mkt.installing === p.id ? '安装中…' : '安装' }}
+                </button>
                 <button class="mkt-btn-danger" @click="deletePlugin(p.id)">删除</button>
               </div>
             </div>
@@ -985,6 +989,10 @@ onMounted(() => {
                 <span style="color:var(--green)">团队</span>
               </div>
               <div class="mkt-card-actions">
+                <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
+                <button class="mkt-btn mkt-btn-ghost" :disabled="mkt.installing === p.id" @click="mkt.install(p.id)">
+                  {{ mkt.installing === p.id ? '安装中…' : '安装' }}
+                </button>
                 <button v-if="selectedSpace.role === 'owner' || p.author_id === auth.user?.id" class="mkt-btn-danger" @click="deleteTeamPlugin(p.id)">删除</button>
               </div>
             </div>

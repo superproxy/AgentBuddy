@@ -76,6 +76,9 @@
 每次打 tag 发布前，**必须执行以下验证**：
 
 ```bash
+# 0. 功能特性任务列表必须全部 [x]（见「功能特性任务列表」章节）
+#    未完成的功能特性不得随版本发布
+
 # 1. generate + sync 全流程
 python scripts/agentctl.py generate
 python scripts/agentctl.py sync --ide All --force --scope llm,mcp,skill,rules
@@ -95,6 +98,9 @@ grep '\${' config/proxy/config.yaml
 
 # 4. 前端构建
 cd frontend && npx vite build
+
+# 5. 单元测试
+python -m pytest -q
 ```
 
 以上验证全部通过后，方可 `git tag` 发布。
@@ -108,6 +114,37 @@ cd frontend && npx vite build
 - 迁移成功后必须写入标记文件 `(PROJECT_ROOT / ".migrated_from_adebuddy")`
 - 禁止在迁移逻辑中无条件 `shutil.copy2` 覆盖 `USER_DATA_FILES`（含 `llm.yaml` / `mcp.yaml` / `keys.yaml` 等）——旧目录只应作为一次性数据源，不能反复覆盖新目录中用户的最新修改
 - 新增/修改任何"启动时同步/迁移用户数据"的逻辑时，必须保证幂等（只执行一次或只合并缺失项），并补充回归测试（见 `tests/test_legacy_migration_once.py`）
+
+## 功能特性任务列表（发布依据）
+
+> 每个条目是一个**功能特性**（Feature），完成时标记 `[x]`。**发布（打 tag）前必须全部 `[x]`**，未完成的功能特性不得随版本发布。新增功能特性时在此追加。
+
+### 智能体构建
+- [x] LLM Provider 可视化编辑（base_url / api_key / models / 多协议）
+- [x] LLM Provider 启用开关（`_enabled`）持久化，重启不丢失
+- [x] LLM 智能添加（粘贴 Key 自动识别厂商 + 协议 + 拉取模型）
+- [x] MCP 服务可视化编辑与密钥管理（keys.yaml）
+- [x] Skills 搜索 / 安装 / 启用切换（三源目录体系）
+- [x] Rules / Commands / Subagents / Hooks 配置编辑
+- [x] Subagent「产品经理职责需求梳理」：从业务目标到可执行需求清单（用户故事 + 验收标准 + 优先级 + 风险）
+
+### 插件分发
+- [x] 插件打包导出（ZIP 含 skills / YAML 仅配置 / 导出全部）
+- [x] 插件导入（ZIP 解压 / YAML / JSON 向后兼容）
+- [x] 插件安装 / 卸载 / 列表
+
+### 多 IDE 同步
+- [x] 一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy
+- [x] OpenCode 多 Provider 原生协议注入（openai / anthropic / openai-compatible）
+- [x] Codex / Claude 默认 LLM 源校验（Provider 或网关二选一）
+- [x] LLM 网关（LiteLLM）路由配置与模型列表生成
+- [x] IDE CLI 会话恢复命令（Claude / Codex / OpenCode / WorkBuddy 等）
+
+### 桌面应用与工程
+- [x] pywebview 桌面版（Frozen-aware，macOS / Windows）
+- [x] 旧品牌目录迁移只执行一次（不覆盖用户最新配置）
+- [x] 自动测试：构建 / 提交前运行 pytest（pre-commit hook + GitHub Actions）
+- [x] 发布前验证清单（generate + sync + 占位符检查 + 前端构建）
 
 ## 文档导航
 
