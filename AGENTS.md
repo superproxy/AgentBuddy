@@ -105,7 +105,17 @@ python -m pytest -q
 
 以上验证全部通过后，方可 `git tag` 发布。
 
-### 8. 旧品牌目录迁移 — 只执行一次，禁止每次启动覆盖用户配置
+### 8. 测试策略 — 本地测试，CI 发布跳过
+
+**问题**：CI 发布构建（`build-release.yml`）调用 `build.py` 时也会执行自动测试，测试失败会中断发布；且 CI 环境缺少本地 `config/` 文件，测试易受环境差异影响。
+
+**规则**：
+- **本地**：`build.py` 默认执行自动测试（`run_tests()`），pre-commit hook 提交前也执行测试
+- **CI 发布**：`build-release.yml` 的 macOS/Windows 构建命令必须加 `--skip-tests`，跳过测试，避免测试失败中断发布
+- 测试只在本地执行（本地构建 + 提交前 hook），CI 发布不跑测试
+- 新增测试必须使用临时目录/模板文件，不得依赖 `config/` 下被 gitignore 的真实文件（CI 中不存在）
+
+### 9. 旧品牌目录迁移 — 只执行一次，禁止每次启动覆盖用户配置
 
 **问题**：`app.py` 的 `_migrate_legacy_data_dir()` 每次启动都会执行，只要旧品牌目录 `~/Library/Application Support/AdeBuddy/` 存在，就用旧目录的 `llm.yaml` 无条件覆盖新目录的 `llm.yaml`，导致用户在新版本里设置的 Provider `_enabled` 开关在重启后消失。
 
@@ -143,7 +153,7 @@ python -m pytest -q
 ### 桌面应用与工程
 - [x] pywebview 桌面版（Frozen-aware，macOS / Windows）
 - [x] 旧品牌目录迁移只执行一次（不覆盖用户最新配置）
-- [x] 自动测试：构建 / 提交前运行 pytest（pre-commit hook + GitHub Actions）
+- [x] 自动测试：本地构建 / 提交前运行 pytest（pre-commit hook），CI 发布跳过测试（--skip-tests）
 - [x] 发布前验证清单（generate + sync + 占位符检查 + 前端构建）
 
 ## 文档导航

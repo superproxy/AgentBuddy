@@ -524,6 +524,8 @@ def main():
     ap.add_argument("--no-verify", action="store_true", help="跳过密钥泄漏扫描（不推荐）")
     ap.add_argument("--no-installer", action="store_true",
                     help="跳过安装包生成（macOS: .dmg/.pkg；Windows: Inno Setup .exe）。开发迭代强烈推荐")
+    ap.add_argument("--skip-tests", action="store_true",
+                    help="跳过自动测试（CI 发布构建使用；本地构建默认仍执行测试）")
     ap.add_argument("--version", default="1.0.0", help="安装包版本号（默认 1.0.0）")
     args = ap.parse_args()
 
@@ -532,8 +534,11 @@ def main():
         info("已启用 --no-installer：跳过 .dmg/.pkg 生成（开发迭代模式）")
 
     install_pre_commit_hook()
-    with _step_timer("自动测试"):
-        run_tests()
+    if not args.skip_tests:
+        with _step_timer("自动测试"):
+            run_tests()
+    else:
+        info("已启用 --skip-tests：跳过自动测试（CI 发布构建）")
     ensure_pyinstaller()
     with _step_timer("写版本号"):
         write_version(args.version)
