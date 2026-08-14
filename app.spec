@@ -106,17 +106,12 @@ for f in ('AGENTS.md', 'README.md', 'install.sh', 'install.cmd',
 # collect_submodules 自动收集所有子模块（agentctl.lib.*, agentctl.lib.ide.* 等）
 hiddenimports = [
     'config_server',
-] + collect_submodules('agentctl') + [
-    # AI 生成服务
-    'openai',
-    'marketplace', 'marketplace.routes', 'marketplace.storage',
-    'ai_generator', 'ai_generator.generator',
-]
+] + collect_submodules('agentctl')
 
 # 排除未直接使用的大依赖包，减小体积（~60MB → ~40MB）
-# - numpy / PIL: openai SDK 间接依赖但 AgentBuddy 运行时不使用
+# - numpy / PIL: openai SDK 间接依赖，已移除 openai（AI 生成移至服务端）
 # - cryptography: Flask session 加密用，但 JWT auth 不依赖（可选）
-# - pydantic_core: openai SDK 间接依赖
+# - pydantic_core: openai SDK 间接依赖，已移除 openai
 # - pythonnet: pywebview 在 Windows 上需要 pythonnet 作为 GUI 后端，不能排除
 # - Tcl/Tk: 无 GUI 需求
 EXCLUDES = [
@@ -124,6 +119,7 @@ EXCLUDES = [
     'pydantic_core', 'pydantic',
     'tkinter', '_tkinter',
     'matplotlib', 'scipy', 'pandas',
+    'openai',  # AI 生成已移至服务端，桌面端不需要
 ]
 
 # litellm 不打包进 bundle — 运行时按需 pip install litellm[proxy]

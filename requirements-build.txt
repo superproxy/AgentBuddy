@@ -7,8 +7,8 @@ flask>=3.0
 pyyaml>=6.0
 requests>=2.30
 pywebview>=6.0
-openai>=1.0  # 一键创建插件 / AI 生成器依赖（SSE 调用 LLM）
 litellm[proxy]>=1.0  # LLM 网关代理（多协议路由）
+# openai 已移至服务端（server/requirements.txt），桌面端不再依赖
 
 # 前端构建依赖（仅开发/构建时需要，不打包进产物）：
 #   Node.js 18+ / npm
