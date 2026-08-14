@@ -58,7 +58,7 @@ jobs:
           pip install -e cli/
 
       - name: Build app + .pkg + .dmg
-        run: python build.py --clean --skip-tests --version ${{ steps.ver.outputs.version }}
+        run: python build.py --clean --skip-tests --cli --version ${{ steps.ver.outputs.version }}
 
       - name: Verify macOS artifacts
         shell: bash
@@ -71,6 +71,8 @@ jobs:
           ls -la dist/AgentBuddy.app/Contents/ 2>/dev/null || echo "(no .app)"
           echo "=== Info.plist ==="
           plutil -p dist/AgentBuddy.app/Contents/Info.plist 2>/dev/null || echo "(no Info.plist)"
+          echo "=== CLI ==="
+          ls -la dist/agentctl/ 2>/dev/null || echo "(no cli)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -80,6 +82,7 @@ jobs:
             dist/installer/AgentBuddy-*.dmg
             dist/installer/AgentBuddy-*.pkg
             dist/installer/AgentBuddy-*.zip
+            dist/installer/agentctl-*
 
   build-windows:
     runs-on: windows-latest
@@ -137,13 +140,15 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
-        run: python build.py --clean --skip-tests --version ${{ steps.ver.outputs.version }}
+        run: python build.py --clean --skip-tests --cli --version ${{ steps.ver.outputs.version }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/installer/AgentBuddy-*
+          path: |
+            dist/installer/AgentBuddy-*
+            dist/installer/agentctl-*
 
   release:
     needs: [build-macos, build-windows]

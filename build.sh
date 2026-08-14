@@ -21,6 +21,7 @@ CLEAN=false
 NO_FRONTEND=false
 NO_VERIFY=false
 NO_INSTALLER=false
+BUILD_CLI=false
 VERSION="1.0.0"
 for arg in "$@"; do
   case "$arg" in
@@ -29,6 +30,7 @@ for arg in "$@"; do
     --no-frontend)  NO_FRONTEND=true ;;
     --no-verify)    NO_VERIFY=true ;;
     --no-installer) NO_INSTALLER=true ;;
+    --cli)          BUILD_CLI=true ;;
     --version=*)    VERSION="${arg#--version=}" ;;
     --version)      shift_next=true ;;
     *) if [ "$shift_next" = true ]; then VERSION="$arg"; shift_next=false; fi ;;
@@ -82,9 +84,13 @@ if [ "$WINDOWED" = true ]; then BUILD_ARGS="$BUILD_ARGS --windowed"; fi
 if [ "$CLEAN" = true ]; then BUILD_ARGS="$BUILD_ARGS --clean"; fi
 if [ "$NO_VERIFY" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-verify"; fi
 if [ "$NO_INSTALLER" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-installer"; fi
+if [ "$BUILD_CLI" = true ]; then BUILD_ARGS="$BUILD_ARGS --cli"; fi
 BUILD_ARGS="$BUILD_ARGS --version $VERSION"
 "$PY" build.py $BUILD_ARGS || fail "PyInstaller 打包失败"
 info "后端打包完成: dist/AgentBuddy/"
+if [ "$BUILD_CLI" = true ]; then
+  info "CLI 打包完成: dist/agentctl/"
+fi
 
 # ===== 4. 验证前端产物已进 bundle =====
 info "步骤 4/4: 验证前端产物..."

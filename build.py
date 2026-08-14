@@ -16,6 +16,8 @@
   python build.py --windowed      # 无控制台（macOS 生成 .app，Windows 无黑框）
   python build.py --clean         # 先清理 dist/ build/
   python build.py --no-verify     # 跳过密钥泄漏扫描（不推荐）
+  python build.py --cli           # 同时构建 agentctl CLI 独立可执行文件
+  python build.py --cli-only      # 仅构建 agentctl CLI（跳过桌面应用）
 
 环境要求：
   Python 3.10+
@@ -53,6 +55,7 @@ sys.stderr = _ensure_utf8_stream(sys.stderr)
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 SPEC_FILE = PROJECT_ROOT / "app.spec"
+CLI_SPEC_FILE = PROJECT_ROOT / "cli.spec"
 DIST_DIR = PROJECT_ROOT / "dist"
 BUILD_DIR = PROJECT_ROOT / "build"
 INSTALLER_ISS = PROJECT_ROOT / "installer.iss"
@@ -269,6 +272,22 @@ def run_pyinstaller(windowed: bool, version: str = "1.0.0") -> None:
         fail(f"PyInstaller 构建失败 (exit={rc})")
 
 
+def run_pyinstaller_cli(version: str = "1.0.0") -> None:
+    """构建 agentctl CLI 独立可执行文件（cli.spec）。
+
+    产物: dist/agentctl/agentctl (macOS/Linux) / dist/agentctl/agentctl.exe (Windows)
+    """
+    if not CLI_SPEC_FILE.is_file():
+        fail(f"找不到 {CLI_SPEC_FILE.name}")
+    cmd = [sys.executable, "-m", "PyInstaller", str(CLI_SPEC_FILE), "--noconfirm"]
+    info(f"执行: {' '.join(cmd)}")
+    env = os.environ.copy()
+    env["AGENTBUDDY_VERSION"] = version
+    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT), env=env)
+    if rc != 0:
+        fail(f"CLI PyInstaller 构建失败 (exit={rc})")
+
+
 def verify_bundle() -> None:
     """扫描 dist/ 产物，确认无敏感文件 / 无密钥明文。
 
@@ -359,6 +378,16 @@ def report() -> None:
         print(f"  产物目录: dist/AgentBuddy/")
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
         print("  分发:    压缩为 .tar.gz，或用 appimagetool 做 .AppImage")
+
+    # CLI 产物
+    cli_exe = DIST_DIR / "agentctl" / ("agentctl.exe" if plat == "win32" else "agentctl")
+    if cli_exe.is_file():
+        print(f"\n  CLI 产物: dist/agentctl/")
+        print(f"  CLI 可执行: {cli_exe.relative_to(PROJECT_ROOT)}")
+        cli_archives = list(INSTALLER_OUT_DIR.glob("agentctl-*")) if INSTALLER_OUT_DIR.exists() else []
+        for ca in cli_archives:
+            print(f"  CLI 分发包: {ca.relative_to(PROJECT_ROOT)}")
+
     print("\n  首次运行会自动从模板生成 config/llm/llm.yaml 与 config/mcp/mcp.yaml")
     print("  用户在 UI 中填入真实 API Key 即可。\n")
 
@@ -529,6 +558,45 @@ def _build_macos_zip(version: str, app_name: str) -> None:
         fail(f"未找到预期的 zip 输出: {zip_name}")
 
 
+def build_cli_dist(version: str = "1.0.0") -> None:
+    """打包 agentctl CLI 为可分发压缩包。
+
+    产物:
+      - macOS/Linux: dist/installer/agentctl-{version}-{platform}.tar.gz
+      - Windows:     dist/installer/agentctl-{version}-windows.zip
+    """
+    cli_dir = DIST_DIR / "agentctl"
+    if not cli_dir.is_dir():
+        fail(f"CLI 产物目录不存在: {cli_dir.relative_to(PROJECT_ROOT)}")
+
+    INSTALLER_OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if sys.platform == "win32":
+        archive_name = f"agentctl-{version}-windows.zip"
+        archive_path = INSTALLER_OUT_DIR / archive_name
+        info(f"打包 CLI 为 .zip: {archive_name}")
+        import zipfile
+        with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in cli_dir.rglob("*"):
+                if p.is_file():
+                    arcname = p.relative_to(DIST_DIR)
+                    zf.write(p, arcname)
+    else:
+        platform_name = "macos" if sys.platform == "darwin" else sys.platform
+        archive_name = f"agentctl-{version}-{platform_name}.tar.gz"
+        archive_path = INSTALLER_OUT_DIR / archive_name
+        info(f"打包 CLI 为 .tar.gz: {archive_name}")
+        cmd = ["tar", "-czf", str(archive_path), "-C", str(DIST_DIR), "agentctl"]
+        rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+        if rc != 0:
+            fail(f"tar 打包失败 (exit={rc})")
+
+    if archive_path.is_file():
+        info(f"CLI 分发包已生成: {archive_path.relative_to(PROJECT_ROOT)}")
+    else:
+        fail(f"CLI 分发包未生成: {archive_name}")
+
+
 def _step_timer(step_name: str):
     """步骤计时上下文管理器，结束时打印耗时。"""
     from contextlib import contextmanager
@@ -561,10 +629,21 @@ def main():
                     help="跳过安装包生成（macOS: .dmg/.pkg；Windows: Inno Setup .exe）。开发迭代强烈推荐")
     ap.add_argument("--skip-tests", action="store_true",
                     help="跳过自动测试（CI 发布构建使用；本地构建默认仍执行测试）")
+    ap.add_argument("--cli", action="store_true",
+                    help="同时构建 agentctl CLI 独立可执行文件（cli.spec）")
+    ap.add_argument("--cli-only", action="store_true",
+                    help="仅构建 agentctl CLI，跳过桌面应用（快速迭代 CLI 用）")
     ap.add_argument("--version", default="1.0.0", help="安装包版本号（默认 1.0.0）")
     args = ap.parse_args()
 
+    build_cli = args.cli or args.cli_only
+    build_app = not args.cli_only
+
     info(f"平台: {sys.platform} | Python: {sys.version.split()[0]} | 版本: {args.version}")
+    if build_app:
+        info("构建目标: 桌面应用")
+    if build_cli:
+        info("构建目标: agentctl CLI")
     if args.no_installer:
         info("已启用 --no-installer：跳过 .dmg/.pkg 生成（开发迭代模式）")
 
@@ -575,24 +654,32 @@ def main():
     else:
         info("已启用 --skip-tests：跳过自动测试（CI 发布构建）")
     ensure_pyinstaller()
-    with _step_timer("构建前端"):
-        build_frontend()
-    with _step_timer("写版本号"):
-        write_version(args.version)
-    with _step_timer("生成 icns"):
-        generate_icns()
-    if args.clean:
-        with _step_timer("清理 dist/build"):
-            clean()
-    with _step_timer("PyInstaller 打包"):
-        run_pyinstaller(windowed=args.windowed, version=args.version)
-    if not args.no_verify:
-        with _step_timer("密钥泄漏扫描"):
-            verify_bundle()
-            check_examples_present()
-    if not args.no_installer and sys.platform in ("win32", "darwin"):
-        with _step_timer("生成安装包 .dmg/.pkg"):
-            build_installer(version=args.version)
+
+    if build_app:
+        with _step_timer("构建前端"):
+            build_frontend()
+        with _step_timer("写版本号"):
+            write_version(args.version)
+        with _step_timer("生成 icns"):
+            generate_icns()
+        if args.clean:
+            with _step_timer("清理 dist/build"):
+                clean()
+        with _step_timer("PyInstaller 打包 (桌面应用)"):
+            run_pyinstaller(windowed=args.windowed, version=args.version)
+        if not args.no_verify:
+            with _step_timer("密钥泄漏扫描"):
+                verify_bundle()
+                check_examples_present()
+        if not args.no_installer and sys.platform in ("win32", "darwin"):
+            with _step_timer("生成安装包 .dmg/.pkg"):
+                build_installer(version=args.version)
+
+    if build_cli:
+        with _step_timer("PyInstaller 打包 (agentctl CLI)"):
+            run_pyinstaller_cli(version=args.version)
+        with _step_timer("打包 CLI 分发包"):
+            build_cli_dist(version=args.version)
 
     total = time.perf_counter() - total_t0
     info(f"═══ 总耗时: {total/60:.1f}m ═══" if total >= 60 else f"═══ 总耗时: {total:.1f}s ═══")
