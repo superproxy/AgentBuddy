@@ -41,7 +41,7 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
     if not os.path.isdir(root):
         return out
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ('__pycache__', '.venv', 'build', 'dist', 'node_modules')]
+        dirnames[:] = [d for d in dirnames if d not in ('__pycache__', '.venv', 'build', 'dist', 'node_modules', '.vite', '.git')]
         for fn in filenames:
             if fn in excludes:
                 continue

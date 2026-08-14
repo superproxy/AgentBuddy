@@ -52,7 +52,7 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
         return out
     for dirpath, dirnames, filenames in os.walk(root):
         # 裁剪缓存目录
-        dirnames[:] = [d for d in dirnames if d not in ('__pycache__', '.venv', 'build', 'dist')]
+        dirnames[:] = [d for d in dirnames if d not in ('__pycache__', '.venv', 'build', 'dist', 'node_modules', '.vite', '.git')]
         for fn in filenames:
             if fn in excludes:
                 continue

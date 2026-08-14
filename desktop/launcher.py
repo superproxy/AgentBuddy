@@ -319,7 +319,8 @@ def _bootstrap_from_bundle() -> None:
     is_macos = sys.platform == "darwin"
 
     resources = [
-        "cli", "template", "desktop",
+        "cli", "template",
+        "desktop/dist-ui",
         "AGENTS.md",
     ]
     copied = []
