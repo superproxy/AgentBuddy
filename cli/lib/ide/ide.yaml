@@ -23,7 +23,7 @@
 #   install_methods: 该 IDE 支持的所有安装方式（用于 UI 展示）
 #   brand:          品牌（用于 UI 分组）
 #   category:       顶层分类 code（编程）/ work（办公）
-#   forms:          形式子集 [cli, app, vscode, idea, acp]
+#   forms:          形式子集 [cli, app, vscode, idea, acp, web]
 #   hidden:         是否在 UI 隐藏（占位符用）
 #
 # cli_install / app_install 的 method：
@@ -121,7 +121,7 @@ install_meta:
     install_methods: [script, npm, brew, winget, acp, vscode, web]
     brand: Claude
     category: code
-    forms: [cli, app, acp, vscode, remote]
+    forms: [cli, app, acp, vscode, web]
 
   Codex:
     # OpenAI Codex CLI + Desktop App
@@ -180,10 +180,10 @@ install_meta:
       password_arg: --password
       url_style: path
       note: npx codexapp 启动 Web UI（--password 注入随机密码），浏览器访问 http://localhost:5900（带密码链接免登录；需已配置 Codex app-server）
-    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, remote]
+    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, web]
     brand: Codex
     category: code
-    forms: [cli, app, vscode, idea, acp, remote]
+    forms: [cli, app, vscode, idea, acp, web]
 
   Cursor:
     # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -400,7 +400,7 @@ install_meta:
       note: opencode web 启动 Web UI（OPENCODE_SERVER_PASSWORD 注入随机密码，HTTP Basic Auth），浏览器访问 http://localhost:4096（带密码链接免登录）
     brand: OpenCode
     category: code
-    forms: [cli, app, acp, remote]
+    forms: [cli, app, acp, web]
 
   DeepSeek:
     # DeepSeek Harness（DeepSeek 官方开源 Agent Harness，"一切皆插件"）
@@ -442,7 +442,7 @@ install_meta:
       note: dsh web 启动 Web UI（无密码，首次打开需输入 DeepSeek API Key 并选择工作区），浏览器访问 http://127.0.0.1:3080
     brand: DeepSeek
     category: code
-    forms: [cli, remote]
+    forms: [cli, web]
 
   Qoder:
     # Qoder 国际版（阿里云通义灵码升级版）
@@ -793,9 +793,14 @@ install_meta:
       url: https://www.jetbrains.com/acp/
       cmd: kimi acp
       note: 在 JetBrains IDE AI Assistant 中配置 ACP 智能体，运行 kimi acp 后连接
+    # Kimi Web 版（kimi.com 在线智能助手）
+    web_install:
+      method: web
+      url: https://www.kimi.com/
+      note: Kimi Web 版在线智能助手（长文本处理、联网搜索、代码编写）
     brand: Kimi
     category: code
-    forms: [cli, vscode, idea, acp]
+    forms: [cli, vscode, idea, acp, web]
 
   KimiWork:
     # Kimi Work（桌面 AI Agent，Moonshot AI 桌面应用）
@@ -1073,10 +1078,10 @@ install_meta:
       macos_x64: https://www.codebuddy.cn/ide/
       windows_x64: https://www.codebuddy.cn/ide/
       linux_x64: https://www.codebuddy.cn/ide/
-    install_methods: [npm, app, vscode, jetbrains, remote]
+    install_methods: [npm, app, vscode, jetbrains, web]
     brand: CodeBuddy
     category: code
-    forms: [cli, app, vscode, idea, remote]
+    forms: [cli, app, vscode, idea, web]
 
 
 # ============================================================
