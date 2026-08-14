@@ -154,10 +154,10 @@ def clean() -> None:
 
 
 def write_version(version: str) -> None:
-    """构建时写入版本信息到 tools/dist-ui/version.json，供运行时 /api/version 读取。"""
+    """构建时写入版本信息到 desktop/service/dist-ui/version.json，供运行时 /api/version 读取。"""
     import json
     from datetime import datetime, timezone
-    version_file = PROJECT_ROOT / "tools" / "dist-ui" / "version.json"
+    version_file = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "version.json"
     data = {
         "version": version,
         "build_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
