@@ -5,8 +5,8 @@ import { fileURLToPath, URL } from 'node:url'
 
 // Vite 配置：
 // - base: './' 相对路径，Flask 静态托管 + pywebview 加载 dist/index.html 兼容
-// - outDir: 产物输出到 tools/dist-ui，被 PyInstaller collect_dir('tools') 自动打包
-// - dev proxy: /api + /static 转发到 Flask(5000)，开发时前端跑 5173
+// - outDir: 产物输出到 desktop/service/dist-ui，被 PyInstaller collect_dir('desktop/service') 自动打包
+// - dev proxy: /api + /static 转发到 Flask(5050)，开发时前端跑 19527
 export default defineConfig({
   base: './',
   plugins: [vue(), tailwindcss()],
@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../tools/dist-ui',
+    outDir: '../service/dist-ui',
     emptyOutDir: true,
     // 产物用相对路径加载资源（配合 base: './'）
     assetsDir: 'assets',
