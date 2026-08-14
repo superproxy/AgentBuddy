@@ -49,7 +49,9 @@ const visible = computed(
     props.tab !== 'plugin-build' &&
     props.tab !== 'ide' &&
     props.tab !== 'marketplace' &&
-    props.tab !== 'terminal',
+    props.tab !== 'terminal' &&
+    props.tab !== 'token' &&
+    !!SCOPE_META[props.tab],
 )
 
 /** 「全部」= AIDE 管理页已检测到的已安装 IDE/CLI */
