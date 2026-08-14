@@ -54,7 +54,7 @@ const tabs: TabGroup[] = [
   { group: 'plugin', label: '插件管理', items: [{ key: 'plugin', label: '插件管理' }] },
   { group: 'marketplace', label: '插件市场', items: [{ key: 'marketplace', label: '插件市场' }] },
   { group: 'plugin-build', label: '插件构建', items: [{ key: 'plugin-build', label: '插件构建' }] },
-  { group: 'token', label: 'Token 渠道', items: [{ key: 'token', label: 'Token 购买' }] },
+  { group: 'token', label: 'Token 市场', items: [{ key: 'token', label: 'Token 市场' }] },
   // ttyd 终端已隐藏（功能意义不大，后续如需恢复取消注释即可）
   // { group: 'tools', label: '工具', items: [{ key: 'terminal', label: '终端测试' }] },
 ]
