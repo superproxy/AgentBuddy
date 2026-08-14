@@ -477,10 +477,21 @@ install_meta:
       macos_x64: https://qoder.com/zh/download
       windows_x64: https://qoder.com/zh/download
       linux_x64: https://qoder.com/zh/download
-    install_methods: [script, app]
+    install_methods: [script, app, vscode, jetbrains]
+    # Qoder VSCode 扩展（通义灵码，扩展 ID: Alibaba-Cloud.tongyi-lingma）
+    vscode_install:
+      method: extension
+      url: vscode:extension/Alibaba-Cloud.tongyi-lingma
+      extension_id: Alibaba-Cloud.tongyi-lingma
+      note: "点击安装将在 VS Code 中打开通义灵码扩展页面"
+    # Qoder JetBrains 插件
+    idea_install:
+      method: manual
+      url: https://qoder.com/jetbrains
+      note: "在 JetBrains IDE 中安装通义灵码插件"
     brand: Qoder
     category: code
-    forms: [app, cli]
+    forms: [app, cli, vscode, idea]
 
   QoderCN:
     # Qoder 国内版（阿里云通义灵码升级版，国内合规）
@@ -509,10 +520,21 @@ install_meta:
       macos_x64: https://qoder.com.cn/download
       windows_x64: https://qoder.com.cn/download
       linux_x64: https://qoder.com.cn/download
-    install_methods: [script, app]
+    install_methods: [script, app, vscode, jetbrains]
+    # Qoder CN VSCode 扩展（通义灵码，扩展 ID: Alibaba-Cloud.tongyi-lingma）
+    vscode_install:
+      method: extension
+      url: vscode:extension/Alibaba-Cloud.tongyi-lingma
+      extension_id: Alibaba-Cloud.tongyi-lingma
+      note: "点击安装将在 VS Code 中打开通义灵码扩展页面"
+    # Qoder CN JetBrains 插件
+    idea_install:
+      method: manual
+      url: https://qoder.cn/jetbrains
+      note: "在 JetBrains IDE 中安装通义灵码插件（从 qoder.cn/jetbrains 下载安装）"
     brand: Qoder CN
     category: code
-    forms: [app, cli]
+    forms: [app, cli, vscode, idea]
 
   OpenClaw:
     # OpenClaw（开源个人 AI 助手平台 / Agent 调度框架）
