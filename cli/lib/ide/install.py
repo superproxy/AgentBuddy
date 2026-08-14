@@ -415,6 +415,47 @@ def _find_jetbrains_launcher() -> str | None:
         return None
 
 
+def _find_jetbrains_plugin_dir() -> Path | None:
+    """查找 JetBrains 插件目录（用于 zip 下载安装）。
+
+    插件目录路径（参考 JetBrains 官方文档）：
+      macOS:   ~/Library/Application Support/JetBrains/<Product><Version>/plugins/
+      Windows: %APPDATA%\\JetBrains\\<Product><Version>\\plugins\\
+      Linux:   ~/.local/share/JetBrains/<Product><Version>/plugins/
+
+    如果存在多个版本目录，选择最新的（按名称排序）。
+    如果目录不存在则创建（返回第一个匹配的 base 目录下的 plugins/）。
+
+    Returns:
+        插件目录 Path，或 None（未找到 JetBrains 安装）。
+    """
+    home = Path.home()
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))
+        base = Path(appdata) / "JetBrains"
+    elif sys.platform == "darwin":
+        base = home / "Library" / "Application Support" / "JetBrains"
+    else:
+        base = home / ".local" / "share" / "JetBrains"
+
+    if not base.exists():
+        return None
+
+    # 查找所有 <Product><Version> 目录（如 IntelliJIdea2024.1, PyCharm2024.1）
+    product_dirs = [d for d in base.iterdir() if d.is_dir() and not d.name.startswith(".")]
+    if not product_dirs:
+        return None
+
+    # 按名称排序，选最新的
+    product_dirs.sort(reverse=True)
+    for pd in product_dirs:
+        plugins_dir = pd / "plugins"
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        return plugins_dir
+
+    return None
+
+
 def install_ide(ide_key: str, mode: str = "cli") -> dict:
     """安装 IDE。
 
@@ -478,6 +519,57 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
                 "cmd": " ".join(install_cmd),
                 "stdout": result["stdout"], "stderr": result["stderr"],
                 "url": url,
+            }
+
+        # —— JetBrains 插件 zip 下载安装 ——
+        # 适用于不在 Marketplace 上的插件（如 QoderCN）
+        # 下载 zip → 解压到 JetBrains 插件目录
+        if mode == "idea" and method == "zip_download":
+            zip_url = ext_meta.get("url", "")
+            if not zip_url or not zip_url.endswith(".zip"):
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": "zip_download 配置缺 url 或 url 非 .zip",
+                        "cmd": "", "stdout": "", "stderr": "", "url": url}
+            import tempfile
+            import zipfile
+            import urllib.request
+            # 查找 JetBrains 插件目录
+            plugin_dir = _find_jetbrains_plugin_dir()
+            if not plugin_dir:
+                msg = ("未找到 JetBrains 插件目录，请先安装任意 JetBrains IDE，"
+                       f"或手动下载 zip 安装：{zip_url}")
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": msg, "cmd": "", "stdout": "", "stderr": "",
+                        "url": zip_url}
+            # 下载 zip
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+                    req = urllib.request.Request(zip_url, headers={"User-Agent": "AgentBuddy-Installer/1.0"})
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        tmp.write(resp.read())
+                    tmp_path = tmp.name
+            except Exception as e:
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": f"下载 zip 失败: {e}",
+                        "cmd": "", "stdout": "", "stderr": "", "url": zip_url}
+            # 解压到插件目录
+            try:
+                with zipfile.ZipFile(tmp_path, "r") as zf:
+                    zf.extractall(str(plugin_dir))
+                plugin_dir_str = str(plugin_dir)
+            except Exception as e:
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": f"解压 zip 失败: {e}",
+                        "cmd": "", "stdout": "", "stderr": "", "url": zip_url}
+            finally:
+                import os as _os
+                _os.unlink(tmp_path)
+            return {
+                "ok": True, "ide": ide_key, "mode": mode, "method": method,
+                "message": f"插件已下载安装到 {plugin_dir_str}，重启 JetBrains IDE 生效",
+                "cmd": f"download {zip_url} → {plugin_dir_str}",
+                "stdout": "", "stderr": "",
+                "url": zip_url,
             }
 
         # —— 默认：返回 URL/命令，由前端或用户处理 ——

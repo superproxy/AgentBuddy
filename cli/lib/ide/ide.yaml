@@ -537,12 +537,12 @@ install_meta:
       url: vscode:extension/Alibaba-Cloud.tongyi-lingma
       extension_id: Alibaba-Cloud.tongyi-lingma
       note: "点击安装将在 VS Code 中打开通义灵码扩展页面"
-    # Qoder CN JetBrains 插件（OSS 直链下载 zip，手动安装到 JetBrains IDE）
+    # Qoder CN JetBrains 插件（OSS 直链 zip，自动下载安装到插件目录）
     idea_install:
-      method: manual
+      method: zip_download
       url: https://qodercn-jb.oss-cn-hangzhou.aliyuncs.com/qodercn-jetbrains-latest.zip
       page_url: https://qoder.cn/jetbrains
-      note: "下载 zip 后在 JetBrains IDE 中：Settings → Plugins → ⚙ → Install Plugin from Disk → 选择 zip 文件"
+      note: "自动下载 zip 并安装到 JetBrains 插件目录，重启 IDE 生效"
     # Qoder CN Remote Control：远程控制模式，手机/Web 端远程操作 CLI 会话
     # 来源：https://docs.qoder.cn/cli/remote-control#remote-control-mode
     # 两种模式：
