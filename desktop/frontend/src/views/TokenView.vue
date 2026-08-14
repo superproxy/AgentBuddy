@@ -15,6 +15,7 @@ interface CodingPlan {
   unit: string
   quota: string
   models: number
+  modelNames: string[]
   billingType: string
   gradient: string
   promoCode?: string
@@ -50,6 +51,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '18,000 次',
     models: 10,
+    modelNames: ['DeepSeek', 'Doubao', 'Qwen'],
     billingType: 'API 请求次数',
     gradient: 'from-red-500 to-orange-600',
     highlight: true,
@@ -64,6 +66,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '20,000 AFP',
     models: 18,
+    modelNames: ['DeepSeek', 'Doubao', 'Qwen', 'GLM'],
     billingType: '积分制',
     gradient: 'from-red-500 to-rose-700',
   },
@@ -77,6 +80,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '90,000 次',
     models: 9,
+    modelNames: ['Qwen'],
     billingType: 'API 请求次数',
     gradient: 'from-orange-500 to-amber-600',
   },
@@ -90,6 +94,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '2,500 积分',
     models: 22,
+    modelNames: ['Qwen', 'DeepSeek', 'GLM'],
     billingType: '积分制',
     gradient: 'from-amber-500 to-yellow-600',
   },
@@ -102,6 +107,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '40,000 积分',
     models: 3,
+    modelNames: ['GLM'],
     billingType: '积分制',
     gradient: 'from-blue-500 to-cyan-600',
   },
@@ -114,6 +120,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '~33M Token',
     models: 5,
+    modelNames: ['Kimi'],
     billingType: 'Token 计费',
     gradient: 'from-purple-500 to-indigo-600',
   },
@@ -126,6 +133,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '~600M Token',
     models: 5,
+    modelNames: ['MiniMax'],
     billingType: 'Token 计费',
     gradient: 'from-teal-500 to-green-600',
   },
@@ -139,6 +147,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '10M Token',
     models: 6,
+    modelNames: ['ERNIE'],
     billingType: 'Token 计费',
     gradient: 'from-blue-600 to-indigo-700',
   },
@@ -151,6 +160,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '35M Token',
     models: 7,
+    modelNames: ['Hunyuan'],
     billingType: 'Token 计费',
     gradient: 'from-sky-500 to-blue-600',
   },
@@ -164,6 +174,7 @@ const codingPlans: CodingPlan[] = [
     unit: '/月',
     quota: '18,000 次',
     models: 16,
+    modelNames: ['Spark'],
     billingType: 'API 请求次数',
     gradient: 'from-indigo-500 to-purple-600',
   },
@@ -274,10 +285,39 @@ function copyPromoCode(code: string, e: Event) {
 const activeTab = ref<'plans' | 'markets'>('plans')
 
 const planFilter = ref<'all' | 'cheap' | 'large'>('all')
+const modelFilter = ref<string>('all')
+
+// 所有可用模型列表（从数据中提取去重）
+const allModelNames = computed(() => {
+  const set = new Set<string>()
+  codingPlans.forEach(p => p.modelNames.forEach(m => set.add(m)))
+  markets.forEach(m => m.models.forEach(mo => {
+    // 从模型名中提取厂商关键词
+    const name = mo.name.toLowerCase()
+    if (name.includes('deepseek')) set.add('DeepSeek')
+    else if (name.includes('claude')) set.add('Claude')
+    else if (name.includes('gpt') || name.includes('codex')) set.add('GPT')
+    else if (name.includes('gemini')) set.add('Gemini')
+    else if (name.includes('qwen')) set.add('Qwen')
+    else if (name.includes('glm')) set.add('GLM')
+    else if (name.includes('kimi')) set.add('Kimi')
+  }))
+  return Array.from(set).sort()
+})
+
 const filteredPlans = computed(() => {
-  if (planFilter.value === 'cheap') return codingPlans.filter(p => parseFloat(p.price.replace(/[¥$]/, '')) <= 40)
-  if (planFilter.value === 'large') return codingPlans.filter(p => p.models >= 10)
-  return codingPlans
+  let result = codingPlans
+  if (planFilter.value === 'cheap') result = result.filter(p => parseFloat(p.price.replace(/[¥$]/, '')) <= 40)
+  if (planFilter.value === 'large') result = result.filter(p => p.models >= 10)
+  if (modelFilter.value !== 'all') result = result.filter(p => p.modelNames.includes(modelFilter.value))
+  return result
+})
+
+const filterMode = ref<'all' | 'free' | 'paid'>('all')
+const filteredMarkets = computed(() => {
+  if (filterMode.value === 'free') return markets.filter(m => m.pricing.free)
+  if (filterMode.value === 'paid') return markets.filter(m => m.pricing.paid)
+  return markets
 })
 </script>
 
@@ -312,7 +352,7 @@ const filteredPlans = computed(() => {
     <!-- ===== Coding Plan 套餐 ===== -->
     <template v-if="activeTab === 'plans'">
       <!-- 筛选器 -->
-      <div class="mb-5 flex items-center gap-2">
+      <div class="mb-5 flex flex-wrap items-center gap-2">
         <button
           v-for="f in [
             { v: 'all', l: '全部' },
@@ -325,6 +365,23 @@ const filteredPlans = computed(() => {
           @click="planFilter = f.v"
         >
           {{ f.l }}
+        </button>
+        <span class="text-ink-300 mx-1">|</span>
+        <button
+          class="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+          :class="modelFilter === 'all' ? 'bg-brand-500 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'"
+          @click="modelFilter = 'all'"
+        >
+          全部模型
+        </button>
+        <button
+          v-for="m in allModelNames"
+          :key="m"
+          class="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+          :class="modelFilter === m ? 'bg-brand-500 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'"
+          @click="modelFilter = m"
+        >
+          {{ m }}
         </button>
       </div>
 
