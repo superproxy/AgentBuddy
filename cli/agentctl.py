@@ -26,16 +26,13 @@ import argparse
 import sys
 from pathlib import Path
 
-# 确保 scripts/ 在 sys.path 中，以便导入 lib 包
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from lib.logging import (
+from agentctl.lib.logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET,
     info, warn, error, hint, header,
 )
-from lib import llm, mcp, skills, plugins
-from lib.ide import get_ide, IDE_REGISTRY
-from lib.ide._meta import get_ide_protocols as get_ide_protocols
+from agentctl.lib import llm, mcp, skills, plugins
+from agentctl.lib.ide import get_ide, IDE_REGISTRY
+from agentctl.lib.ide._meta import get_ide_protocols as get_ide_protocols
 
 
 def _resolve_project_root() -> Path:
@@ -61,7 +58,7 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
 
     只同步有 responses 协议且启用的 provider。active provider 已在模板中生成。
     """
-    from lib.llm import _merge_base
+    from agentctl.lib.llm import _merge_base
 
     llm = env_config.get("llm", {})
     if not isinstance(llm, dict):
