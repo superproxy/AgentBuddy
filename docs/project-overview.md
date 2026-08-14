@@ -9,20 +9,23 @@
 
 ## 项目结构
 ```
-app.py                      # pywebview 桌面启动器（Frozen-aware）
-tools/config_server.py      # Flask 后端（API + SSE 流式安装）
-scripts/agentctl.py         # CLI 入口（generate / sync / install / uninstall）
-scripts/lib/                # 公共库（skills / plugins / mcp / llm / ide/）
-  skills.py                 # skill 安装 + 同步 + 启用清单
-  plugins.py                # 插件安装编排 + CSV 生成
-  config_io.py              # yaml/json 读写
-  ide/                      # IDE 检测 / 启动 / 会话 / 安装
-frontend/                   # Vue 3 + Vite + Pinia + TailwindCSS
-  src/stores/plugin.ts      # 插件 store（导入导出 / 安装 / 卸载）
-  src/stores/skill.ts       # 技能 store（搜索 / 安装 / 启用切换）
-  src/views/PluginView.vue  # 插件列表（导出下拉菜单 ZIP/YAML）
-  src/views/PluginBuildView.vue  # 插件构建
-  src/views/SkillView.vue   # 技能管理
+desktop/                    # 桌面应用层（API + Vue 前端 + 启动器）
+  launcher.py               # pywebview 桌面启动器（Frozen-aware）
+  service/config_server.py  # Flask 后端（API + SSE 流式安装）
+  frontend/                 # Vue 3 + Vite + Pinia + TailwindCSS
+    src/stores/plugin.ts    # 插件 store（导入导出 / 安装 / 卸载）
+    src/stores/skill.ts     # 技能 store（搜索 / 安装 / 启用切换）
+    src/views/PluginView.vue    # 插件列表（导出下拉菜单 ZIP/YAML）
+    src/views/PluginBuildView.vue  # 插件构建
+    src/views/SkillView.vue # 技能管理
+cli/                        # CLI 层（独立可发布的 agentctl 包）
+  agentctl.py               # CLI 入口（generate / sync / install / uninstall）
+  lib/                      # 公共库（skills / plugins / mcp / llm / ide/）
+    skills.py               # skill 安装 + 同步 + 启用清单
+    plugins.py              # 插件安装编排 + CSV 生成
+    config_io.py            # yaml/json 读写
+    ide/                    # IDE 检测 / 启动 / 会话 / 安装
+  pyproject.toml            # agentctl 包元数据（pip install -e cli/）
 config/                     # 运行态配置（用户可编辑）
   llm/llm.yaml              # LLM Provider 配置
   mcp/mcp.yaml              # MCP 服务定义 + 密钥

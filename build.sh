@@ -37,17 +37,17 @@ done
 
 info "AgentBuddy 完整构建 (platform=$(uname -s))"
 
-# ===== 1. 前端构建（Vue 3 + Vite -> tools/dist-ui）=====
+# ===== 1. 前端构建（Vue 3 + Vite -> desktop/service/dist-ui）=====
 if [ "$NO_FRONTEND" = false ]; then
   info "步骤 1/4: 构建前端 (Vue 3 + Vite)..."
-  if [ ! -d "frontend/node_modules" ]; then
-    warn "frontend/node_modules 不存在，正在安装依赖..."
-    cd frontend && npm install && cd "$ROOT"
+  if [ ! -d "desktop/frontend/node_modules" ]; then
+    warn "desktop/frontend/node_modules 不存在，正在安装依赖..."
+    cd desktop/frontend && npm install && cd "$ROOT"
   fi
-  cd frontend
+  cd desktop/frontend
   npm run build-only || fail "前端构建失败"
   cd "$ROOT"
-  info "前端产物: tools/dist-ui/ ($(du -sh tools/dist-ui 2>/dev/null | cut -f1))"
+  info "前端产物: desktop/service/dist-ui/ ($(du -sh desktop/service/dist-ui 2>/dev/null | cut -f1))"
 else
   warn "跳过前端构建 (--no-frontend)"
 fi
@@ -63,6 +63,11 @@ fi
 if ! "$PY" -c "import flask, yaml, requests" 2>/dev/null; then
   warn "缺少运行时依赖，正在安装..."
   "$PY" -m pip install flask pyyaml requests pywebview || fail "依赖安装失败"
+fi
+# 三层分离：agentctl 包以 editable install 方式注册
+if ! "$PY" -c "import agentctl" 2>/dev/null; then
+  warn "安装 agentctl 包（cli/ 共享业务库）..."
+  "$PY" -m pip install -e cli/ || fail "agentctl 安装失败"
 fi
 if ! "$PY" -c "import PyInstaller" 2>/dev/null; then
   warn "缺少 PyInstaller，正在安装..."
@@ -83,14 +88,14 @@ info "后端打包完成: dist/AgentBuddy/"
 
 # ===== 4. 验证前端产物已进 bundle =====
 info "步骤 4/4: 验证前端产物..."
-BUNDLE_TOOLS="dist/AgentBuddy/_internal/tools"
-if [ ! -d "$BUNDLE_TOOLS/dist-ui" ]; then
-  BUNDLE_TOOLS="dist/AgentBuddy/tools"
+BUNDLE_DESKTOP="dist/AgentBuddy/_internal/desktop"
+if [ ! -d "$BUNDLE_DESKTOP/service" ]; then
+  BUNDLE_DESKTOP="dist/AgentBuddy/desktop"
 fi
-if [ -f "$BUNDLE_TOOLS/dist-ui/index.html" ]; then
-  info "前端产物已进 bundle: $BUNDLE_TOOLS/dist-ui/index.html"
+if [ -f "$BUNDLE_DESKTOP/service/dist-ui/index.html" ]; then
+  info "前端产物已进 bundle: $BUNDLE_DESKTOP/service/dist-ui/index.html"
 else
-  warn "前端产物未在 bundle 中找到（tools/dist-ui），打包后 UI 可能无法显示"
+  warn "前端产物未在 bundle 中找到（desktop/service/dist-ui），打包后 UI 可能无法显示"
 fi
 
 echo ""

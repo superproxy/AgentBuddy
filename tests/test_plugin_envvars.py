@@ -17,10 +17,10 @@ import zipfile
 
 import yaml
 
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-TOOLS_DIR = pathlib.Path(__file__).resolve().parents[1] / "tools"
-sys.path.insert(0, str(SCRIPTS_DIR))
-sys.path.insert(0, str(TOOLS_DIR))
+# 导入 desktop/service/config_server.py（Flask 后端）
+_SERVICE_DIR = pathlib.Path(__file__).resolve().parents[1] / "desktop" / "service"
+if str(_SERVICE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVICE_DIR))
 
 
 class PluginEnvVarsImportTests(unittest.TestCase):

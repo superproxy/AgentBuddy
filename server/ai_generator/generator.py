@@ -3,7 +3,6 @@
 使用 LangChain + LLM 根据用户需求描述生成完整 plugin.yaml。
 从 config/llm/llm.yaml 读取 API Key 和 provider 配置。
 """
-import sys
 import os
 import json
 import yaml
@@ -233,8 +232,8 @@ def _search_external_resources(prompt: str) -> dict:
     Returns:
         {"skills": [...], "mcps": [...], "errors": [...]}
     """
-    from lib.skill_market import search_skill_market
-    from lib.mcp_market import search_mcp_market
+    from agentctl.lib.skill_market import search_skill_market
+    from agentctl.lib.mcp_market import search_mcp_market
 
     keywords = _extract_keywords(prompt)
     if not keywords:
@@ -531,14 +530,10 @@ def _search_market(query: str, search_type: str = "both") -> dict:
         query: 搜索关键词
         search_type: "skill" | "mcp" | "both"
     """
-    scripts_dir = str(Path(__file__).resolve().parent.parent.parent / "scripts")
-    if scripts_dir not in sys.path:
-        sys.path.insert(0, scripts_dir)
-
     result = {"skills": [], "mcps": []}
     if search_type in ("skill", "both"):
         try:
-            from lib.skill_market import search_skill_market
+            from agentctl.lib.skill_market import search_skill_market
             sk = search_skill_market(query, limit_per_source=5)
             if sk.get("ok"):
                 for item in sk.get("data", [])[:8]:
@@ -553,7 +548,7 @@ def _search_market(query: str, search_type: str = "both") -> dict:
 
     if search_type in ("mcp", "both"):
         try:
-            from lib.mcp_market import search_mcp_market
+            from agentctl.lib.mcp_market import search_mcp_market
             mc = search_mcp_market(query, limit_per_source=5)
             if mc.get("ok"):
                 for item in mc.get("data", [])[:8]:

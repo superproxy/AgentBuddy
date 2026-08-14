@@ -26,6 +26,17 @@ if errorlevel 1 (
     )
 )
 
+REM 三层分离：agentctl 包以 editable install 方式注册（共享业务库 cli/lib/）
+python -c "import agentctl" 2>nul
+if errorlevel 1 (
+    echo [INFO] 安装 agentctl 包（cli/ 共享业务库）...
+    python -m pip install -e cli/
+    if errorlevel 1 (
+        echo [ERROR] agentctl 安装失败，请手动执行: python -m pip install -e cli/
+        exit /b 1
+    )
+)
+
 REM 尝试安装 pywebview（缺失则安装，可选依赖）
 python -c "import webview" 2>nul
 if errorlevel 1 (
@@ -37,5 +48,5 @@ if errorlevel 1 (
 )
 
 echo [INFO] 启动配置工具 (pywebview 优先): http://127.0.0.1:%PORT%
-python app.py --port %PORT% %2 %3 %4
+python desktop/launcher.py --port %PORT% %2 %3 %4
 endlocal

@@ -48,6 +48,15 @@ if ! "$PY" -c "import flask, yaml, requests" >/dev/null 2>&1; then
     }
 fi
 
+# 三层分离：agentctl 包以 editable install 方式注册（共享业务库 cli/lib/）
+if ! "$PY" -c "import agentctl" >/dev/null 2>&1; then
+    echo "[INFO] 安装 agentctl 包（cli/ 共享业务库）..."
+    "$PY" -m pip install -e cli/ || {
+        echo "[ERROR] agentctl 安装失败，请手动执行: $PY -m pip install -e cli/"
+        exit 1
+    }
+fi
+
 # 尝试安装 pywebview（缺失则安装，可选依赖）
 if ! "$PY" -c "import webview" >/dev/null 2>&1; then
     echo "[INFO] 未安装 pywebview，正在安装（可选，用于桌面窗口）..."
@@ -55,4 +64,4 @@ if ! "$PY" -c "import webview" >/dev/null 2>&1; then
 fi
 
 echo "[INFO] 启动配置工具 (pywebview 优先): http://127.0.0.1:${PORT}"
-exec $PY app.py --port "$PORT" ${2:-} ${3:-} ${4:-}
+exec $PY desktop/launcher.py --port "$PORT" ${2:-} ${3:-} ${4:-}
