@@ -183,7 +183,7 @@ const codingPlans: CodingPlan[] = [
 // ===== Token 中转市场（按量付费） =====
 const tokenMarkets: TokenMarket[] = [
   {
-    name: 'TeamOrouter',
+    name: 'TeamoRouter',
     description: '免费白嫖 DeepSeek V4 + Codex 的宝藏入口',
     url: 'https://teamorouter.com/?i=e1c028955e',
     badge: '免费',
