@@ -19,11 +19,32 @@
 """
 import fnmatch
 import os
+import sys
+import shutil
 from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
 APP_VERSION = os.environ.get("AGENTBUDDY_VERSION", "1.0.0")
+
+# ---- agentctl 包映射（与 app.spec 一致）----
+# PyInstaller 不理解 pyproject.toml 的 package-dir 映射，
+# 需要创建 build/_pkg_map/agentctl -> cli/ 符号链接，让 agentctl 被识别为包。
+_PKG_MAP = os.path.join(SPECPATH, 'build', '_pkg_map')
+_AGENTCTL_LINK = os.path.join(_PKG_MAP, 'agentctl')
+_CLI_SRC = os.path.join(SPECPATH, 'cli')
+
+if not (os.path.islink(_AGENTCTL_LINK) or os.path.isdir(_AGENTCTL_LINK)):
+    if os.path.exists(_PKG_MAP):
+        shutil.rmtree(_PKG_MAP)
+    os.makedirs(_PKG_MAP, exist_ok=True)
+    if sys.platform == 'win32':
+        import subprocess
+        subprocess.check_call(['cmd', '/c', 'mklink', '/J', _AGENTCTL_LINK, _CLI_SRC], shell=True)
+    else:
+        os.symlink(_CLI_SRC, _AGENTCTL_LINK)
+if _PKG_MAP not in sys.path:
+    sys.path.insert(0, _PKG_MAP)
 
 # 绝不允许进入 bundle 的文件名（与 app.spec 一致）
 SENSITIVE = {
@@ -77,7 +98,7 @@ EXCLUDES = [
 
 a = Analysis(
     ['cli/agentctl.py'],
-    pathex=['cli'],
+    pathex=[_PKG_MAP],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,

@@ -19,9 +19,33 @@
 """
 import fnmatch
 import os
+import sys
+import shutil
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
+
+# ---- agentctl 包映射 ----
+# PyInstaller 不理解 pyproject.toml 的 package-dir = {"agentctl" = "."} 映射，
+# 它会把 cli/agentctl.py 当作 agentctl 模块（.py 文件），而非 agentctl 包（目录），
+# 导致 from agentctl.lib.xxx import ... 失败（ModuleNotFoundError: No module named 'agentctl.lib'）。
+# 解决：创建 build/_pkg_map/agentctl -> cli/ 符号链接，让 PyInstaller 正确识别 agentctl 为包。
+_PKG_MAP = os.path.join(SPECPATH, 'build', '_pkg_map')
+_AGENTCTL_LINK = os.path.join(_PKG_MAP, 'agentctl')
+_CLI_SRC = os.path.join(SPECPATH, 'cli')
+
+if not (os.path.islink(_AGENTCTL_LINK) or os.path.isdir(_AGENTCTL_LINK)):
+    if os.path.exists(_PKG_MAP):
+        shutil.rmtree(_PKG_MAP)
+    os.makedirs(_PKG_MAP, exist_ok=True)
+    if sys.platform == 'win32':
+        import subprocess
+        subprocess.check_call(['cmd', '/c', 'mklink', '/J', _AGENTCTL_LINK, _CLI_SRC], shell=True)
+    else:
+        os.symlink(_CLI_SRC, _AGENTCTL_LINK)
+# 加入 sys.path，让 collect_submodules('agentctl') 能正确扫描 agentctl 包
+if _PKG_MAP not in sys.path:
+    sys.path.insert(0, _PKG_MAP)
 
 # 从环境变量读取版本号（由 build.py 的 run_pyinstaller 设置）
 APP_VERSION = os.environ.get("AGENTBUDDY_VERSION", "1.0.0")
@@ -78,20 +102,11 @@ for f in ('AGENTS.md', 'README.md', 'install.sh', 'install.cmd',
     if os.path.exists(f):
         datas.append((f, '.'))
 
-# agentctl 包（cli/）和 config_server（desktop/）通过 pathex + hiddenimports 收集
-# agentctl 已 pip install -e cli/，PyInstaller 通过 import 探测自动收集子模块
+# agentctl 包（cli/）通过 _PKG_MAP 符号链接正确映射为 agentctl/ 包目录
+# collect_submodules 自动收集所有子模块（agentctl.lib.*, agentctl.lib.ide.* 等）
 hiddenimports = [
     'config_server',
-    'agentctl', 'agentctl.agentctl',
-    'agentctl.lib', 'agentctl.lib.config_io', 'agentctl.lib.llm',
-    'agentctl.lib.mcp', 'agentctl.lib.skills', 'agentctl.lib.plugins',
-    'agentctl.lib.placeholder', 'agentctl.lib.paths', 'agentctl.lib.logging',
-    'agentctl.lib.ide', 'agentctl.lib.ide.base', 'agentctl.lib.ide.cursor',
-    'agentctl.lib.ide.codex', 'agentctl.lib.ide.opencode', 'agentctl.lib.ide.trae',
-    'agentctl.lib.ide.claude', 'agentctl.lib.ide.workbuddy', 'agentctl.lib.ide.qoder',
-    'agentctl.lib.ide.openclaw', 'agentctl.lib.ide.hermes',
-    'agentctl.lib.ide.idea', 'agentctl.lib.ide.agents',
-    'agentctl.lib.ide.deepseek',
+] + collect_submodules('agentctl') + [
     # AI 生成服务
     'openai',
     'marketplace', 'marketplace.routes', 'marketplace.storage',
@@ -118,7 +133,7 @@ EXCLUDES = [
 
 a = Analysis(
     ['desktop/launcher.py'],
-    pathex=['cli', 'desktop', 'server'],
+    pathex=[_PKG_MAP, 'desktop', 'server'],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
