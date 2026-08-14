@@ -503,30 +503,33 @@ install_meta:
   QoderCN:
     # Qoder 国内版（阿里云通义灵码升级版，国内合规）
     # 最新版本：v1.4.1（2026-06）
-    # 来源：https://qoder.com.cn/download + https://qoder.com.cn/cli
+    # 来源：https://qoder.cn/ide + https://qoder.cn/cli
     label: Qoder CN
     version: "1.4.1"
     release_date: "2026-06-28"
-    homepage: https://qoder.com.cn
-    docs_url: https://help.aliyun.com/zh/lingma/qoder-cn/user-guide/installation-guide
-    release_url: https://qoder.com.cn/changelog
+    homepage: https://qoder.cn
+    docs_url: https://docs.qoder.cn
+    release_url: https://qoder.cn/changelog
     cli_install:
+      # 脚本安装（macOS/Linux）：curl -fsSL https://qoder.cn/install | bash
+      # 脚本安装（Windows PowerShell）：irm https://qoder.cn/install.ps1 | iex
+      # 脚本安装（Windows CMD）：curl -fsSL https://qoder.cn/install.cmd -o install.cmd && install.cmd
       method: script
-      script_url: https://qoder.com.cn/install
-      script_url_win: https://qoder.com.cn/install.ps1
-      url: https://qoder.com.cn/cli
+      script_url: https://qoder.cn/install
+      script_url_win: https://qoder.cn/install.ps1
+      url: https://qoder.cn/cli
       uninstall_cmd_mac: "rm -f ~/.local/bin/qoderclicn ~/.local/bin/qoder-cn; rm -rf ~/.qoder-cn ~/.qodercn; true"
       uninstall_cmd_win: "del /q \"%USERPROFILE%\\.local\\bin\\qoderclicn.exe\" \"%USERPROFILE%\\.local\\bin\\qoder-cn.exe\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0"
     app_install:
       method: system_uninstall
-      url: https://qoder.com.cn/download
+      url: https://qoder.cn/ide
       uninstall_cmd_mac: "rm -rf '/Applications/Qoder CN.app' ~/.qoder-cn ~/.qodercn 2>/dev/null; true"
       uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Qoder CN\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qoder-cn\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.qodercn\" 2>nul & exit /b 0"
     download_urls:
-      macos_arm64: https://qoder.com.cn/download
-      macos_x64: https://qoder.com.cn/download
-      windows_x64: https://qoder.com.cn/download
-      linux_x64: https://qoder.com.cn/download
+      macos_arm64: https://qoder.cn/ide
+      macos_x64: https://qoder.cn/ide
+      windows_x64: https://qoder.cn/ide
+      linux_x64: https://qoder.cn/ide
     install_methods: [script, app, vscode, jetbrains]
     # Qoder CN VSCode 扩展（通义灵码，扩展 ID: Alibaba-Cloud.tongyi-lingma）
     vscode_install:
