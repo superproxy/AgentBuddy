@@ -4,6 +4,24 @@ import { useIdeStore } from '../stores/ide'
 
 const ide = useIdeStore()
 
+interface CodingPlan {
+  name: string
+  vendor: string
+  description: string
+  url: string
+  badge?: string
+  price: string
+  firstMonth?: string
+  unit: string
+  quota: string
+  models: number
+  billingType: string
+  gradient: string
+  promoCode?: string
+  promoDiscount?: string
+  highlight?: boolean
+}
+
 interface TokenMarket {
   name: string
   description: string
@@ -11,19 +29,148 @@ interface TokenMarket {
   badge?: string
   features: string[]
   models: { name: string; price: string; unit: string }[]
-  pricing: {
-    free?: string
-    paid?: string
-    currency: string
-  }
-  highlight?: boolean
+  pricing: { free?: string; paid?: string; currency: string }
   gradient: string
   promoCode?: string
   promoDiscount?: string
   cheapestPrice?: string
+  highlight?: boolean
 }
 
-const markets: TokenMarket[] = [
+// ===== Coding Plan 方案（各家厂商订阅套餐） =====
+const codingPlans: CodingPlan[] = [
+  {
+    name: '火山方舟 Coding Plan',
+    vendor: '字节跳动',
+    description: 'Doubao Seed 1.5 / DeepSeek V3 / Qwen 等模型，18,000 次/月',
+    url: 'https://www.volcengine.com/product/ark',
+    badge: '性价比',
+    price: '¥40',
+    firstMonth: '¥9.4',
+    unit: '/月',
+    quota: '18,000 次',
+    models: 10,
+    billingType: 'API 请求次数',
+    gradient: 'from-red-500 to-orange-600',
+    highlight: true,
+  },
+  {
+    name: '火山方舟 Agent Plan',
+    vendor: '字节跳动',
+    description: '18 个模型 + 10+ 工具，20,000 AFP 积分/月',
+    url: 'https://www.volcengine.com/product/ark',
+    price: '¥40',
+    firstMonth: '¥9.9',
+    unit: '/月',
+    quota: '20,000 AFP',
+    models: 18,
+    billingType: '积分制',
+    gradient: 'from-red-500 to-rose-700',
+  },
+  {
+    name: '百炼 Coding Plan',
+    vendor: '阿里云',
+    description: 'Qwen 系列模型，90,000 次/月，AI 编码专属套餐',
+    url: 'https://bailian.console.aliyun.com/',
+    badge: '大额度',
+    price: '¥200',
+    unit: '/月',
+    quota: '90,000 次',
+    models: 9,
+    billingType: 'API 请求次数',
+    gradient: 'from-orange-500 to-amber-600',
+  },
+  {
+    name: '百炼 Token Plan',
+    vendor: '阿里云',
+    description: '22 个模型灵活切换，2,500 积分/月',
+    url: 'https://bailian.console.aliyun.com/',
+    price: '¥60',
+    firstMonth: '¥39',
+    unit: '/月',
+    quota: '2,500 积分',
+    models: 22,
+    billingType: '积分制',
+    gradient: 'from-amber-500 to-yellow-600',
+  },
+  {
+    name: 'GLM Coding Plan',
+    vendor: '智谱华章',
+    description: 'GLM-4.6 / GLM-4-AirX 等，40,000 积分/月',
+    url: 'https://open.bigmodel.cn/',
+    price: '¥118',
+    unit: '/月',
+    quota: '40,000 积分',
+    models: 3,
+    billingType: '积分制',
+    gradient: 'from-blue-500 to-cyan-600',
+  },
+  {
+    name: 'Kimi Code Plan',
+    vendor: '月之暗面',
+    description: 'Kimi K3 模型，约 33M Token/月',
+    url: 'https://platform.moonshot.cn/',
+    price: '¥49',
+    unit: '/月',
+    quota: '~33M Token',
+    models: 5,
+    billingType: 'Token 计费',
+    gradient: 'from-purple-500 to-indigo-600',
+  },
+  {
+    name: 'MiniMax Token Plan',
+    vendor: 'MiniMax',
+    description: '5 个模型，约 600M Token/月，额度大',
+    url: 'https://platform.minimaxi.com/',
+    price: '¥49',
+    unit: '/月',
+    quota: '~600M Token',
+    models: 5,
+    billingType: 'Token 计费',
+    gradient: 'from-teal-500 to-green-600',
+  },
+  {
+    name: '百度千帆 Token Plan',
+    vendor: '百度',
+    description: 'ERNIE 4.5 等 6 个模型，10M Token/月',
+    url: 'https://qianfan.cloud.baidu.com/',
+    price: '¥9.9',
+    firstMonth: '¥4.9',
+    unit: '/月',
+    quota: '10M Token',
+    models: 6,
+    billingType: 'Token 计费',
+    gradient: 'from-blue-600 to-indigo-700',
+  },
+  {
+    name: '腾讯云 Hy Token Plan',
+    vendor: '腾讯云',
+    description: '7 个模型，35M Token/月',
+    url: 'https://cloud.tencent.com/product/hy',
+    price: '¥28',
+    unit: '/月',
+    quota: '35M Token',
+    models: 7,
+    billingType: 'Token 计费',
+    gradient: 'from-sky-500 to-blue-600',
+  },
+  {
+    name: '科大讯飞 Astron Coding Plan',
+    vendor: '科大讯飞',
+    description: '16 个模型，18,000 次/月',
+    url: 'https://xinghuo.xfyun.cn/',
+    price: '¥19',
+    firstMonth: '¥3.9',
+    unit: '/月',
+    quota: '18,000 次',
+    models: 16,
+    billingType: 'API 请求次数',
+    gradient: 'from-indigo-500 to-purple-600',
+  },
+]
+
+// ===== Token 中转市场（按量付费） =====
+const tokenMarkets: TokenMarket[] = [
   {
     name: 'TeamOrouter',
     description: '免费白嫖 DeepSeek V4 + Codex 的宝藏入口',
@@ -115,11 +262,13 @@ function go(url: string) {
   ide.openExternal(url)
 }
 
-const filterMode = ref<'all' | 'free' | 'paid'>('all')
-const filteredMarkets = computed(() => {
-  if (filterMode.value === 'free') return markets.filter(m => m.pricing.free)
-  if (filterMode.value === 'paid') return markets.filter(m => m.pricing.paid)
-  return markets
+const activeTab = ref<'plans' | 'markets'>('plans')
+
+const planFilter = ref<'all' | 'cheap' | 'large'>('all')
+const filteredPlans = computed(() => {
+  if (planFilter.value === 'cheap') return codingPlans.filter(p => parseFloat(p.price.replace(/[¥$]/, '')) <= 40)
+  if (planFilter.value === 'large') return codingPlans.filter(p => p.models >= 10)
+  return codingPlans
 })
 </script>
 
@@ -129,133 +278,190 @@ const filteredMarkets = computed(() => {
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-ink-900">Token 市场</h1>
       <p class="text-sm text-ink-600 mt-1">
-        精选 LLM API Token 渠道，按价格从低到高排列，推广码已内置到链接中。
+        精选 LLM API 方案：Coding Plan 订阅套餐 + 按量付费中转市场，对比价格后选择最划算的方案。
       </p>
     </div>
 
-    <!-- 筛选器 -->
-    <div class="mb-5 flex items-center gap-2">
+    <!-- Tab 切换 -->
+    <div class="mb-5 flex items-center gap-2 rounded-lg border border-ink-200 bg-ink-100 p-1 w-fit">
       <button
-        v-for="f in [
-          { v: 'all', l: '全部' },
-          { v: 'free', l: '免费' },
-          { v: 'paid', l: '付费' },
-        ]"
-        :key="f.v"
-        class="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
-        :class="filterMode === f.v
-          ? 'bg-brand-500 text-white'
-          : 'bg-ink-100 text-ink-600 hover:bg-ink-200'"
-        @click="filterMode = f.v"
+        class="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
+        :class="activeTab === 'plans' ? 'bg-white text-brand-500 shadow-sm' : 'text-ink-500 hover:text-ink-700'"
+        @click="activeTab = 'plans'"
       >
-        {{ f.l }}
+        Coding Plan 套餐
+      </button>
+      <button
+        class="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
+        :class="activeTab === 'markets' ? 'bg-white text-brand-500 shadow-sm' : 'text-ink-500 hover:text-ink-700'"
+        @click="activeTab = 'markets'"
+      >
+        按量付费市场
       </button>
     </div>
 
-    <!-- Hero 大图卡片 -->
-    <div class="grid gap-5">
-      <div
-        v-for="m in filteredMarkets"
-        :key="m.name"
-        class="rounded-2xl overflow-hidden border bg-white hover:shadow-xl transition-all cursor-pointer"
-        :class="m.highlight ? 'border-brand-300 ring-1 ring-brand-200' : 'border-ink-200'"
-        @click="go(m.url)"
-      >
-        <!-- 顶部渐变 Banner -->
-        <div
-          class="h-28 bg-gradient-to-r relative flex items-center px-6"
-          :class="m.gradient"
+    <!-- ===== Coding Plan 套餐 ===== -->
+    <template v-if="activeTab === 'plans'">
+      <!-- 筛选器 -->
+      <div class="mb-5 flex items-center gap-2">
+        <button
+          v-for="f in [
+            { v: 'all', l: '全部' },
+            { v: 'cheap', l: '≤¥40/月' },
+            { v: 'large', l: '10+ 模型' },
+          ]"
+          :key="f.v"
+          class="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+          :class="planFilter === f.v ? 'bg-brand-500 text-white' : 'bg-ink-100 text-ink-600 hover:bg-ink-200'"
+          @click="planFilter = f.v"
         >
-          <div class="absolute right-0 top-0 w-32 h-32 rounded-full bg-white/10 -translate-y-8 translate-x-8"></div>
-          <div class="absolute right-12 top-4 w-20 h-20 rounded-full bg-white/5"></div>
+          {{ f.l }}
+        </button>
+      </div>
 
-          <div class="text-white relative z-10 flex-1">
-            <div class="flex items-center gap-2">
-              <h3 class="text-xl font-bold">{{ m.name }}</h3>
-              <span
-                v-if="m.badge"
-                class="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium backdrop-blur-sm"
-              >
-                {{ m.badge }}
-              </span>
-              <span
-                v-if="m.highlight"
-                class="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400 text-yellow-900 font-bold"
-              >
-                ⭐ 推荐
-              </span>
+      <!-- 套餐卡片网格 -->
+      <div class="grid gap-4 md:grid-cols-2">
+        <div
+          v-for="p in filteredPlans"
+          :key="p.name"
+          class="rounded-2xl overflow-hidden border bg-white hover:shadow-xl transition-all cursor-pointer"
+          :class="p.highlight ? 'border-brand-300 ring-1 ring-brand-200' : 'border-ink-200'"
+          @click="go(p.url)"
+        >
+          <!-- 顶部渐变 Banner -->
+          <div class="h-20 bg-gradient-to-r relative flex items-center px-5" :class="p.gradient">
+            <div class="absolute right-0 top-0 w-24 h-24 rounded-full bg-white/10 -translate-y-6 translate-x-6"></div>
+            <div class="text-white relative z-10 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="text-base font-bold">{{ p.name }}</h3>
+                <span v-if="p.badge" class="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium backdrop-blur-sm">
+                  {{ p.badge }}
+                </span>
+                <span v-if="p.highlight" class="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400 text-yellow-900 font-bold">
+                  ⭐ 推荐
+                </span>
+              </div>
+              <p class="text-xs text-white/80 mt-0.5">{{ p.vendor }} · {{ p.description }}</p>
             </div>
-            <p class="text-sm text-white/80 mt-0.5">{{ m.description }}</p>
+            <div class="relative z-10 text-white text-right">
+              <p class="text-lg font-bold">{{ p.price }}<span class="text-xs font-normal">{{ p.unit }}</span></p>
+              <p v-if="p.firstMonth" class="text-[10px] text-white/70">首月 {{ p.firstMonth }}</p>
+            </div>
           </div>
 
-          <!-- 右侧最低价 -->
-          <div class="relative z-10 text-white text-right">
-            <p class="text-[11px] text-white/70 uppercase tracking-wide">最低价</p>
-            <p class="text-lg font-bold">{{ m.cheapestPrice }}</p>
-          </div>
-        </div>
-
-        <!-- 推广码横幅 -->
-        <div
-          v-if="m.promoCode"
-          class="px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2"
-        >
-          <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M7 7a2 2 0 11-4 0 2 2 0 014 0zM17 17a2 2 0 11-4 0 2 2 0 014 0zM7 7h10M7 17h10" />
-          </svg>
-          <span class="text-xs text-amber-700 font-medium">{{ m.promoDiscount }}</span>
-          <span class="text-xs text-amber-600 font-mono bg-amber-100 px-2 py-0.5 rounded ml-auto">
-            推广码: {{ m.promoCode }}
-          </span>
-        </div>
-
-        <!-- 内容区 -->
-        <div class="p-5">
-          <!-- 模型价格表 -->
-          <div class="mb-4">
-            <p class="text-[11px] text-ink-500 uppercase tracking-wide font-medium mb-2">模型价格（从低到高）</p>
-            <div class="grid grid-cols-3 gap-2">
-              <div
-                v-for="model in m.models"
-                :key="model.name"
-                class="rounded-lg border px-3 py-2 text-center"
-                :class="model.price === '0'
-                  ? 'border-green-200 bg-green-50'
-                  : 'border-ink-200'"
-              >
-                <p class="text-xs text-ink-600 truncate">{{ model.name }}</p>
-                <p class="text-sm font-bold mt-0.5" :class="model.price === '0' ? 'text-green-600' : 'text-ink-900'">
-                  {{ model.price === '0' ? '免费' : `${m.pricing.currency}${model.price}` }}
-                </p>
-                <p class="text-[10px] text-ink-400">{{ model.unit !== '免费' ? model.unit : '' }}</p>
+          <!-- 内容区 -->
+          <div class="p-4">
+            <div class="grid grid-cols-3 gap-3 mb-3">
+              <div class="text-center">
+                <p class="text-[10px] text-ink-500 uppercase">月度额度</p>
+                <p class="text-sm font-semibold text-ink-900 mt-0.5">{{ p.quota }}</p>
+              </div>
+              <div class="text-center border-x border-ink-100">
+                <p class="text-[10px] text-ink-500 uppercase">模型数</p>
+                <p class="text-sm font-semibold text-ink-900 mt-0.5">{{ p.models }} 个</p>
+              </div>
+              <div class="text-center">
+                <p class="text-[10px] text-ink-500 uppercase">计费方式</p>
+                <p class="text-sm font-semibold text-ink-900 mt-0.5">{{ p.billingType }}</p>
               </div>
             </div>
-          </div>
-
-          <!-- 特性 + 前往按钮 -->
-          <div class="flex items-end justify-between">
-            <div class="flex flex-wrap gap-x-3 gap-y-1">
-              <span
-                v-for="f in m.features"
-                :key="f"
-                class="text-[11px] flex items-center gap-1 text-ink-600"
-              >
-                <svg class="w-3 h-3 text-brand-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-ink-500">{{ p.vendor }}</span>
+              <span class="text-xs font-medium text-brand-600 flex items-center gap-1">
+                前往订阅
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
-                {{ f }}
               </span>
             </div>
-            <span class="text-sm font-medium text-brand-600 flex items-center gap-1 flex-shrink-0 ml-4">
-              前往购买
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </span>
           </div>
         </div>
       </div>
-    </div>
+    </template>
+
+    <!-- ===== 按量付费市场 ===== -->
+    <template v-else>
+      <!-- Hero 大图卡片 -->
+      <div class="grid gap-5">
+        <div
+          v-for="m in tokenMarkets"
+          :key="m.name"
+          class="rounded-2xl overflow-hidden border bg-white hover:shadow-xl transition-all cursor-pointer"
+          :class="m.highlight ? 'border-brand-300 ring-1 ring-brand-200' : 'border-ink-200'"
+          @click="go(m.url)"
+        >
+          <!-- 顶部渐变 Banner -->
+          <div class="h-28 bg-gradient-to-r relative flex items-center px-6" :class="m.gradient">
+            <div class="absolute right-0 top-0 w-32 h-32 rounded-full bg-white/10 -translate-y-8 translate-x-8"></div>
+            <div class="absolute right-12 top-4 w-20 h-20 rounded-full bg-white/5"></div>
+            <div class="text-white relative z-10 flex-1">
+              <div class="flex items-center gap-2">
+                <h3 class="text-xl font-bold">{{ m.name }}</h3>
+                <span v-if="m.badge" class="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium backdrop-blur-sm">
+                  {{ m.badge }}
+                </span>
+                <span v-if="m.highlight" class="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400 text-yellow-900 font-bold">
+                  ⭐ 推荐
+                </span>
+              </div>
+              <p class="text-sm text-white/80 mt-0.5">{{ m.description }}</p>
+            </div>
+            <div class="relative z-10 text-white text-right">
+              <p class="text-[11px] text-white/70 uppercase tracking-wide">最低价</p>
+              <p class="text-lg font-bold">{{ m.cheapestPrice }}</p>
+            </div>
+          </div>
+
+          <!-- 推广码横幅 -->
+          <div v-if="m.promoCode" class="px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 7a2 2 0 11-4 0 2 2 0 014 0zM17 17a2 2 0 11-4 0 2 2 0 014 0zM7 7h10M7 17h10" />
+            </svg>
+            <span class="text-xs text-amber-700 font-medium">{{ m.promoDiscount }}</span>
+            <span class="text-xs text-amber-600 font-mono bg-amber-100 px-2 py-0.5 rounded ml-auto">
+              推广码: {{ m.promoCode }}
+            </span>
+          </div>
+
+          <!-- 内容区 -->
+          <div class="p-5">
+            <div class="mb-4">
+              <p class="text-[11px] text-ink-500 uppercase tracking-wide font-medium mb-2">模型价格（从低到高）</p>
+              <div class="grid grid-cols-3 gap-2">
+                <div
+                  v-for="model in m.models"
+                  :key="model.name"
+                  class="rounded-lg border px-3 py-2 text-center"
+                  :class="model.price === '0' ? 'border-green-200 bg-green-50' : 'border-ink-200'"
+                >
+                  <p class="text-xs text-ink-600 truncate">{{ model.name }}</p>
+                  <p class="text-sm font-bold mt-0.5" :class="model.price === '0' ? 'text-green-600' : 'text-ink-900'">
+                    {{ model.price === '0' ? '免费' : `${m.pricing.currency}${model.price}` }}
+                  </p>
+                  <p class="text-[10px] text-ink-400">{{ model.unit !== '免费' ? model.unit : '' }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-end justify-between">
+              <div class="flex flex-wrap gap-x-3 gap-y-1">
+                <span v-for="f in m.features" :key="f" class="text-[11px] flex items-center gap-1 text-ink-600">
+                  <svg class="w-3 h-3 text-brand-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                  </svg>
+                  {{ f }}
+                </span>
+              </div>
+              <span class="text-sm font-medium text-brand-600 flex items-center gap-1 flex-shrink-0 ml-4">
+                前往购买
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- 底部提示 -->
     <div class="mt-6 rounded-lg bg-ink-50 border border-ink-200 p-4">
