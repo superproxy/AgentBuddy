@@ -209,9 +209,9 @@ install_meta:
       uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\cursor\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.cursor\" 2>nul & exit /b 0"
     # Cursor 基于 VS Code 内核（App 即 VSCode 体验），无需单独 VSCode 扩展
     vscode_install:
-      method: manual
-      url: https://marketplace.visualstudio.com/search?term=cursor
-      note: Cursor 桌面版基于 VS Code 内核，安装 App 即可获得 VSCode 体验。如需在 VS Code 中使用 Cursor，可在扩展市场搜索
+      method: system_uninstall
+      url: https://www.cursor.com/downloads
+      note: "Cursor 桌面版基于 VS Code 内核，安装 App 即可获得 VSCode 体验（无独立 VSCode 扩展）"
     # Cursor JetBrains：通过 ACP（Agent Client Protocol）协议支持
     idea_install:
       method: manual
@@ -252,6 +252,13 @@ install_meta:
       url: https://www.trae.ai/download
       uninstall_cmd_mac: "rm -rf '/Applications/Trae.app' ~/.trae 2>/dev/null; true"
       uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\Trae\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.trae\" 2>nul & exit /b 0"
+    vscode_install:
+      # Trae VSCode 扩展（原名 MarsCode，后更名为 TRAE AI）
+      # 扩展 ID: MarsCode.marscode-extension（ID 不可变）
+      method: extension
+      url: vscode:extension/MarsCode.marscode-extension
+      extension_id: MarsCode.marscode-extension
+      note: "点击安装将在 VS Code 中打开 TRAE AI 扩展页面"
     download_urls:
       macos_arm64: https://www.trae.ai/download
       macos_x64: https://www.trae.ai/download
