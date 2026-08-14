@@ -207,11 +207,11 @@ const tokenMarkets: TokenMarket[] = [
   {
     name: '硅基流动',
     description: '国内最便宜的 DeepSeek API，新用户送 ¥14 额度',
-    url: 'https://cloud.siliconflow.cn/i/e1c028955e',
+    url: 'https://cloud.siliconflow.cn/i/BrA9VbJA',
     badge: '最便宜',
     highlight: true,
     gradient: 'from-orange-500 to-red-600',
-    promoCode: 'e1c028955e',
+    promoCode: 'BrA9VbJA',
     promoDiscount: '新用户送 ¥14 + 推广返佣',
     cheapestPrice: '¥1/1M',
     features: [
