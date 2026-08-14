@@ -12,6 +12,7 @@
 #   version:        最新已知版本号（用于展示，非运行时校验）
 #   release_date:   版本发布日期 YYYY-MM-DD
 #   homepage:       官方主页
+#   web_chat:       Web Chat 网站（在线对话，区别于 web_install 远程控制）
 #   docs_url:       官方文档/安装说明页
 #   release_url:    GitHub Releases 或 changelog 页
 #   cli_install:    CLI 安装配置（见下方 method 说明）
@@ -23,7 +24,7 @@
 #   install_methods: 该 IDE 支持的所有安装方式（用于 UI 展示）
 #   brand:          品牌（用于 UI 分组）
 #   category:       顶层分类 code（编程）/ work（办公）
-#   forms:          形式子集 [cli, app, vscode, idea, acp, web]
+#   forms:          形式子集 [cli, app, vscode, idea, acp, remote]
 #   hidden:         是否在 UI 隐藏（占位符用）
 #
 # cli_install / app_install 的 method：
@@ -45,6 +46,7 @@ install_meta:
     label: Cherry Studio
     version: latest
     homepage: https://cherry-ai.com
+    web_chat: https://cherry-ai.com
     docs_url: https://github.com/CherryHQ/cherry-studio#readme
     release_url: https://github.com/CherryHQ/cherry-studio/releases
     cli_install:
@@ -74,6 +76,7 @@ install_meta:
     version: "2.1.150"
     release_date: "2026-05-23"
     homepage: https://claude.ai/download
+    web_chat: https://claude.ai/
     docs_url: https://code.claude.com/docs/en/setup
     release_url: https://github.com/anthropics/claude-code/releases
     cli_install:
@@ -121,7 +124,7 @@ install_meta:
     install_methods: [script, npm, brew, winget, acp, vscode, web]
     brand: Claude
     category: code
-    forms: [cli, app, acp, vscode, web]
+    forms: [cli, app, acp, vscode, remote]
 
   Codex:
     # OpenAI Codex CLI + Desktop App
@@ -131,6 +134,7 @@ install_meta:
     version: "0.144.5"
     release_date: "2026-07-17"
     homepage: https://openai.com/codex
+    web_chat: https://chatgpt.com/codex
     docs_url: https://developers.openai.com/codex/cli
     release_url: https://github.com/openai/codex/releases
     cli_install:
@@ -180,10 +184,10 @@ install_meta:
       password_arg: --password
       url_style: path
       note: npx codexapp 启动 Web UI（--password 注入随机密码），浏览器访问 http://localhost:5900（带密码链接免登录；需已配置 Codex app-server）
-    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, web]
+    install_methods: [script, npm, brew, app, vscode, jetbrains, acp, remote]
     brand: Codex
     category: code
-    forms: [cli, app, vscode, idea, acp, web]
+    forms: [cli, app, vscode, idea, acp, remote]
 
   Cursor:
     # Cursor IDE（基于 VS Code 的 AI 编辑器）+ agent CLI
@@ -406,7 +410,7 @@ install_meta:
       note: opencode web 启动 Web UI（OPENCODE_SERVER_PASSWORD 注入随机密码，HTTP Basic Auth），浏览器访问 http://localhost:4096（带密码链接免登录）
     brand: OpenCode
     category: code
-    forms: [cli, app, vscode, acp, web]
+    forms: [cli, app, acp, remote]
 
   DeepSeek:
     # DeepSeek Harness（DeepSeek 官方开源 Agent Harness，"一切皆插件"）
@@ -421,6 +425,7 @@ install_meta:
     version: "0.1.0-rc.6"
     release_date: "2026-08-13"
     homepage: https://www.deepseek.com/harness/
+    web_chat: https://chat.deepseek.com/
     docs_url: https://deepseek-harness.github.io/deepseek-harness/guide/quickstart
     release_url: https://github.com/deepseek-ai/deepseek-harness/releases
     cli_install:
@@ -448,7 +453,7 @@ install_meta:
       note: dsh web 启动 Web UI（无密码，首次打开需输入 DeepSeek API Key 并选择工作区），浏览器访问 http://127.0.0.1:3080
     brand: DeepSeek
     category: code
-    forms: [cli, web]
+    forms: [cli, remote]
 
   Qoder:
     # Qoder 国际版（阿里云通义灵码升级版）
@@ -498,7 +503,7 @@ install_meta:
       note: "qoder remote-control 启动守护进程模式，浏览器访问 https://qoder.com/agents 远程管理（需 Qoder 账号登录）"
     brand: Qoder
     category: code
-    forms: [app, cli, vscode, idea, web]
+    forms: [app, cli, vscode, idea, remote]
 
   QoderCN:
     # Qoder 国内版（阿里云通义灵码升级版，国内合规）
@@ -557,7 +562,7 @@ install_meta:
       note: "qodercn remote-control 启动守护进程模式，浏览器访问 https://qoder.cn/agents 远程管理（需 Qoder 账号登录）"
     brand: Qoder CN
     category: code
-    forms: [app, cli, vscode, idea, web]
+    forms: [app, cli, vscode, idea, remote]
 
   OpenClaw:
     # OpenClaw（开源个人 AI 助手平台 / Agent 调度框架）
@@ -805,6 +810,7 @@ install_meta:
     version: "0.4.0"
     release_date: "2026-07-22"
     homepage: https://code.kimi.com
+    web_chat: https://www.kimi.com/
     docs_url: https://www.kimi.com/code/docs/kimi-code-cli/guides/getting-started.html
     release_url: https://github.com/MoonshotAI/kimi-code/releases
     cli_install:
@@ -851,7 +857,7 @@ install_meta:
       note: Kimi Web 版在线智能助手（长文本处理、联网搜索、代码编写）
     brand: Kimi
     category: code
-    forms: [cli, vscode, idea, acp, web]
+    forms: [cli, vscode, idea, acp, remote]
 
   KimiWork:
     # Kimi Work（桌面 AI Agent，Moonshot AI 桌面应用）
@@ -860,6 +866,7 @@ install_meta:
     version: "1.0.0"
     release_date: "2026-06-08"
     homepage: https://kimi.com/products/kimi-work
+    web_chat: https://kimi.com/
     docs_url: https://kimi.com/products/kimi-work
     release_url: https://kimi.com/products/kimi-work
     cli_install:
@@ -977,6 +984,7 @@ install_meta:
     version: latest
     release_date: "2026-07-01"
     homepage: https://github.com/features/copilot
+    web_chat: https://github.com/copilot
     docs_url: https://docs.github.com/en/copilot
     release_url: https://github.com/github/copilot-sdk/releases
     cli_install:
@@ -1129,10 +1137,10 @@ install_meta:
       macos_x64: https://www.codebuddy.cn/ide/
       windows_x64: https://www.codebuddy.cn/ide/
       linux_x64: https://www.codebuddy.cn/ide/
-    install_methods: [npm, app, vscode, jetbrains, web]
+    install_methods: [npm, app, vscode, jetbrains, remote]
     brand: CodeBuddy
     category: code
-    forms: [cli, app, vscode, idea, web]
+    forms: [cli, app, vscode, idea, remote]
 
 
 # ============================================================
