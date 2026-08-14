@@ -282,7 +282,7 @@ function copyPromoCode(code: string, e: Event) {
   })
 }
 
-const activeTab = ref<'plans' | 'markets'>('plans')
+const activeTab = ref<'plans' | 'markets'>('markets')
 
 const planFilter = ref<'all' | 'cheap' | 'large'>('all')
 const modelFilter = ref<string>('all')
@@ -327,7 +327,7 @@ const filteredMarkets = computed(() => {
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-ink-900">Token 市场</h1>
       <p class="text-sm text-ink-600 mt-1">
-        精选 LLM API 方案：Coding Plan 订阅套餐 + 按量付费中转市场，对比价格后选择最划算的方案。
+        精选 LLM API 方案：按量付费市场（按需付费，比订阅更便宜）+ Coding Plan 订阅套餐（固定额度）。
       </p>
     </div>
 
@@ -335,17 +335,17 @@ const filteredMarkets = computed(() => {
     <div class="mb-5 flex items-center gap-2 rounded-lg border border-ink-200 bg-ink-100 p-1 w-fit">
       <button
         class="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
+        :class="activeTab === 'markets' ? 'bg-white text-brand-500 shadow-sm' : 'text-ink-500 hover:text-ink-700'"
+        @click="activeTab = 'markets'"
+      >
+        按量付费市场 ⭐
+      </button>
+      <button
+        class="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
         :class="activeTab === 'plans' ? 'bg-white text-brand-500 shadow-sm' : 'text-ink-500 hover:text-ink-700'"
         @click="activeTab = 'plans'"
       >
         Coding Plan 套餐
-      </button>
-      <button
-        class="text-sm px-4 py-1.5 rounded-md font-medium transition-all"
-        :class="activeTab === 'markets' ? 'bg-white text-brand-500 shadow-sm' : 'text-ink-500 hover:text-ink-700'"
-        @click="activeTab = 'markets'"
-      >
-        按量付费市场
       </button>
     </div>
 
