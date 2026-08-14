@@ -10,9 +10,9 @@
 import shutil
 from pathlib import Path
 
-from lib.logging import COLOR_GREEN, COLOR_RED, COLOR_RESET
-from lib.mcp import copy_file_safe, copy_dir_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_GREEN, COLOR_RED, COLOR_RESET
+from ..mcp import copy_file_safe, copy_dir_safe
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 
@@ -132,7 +132,7 @@ class AgentsTarget(IdeTarget):
     def run(self, source_rules: Path, source_mcp_file: Path,
             source_skills_dir: Path, source_agents_md: Path) -> str:
         """Agents 始终同步全部内容到 .agents/，不受 scope 限制。"""
-        from lib.logging import COLOR_MAGENTA, COLOR_RESET
+        from ..logging import COLOR_MAGENTA, COLOR_RESET
         print(f"\n{COLOR_MAGENTA}--- {self.name} (.agents/) ---{COLOR_RESET}")
         self.init_rules(source_rules)
         self.init_mcp(source_mcp_file)

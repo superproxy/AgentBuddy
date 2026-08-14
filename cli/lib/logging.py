@@ -1,4 +1,4 @@
-"""统一颜色日志。所有模块 from lib.logging import * 即可。"""
+"""统一颜色日志。所有模块 from .logging import * 即可。"""
 import sys
 
 COLOR_CYAN = "\033[96m"

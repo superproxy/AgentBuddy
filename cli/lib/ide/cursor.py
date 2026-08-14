@@ -1,13 +1,13 @@
-﻿"""Cursor IDE 分发器。
+"""Cursor IDE 分发器。
 
 迁移自 scripts/init-ide.py 的 init_cursor()。
 MCP 配置转换为 Cursor 格式（提取 mcpServers 到 .cursor/mcp.json）。
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_dir_safe, convert_to_cursor_mcp
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..mcp import copy_dir_safe, convert_to_cursor_mcp
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 

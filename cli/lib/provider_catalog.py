@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from lib.config_io import load_env_config_file
+from .config_io import load_env_config_file
 
 # ---------------------------------------------------------------------------
 # API Key 指纹（按优先级；unique=True 表示可唯一锁定厂商/家族）

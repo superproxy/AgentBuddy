@@ -8,8 +8,8 @@ import re
 import sys
 from pathlib import Path
 
-from lib.config_io import load_env_config_file, save_env_config_file
-from lib.logging import (
+from .config_io import load_env_config_file, save_env_config_file
+from .logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET,
     info, warn, error, hint,
 )
@@ -620,7 +620,7 @@ def flatten_env_config(env_config: dict, active_provider: str, active_protocols:
     # 批量解析 ${VAR} 占位符：llm.yaml / mcp.yaml.mcp / keys.yaml 中的 ${VAR} 引用
     # 优先级：flat 自身（已含 mcp/misc 段，即 keys.yaml）> ${VAR:-default} 默认值 > 保留字面
     # 多次迭代直到稳定（最多 5 次，防止循环引用）
-    from lib import placeholder
+    from . import placeholder
     env_map_for_resolve = {k: v for k, v in flat.items() if isinstance(v, str)}
     for _ in range(5):
         changed = False
@@ -890,7 +890,7 @@ def switch_provider(env_config: dict, provider: str, protocol, env_file: Path) -
         # llm.yaml 在 config/llm/ 下，mcp.yaml 在 config/mcp/ 下
         # save_split_env_config 期望 llm_file 和 mcp_file 在同一目录，
         # 这里直接调用 save_env_config_file 分别保存
-        from lib.config_io import save_env_config_file
+        from .config_io import save_env_config_file
         mcp_file = env_file.parent.parent / "mcp" / "mcp.yaml"
         llm_config = {"llm": env_config.get("llm", {})}
         mcp_config = {"mcpServers": env_config.get("mcpServers", {})}

@@ -16,9 +16,9 @@ import re
 import sys
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
-from lib.mcp import copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
+from ..mcp import copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 
@@ -96,7 +96,7 @@ class OpenWorkerTarget(IdeTarget):
           支持自定义 OpenAI 兼容端点/网关（无需 GUI 重复配置）。
         - config.toml：model = "<默认模型>" 指定会话默认模型。
         """
-        from lib.llm import load_split_env_config
+        from ..llm import load_split_env_config
         ow_dir = self.base
         ow_dir.mkdir(parents=True, exist_ok=True)
 

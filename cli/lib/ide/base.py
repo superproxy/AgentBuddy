@@ -8,12 +8,12 @@ SCOPE 机制：通过 scope 参数控制同步范围（llm/mcp/skill/rules），
 import sys
 from pathlib import Path
 
-from lib.logging import (
+from ..logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY,
     COLOR_MAGENTA, COLOR_WHITE, COLOR_RESET,
 )
-from lib.mcp import copy_dir_safe, copy_file_safe, copy_mcp_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..mcp import copy_dir_safe, copy_file_safe, copy_mcp_file_safe
+from ..skills import copy_skills_safe, write_skills_index
 
 
 # 默认同步范围（plugin 的 mcp/skill 已分别并入 mcp/skill 阶段处理）

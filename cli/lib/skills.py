@@ -143,10 +143,10 @@ def _remove_link_or_dir(path: Path) -> None:
     else:
         shutil.rmtree(str(path), ignore_errors=True)
 
-from lib.logging import (
+from .logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_MAGENTA, COLOR_RESET,
 )
-from lib.config_io import load_env_config_file, save_env_config_file
+from .config_io import load_env_config_file, save_env_config_file
 
 H1 = "## "
 H2 = "### "
@@ -1395,7 +1395,7 @@ def find_source_via_search(skill_name: str, timeout: int = 15) -> dict:
     if not skill_name:
         return {"source": "", "skill_filter": "", "url": "", "method": "", "message": "缺少 skill 名"}
     try:
-        from lib.skill_market import search_skill_market
+        from .skill_market import search_skill_market
     except ImportError:
         try:
             from skill_market import search_skill_market

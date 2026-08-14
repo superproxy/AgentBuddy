@@ -1,12 +1,12 @@
-﻿"""Hermes Agent IDE 分发器。
+"""Hermes Agent IDE 分发器。
 
 配置目录 .ade-hermes，CLI 命令 hermes。
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_RESET
+from ..mcp import copy_dir_safe, copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 

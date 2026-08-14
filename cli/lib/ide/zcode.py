@@ -7,8 +7,8 @@
 import json
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 
@@ -17,7 +17,7 @@ class ZCodeTarget(IdeTarget):
 
     def init_rules(self, source_rules: Path):
         """同步 rules 到 ~/.zcode/rules/。"""
-        from lib.mcp import copy_dir_safe
+        from ..mcp import copy_dir_safe
         zcode_rules_dir = Path.home() / ".zcode" / "rules"
         srcs = source_rules if isinstance(source_rules, list) else [source_rules]
         srcs = [s for s in srcs if s.exists()]
@@ -113,7 +113,7 @@ class ZCodeTarget(IdeTarget):
             {provider: {"custom:<p>-<proto>": {name, kind, options:{apiKey,baseURL}, models}}}
         合并已有 v2/config.json，force 时覆盖同 key，否则新增。
         """
-        from lib.config_io import load_env_config_file
+        from ..config_io import load_env_config_file
         first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
         project_root = first.parent.parent
         llm_yaml = project_root / "config" / "llm" / "llm.yaml"

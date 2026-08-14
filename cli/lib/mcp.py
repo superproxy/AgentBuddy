@@ -12,12 +12,12 @@ import sys
 import time
 from pathlib import Path
 
-from lib.config_io import load_env_config_file
-from lib.logging import (
+from .config_io import load_env_config_file
+from .logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET,
 )
-from lib.placeholder import prune_unresolved_blocks
-from lib.plugins import iter_plugin_files
+from .placeholder import prune_unresolved_blocks
+from .plugins import iter_plugin_files
 
 
 # ============================================================
@@ -571,13 +571,13 @@ def _resolve_placeholder_str(text: str, env_map: dict) -> tuple:
 
     保留此函数以维持向后兼容（已有代码引用 mcp._resolve_placeholder_str）。
     """
-    from lib import placeholder
+    from . import placeholder
     return placeholder.resolve_str(text, env_map)
 
 
 def _resolve_placeholders(obj, env_map: dict) -> tuple:
     """递归解析 dict/list/str 中的 ${VAR} 占位符（委托给 lib.placeholder）。"""
-    from lib import placeholder
+    from . import placeholder
     return placeholder.resolve_dict(obj, env_map)
 
 

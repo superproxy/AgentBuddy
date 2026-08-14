@@ -1,4 +1,4 @@
-﻿"""IntelliJ IDEA (JetBrains) 分发器。
+"""IntelliJ IDEA (JetBrains) 分发器。
 
 迁移自 scripts/init-ide.py 的 init_idea() 和 _deploy_acp_to_jetbrains()。
 部署 acp.json 到 JetBrains IDE 配置目录（跨平台）。
@@ -9,8 +9,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_DARKGRAY, COLOR_RESET
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 

@@ -20,11 +20,11 @@ import json
 import os
 from pathlib import Path
 
-from lib.logging import (
+from ..logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_DARKGRAY, COLOR_RESET,
 )
-from lib.skills import copy_skills_safe, write_skills_index
-from lib.llm import load_split_env_config
+from ..skills import copy_skills_safe, write_skills_index
+from ..llm import load_split_env_config
 from .base import IdeTarget
 
 

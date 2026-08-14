@@ -5,10 +5,10 @@
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_RESET
-from lib.mcp import convert_to_opencode_mcp
-from lib.skills import copy_skills_safe, write_skills_index
-from lib.llm import load_split_env_config
+from ..logging import COLOR_YELLOW, COLOR_RESET
+from ..mcp import convert_to_opencode_mcp
+from ..skills import copy_skills_safe, write_skills_index
+from ..llm import load_split_env_config
 from .base import IdeTarget
 
 
@@ -17,7 +17,7 @@ class OpenCodeTarget(IdeTarget):
 
     def init_rules(self, source_rules: Path):
         """同步 rules 到 ~/.config/opencode/rules/。"""
-        from lib.mcp import copy_dir_safe
+        from ..mcp import copy_dir_safe
         oc_rules_dir = Path.home() / ".config" / "opencode" / "rules"
         srcs = source_rules if isinstance(source_rules, list) else [source_rules]
         srcs = [s for s in srcs if s.exists()]
@@ -42,7 +42,7 @@ class OpenCodeTarget(IdeTarget):
 
         if generated.exists():
             # 从 generate 产物复制
-            from lib.mcp import copy_file_safe
+            from ..mcp import copy_file_safe
             copy_file_safe(generated, opencode_dir / "opencode.json",
                            "~/.config/opencode/opencode.json", self.force)
         else:

@@ -18,8 +18,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
-from lib.skills import copy_skills_safe
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
+from ..skills import copy_skills_safe
 from .base import IdeTarget
 
 
@@ -129,7 +129,7 @@ class CherryStudioTarget(IdeTarget):
         生成一个 Cherry Studio 可导入的 provider JSON（config/ide/cherrystudio/providers.json），
         并给出导入指引。
         """
-        from lib.config_io import load_env_config_file
+        from ..config_io import load_env_config_file
         first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
         project_root = first.parent.parent
         llm_yaml = project_root / "config" / "llm" / "llm.yaml"

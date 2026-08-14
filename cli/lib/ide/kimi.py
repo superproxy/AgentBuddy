@@ -27,9 +27,9 @@ Kimi 是月之暗面（Moonshot AI）的 AI 编程产品线，包含三个互补
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..mcp import copy_dir_safe, copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 

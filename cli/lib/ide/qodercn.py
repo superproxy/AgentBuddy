@@ -1,13 +1,13 @@
-﻿"""Qoder CN（国内版）IDE 分发器。
+"""Qoder CN（国内版）IDE 分发器。
 
 与 QoderTarget 结构相同，差异在配置目录名（.qoder-cn）。
 国际版见 qoder.py。
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
+from ..logging import COLOR_YELLOW, COLOR_RESET
+from ..mcp import copy_dir_safe, copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
 

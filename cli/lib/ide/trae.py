@@ -1,13 +1,13 @@
-﻿"""Trae IDE 分发器（含 Trae / Trae CN / Trae Work CN）。
+"""Trae IDE 分发器（含 Trae / Trae CN / Trae Work CN）。
 
 迁移自 scripts/init-ide.py 的 init_trae() / init_trae_cn() / init_trae_solo_cn()。
 三个变体共享相同结构，差异在全局目录名和 IDE User 目录名。
 """
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_mcp_file_safe
-from lib.skills import copy_skills_safe
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..mcp import copy_dir_safe, copy_mcp_file_safe
+from ..skills import copy_skills_safe
 from .base import IdeTarget, get_ide_user_dir
 
 

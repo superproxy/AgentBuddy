@@ -11,7 +11,7 @@
 - lib.logging: 颜色常量
 
 parse_shorthand / build_install_command / install_skill 已迁移到 lib/skills.py，
-本模块通过 from lib.skills import install_skill 复用。
+本模块通过 from .skills import install_skill 复用。
 """
 import csv
 import json
@@ -19,12 +19,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from lib.logging import (
+from .logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_DARKGRAY,
     COLOR_MAGENTA, COLOR_WHITE, COLOR_RESET,
 )
-from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import install_skill
+from .config_io import load_env_config_file, save_env_config_file
+from .skills import install_skill
 
 
 # ============================================================

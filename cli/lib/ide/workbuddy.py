@@ -12,10 +12,10 @@ WorkBuddy models.json 官方格式（腾讯云文档 product/1749/116119）：
 import json
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_dir_safe, copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
-from lib.llm import load_split_env_config
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..mcp import copy_dir_safe, copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
+from ..llm import load_split_env_config
 from .base import IdeTarget
 
 

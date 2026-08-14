@@ -11,10 +11,10 @@ CodeBuddy models.json 官方格式（腾讯云 TokenHub 文档 product/1823/1300
 import json
 from pathlib import Path
 
-from lib.logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
-from lib.mcp import copy_file_safe
-from lib.skills import copy_skills_safe, write_skills_index
-from lib.llm import load_split_env_config
+from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
+from ..mcp import copy_file_safe
+from ..skills import copy_skills_safe, write_skills_index
+from ..llm import load_split_env_config
 from .base import IdeTarget
 
 
@@ -124,7 +124,7 @@ class CodeBuddyTarget(IdeTarget):
         cb_rules_dir = Path.home() / ".codebuddy" / "rules"
         cb_rules_dir.parent.mkdir(parents=True, exist_ok=True)
         if source_rules.exists():
-            from lib.mcp import copy_dir_safe
+            from ..mcp import copy_dir_safe
             copy_dir_safe(source_rules, cb_rules_dir, "~/.codebuddy/rules/", self.force)
         else:
             print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
