@@ -6,8 +6,8 @@
 - pywebview 未安装时回退到系统浏览器
 
 用法：
-    python app.py                 # 默认 5050 端口
-    python app.py --port 5050     # 指定端口
+    python desktop/launcher.py                 # 默认 5050 端口
+    python desktop/launcher.py --port 5050     # 指定端口
 """
 import argparse
 import os
@@ -82,7 +82,8 @@ def _resolve_project_root() -> Path:
             data_root.mkdir(parents=True, exist_ok=True)
             return data_root
         return Path(sys.executable).parent
-    return Path(__file__).resolve().parent
+    # dev 模式：desktop/launcher.py 的上两级 = 仓库根
+    return Path(__file__).resolve().parent.parent
 
 
 def _migrate_legacy_data_dir() -> None:
@@ -210,38 +211,39 @@ def _redirect_stdio_to_log(project_root: Path) -> None:
 
 
 PROJECT_ROOT = _resolve_project_root()
-TOOLS_DIR = PROJECT_ROOT / "tools"
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
+DESKTOP_DIR = PROJECT_ROOT / "desktop"
+SERVICE_DIR = DESKTOP_DIR / "service"
 
-# 把 tools/ 加入 sys.path 以便 import config_server
-if str(TOOLS_DIR) not in sys.path:
-    sys.path.insert(0, str(TOOLS_DIR))
+# 把 desktop/service/ 加入 sys.path 以便 import config_server
+if str(SERVICE_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVICE_DIR))
 
 
 def _run_bundled_script(script_name: str, extra_args: list) -> int:
-    """在当前进程中运行 scripts/<name>.py，捕获 sys.exit 并返回退出码。
-    用于 PyInstaller frozen 模式下替代 `python script.py` 的子进程调用。
+    """在当前进程中运行 agentctl 子命令，捕获 sys.exit 并返回退出码。
+    用于 PyInstaller frozen 模式下替代 `python -m agentctl.agentctl` 的子进程调用。
     """
+    # agentctl 已作为包安装（dev: editable install；frozen: PyInstaller 收集）
+    # frozen 模式下 cli/ 目录可能被打包到 _MEIPASS，作为兜底用 runpy 加载
     candidates = [
-        SCRIPTS_DIR / f"{script_name}.py",
-        PROJECT_ROOT / "scripts" / f"{script_name}.py",
+        PROJECT_ROOT / "cli" / f"{script_name}.py",
     ]
-    # frozen 模式：脚本可能被打包到 sys._MEIPASS，作为最后兜底
-    # （优先用 PROJECT_ROOT/scripts 的副本，使脚本的 __file__ 解析出正确的 PROJECT_ROOT）
     if getattr(sys, "frozen", False):
         meipass = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-        candidates.append(meipass / "scripts" / f"{script_name}.py")
+        candidates.append(meipass / "cli" / f"{script_name}.py")
 
     script_path = next((p for p in candidates if p.exists()), None)
-    if script_path is None:
-        print(f"[--run][ERROR] 找不到脚本: {script_name}.py", file=sys.stderr)
-        return 2
 
     # 设置 sys.argv 让脚本内的 argparse 正常工作
     saved_argv = sys.argv
-    sys.argv = [str(script_path)] + list(extra_args)
+    sys.argv = [str(script_path) if script_path else script_name] + list(extra_args)
     try:
-        runpy.run_path(str(script_path), run_name="__main__")
+        if script_path:
+            runpy.run_path(str(script_path), run_name="__main__")
+        else:
+            # 兜底：通过 agentctl 包入口运行
+            from agentctl import agentctl as _agentctl_mod
+            _agentctl_mod.main()
         return 0
     except SystemExit as e:
         code = e.code
@@ -307,7 +309,7 @@ def _bootstrap_from_bundle() -> None:
     - macOS: PROJECT_ROOT == ~/Library/Application Support/AgentBuddy/（可写），
       .app bundle 内源文件为 root 只读，需先删旧只读目录再拷贝，拷贝后 chmod 设可写
 
-    程序资源（scripts/template/tools/AGENTS.md）每次启动用 bundle 新版本覆盖；
+    程序资源（cli/template/desktop/AGENTS.md）每次启动用 bundle 新版本覆盖；
     用户数据（config/、.agents/）不在 resources 列表，天然保留不被覆盖。
     """
     if not getattr(sys, "frozen", False):
@@ -318,7 +320,7 @@ def _bootstrap_from_bundle() -> None:
     is_macos = sys.platform == "darwin"
 
     resources = [
-        "scripts", "template", "tools",
+        "cli", "template", "desktop",
         "AGENTS.md",
     ]
     copied = []
@@ -611,10 +613,10 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5050)
     parser.add_argument("--no-webview", action="store_true", help="不使用 pywebview，回退到系统浏览器")
-    parser.add_argument("--run", metavar="SCRIPT", help="frozen 模式下运行 bundled scripts/<name>.py（内部用，不启动窗口）")
+    parser.add_argument("--run", metavar="SCRIPT", help="frozen 模式下运行 bundled cli/<name>.py（内部用，不启动窗口）")
     args, extra = parser.parse_known_args()
 
-    # --run 派发：在当前进程运行 scripts 下的脚本，供 config_server 子进程调用
+    # --run 派发：在当前进程运行 cli/ 下的脚本，供 config_server 子进程调用
     if args.run:
         # --run 子进程由 config_server 捕获 stdout，无需重定向
         rc = _run_bundled_script(args.run, extra)
