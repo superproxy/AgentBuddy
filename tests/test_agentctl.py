@@ -1,24 +1,19 @@
 """agentctl 测试套件。
 
 迁移自 tests/test_init_env.py 和 tests/test_plugin_manager.py，
-改为导入 scripts/lib/ 下的模块（替代直接导入旧脚本）。
+改为导入 agentctl.lib 下的模块（替代直接导入旧脚本）。
 
 测试覆盖：
 - FlattenEnvConfigTests: llm.flatten_env_config 行为（迁移自 test_init_env）
 - SkillsFilterTests: skills.copy_skills_safe 白名单过滤（新增）
 """
 import pathlib
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
-# 将 scripts/ 加入 sys.path 以导入 lib 包
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lib import llm, skills, plugins
-from lib import provider_catalog
+from agentctl.lib import llm, skills, plugins
+from agentctl.lib import provider_catalog
 
 
 class FlattenEnvConfigTests(unittest.TestCase):

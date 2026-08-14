@@ -1,11 +1,7 @@
 import pathlib
-import sys
 import unittest
 
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lib.llm import build_proxy_model_list, flatten_env_config
+from agentctl.lib.llm import build_proxy_model_list, flatten_env_config
 
 
 class GatewayRouteTests(unittest.TestCase):
