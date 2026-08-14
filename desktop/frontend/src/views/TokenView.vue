@@ -262,6 +262,15 @@ function go(url: string) {
   ide.openExternal(url)
 }
 
+const copiedCode = ref('')
+function copyPromoCode(code: string, e: Event) {
+  e.stopPropagation()
+  navigator.clipboard?.writeText(code).then(() => {
+    copiedCode.value = code
+    setTimeout(() => { copiedCode.value = '' }, 2000)
+  })
+}
+
 const activeTab = ref<'plans' | 'markets'>('plans')
 
 const planFilter = ref<'all' | 'cheap' | 'large'>('all')
@@ -412,15 +421,24 @@ const filteredPlans = computed(() => {
             </div>
           </div>
 
-          <!-- 推广码横幅 -->
+          <!-- 推广码横幅（可点击复制） -->
           <div v-if="m.promoCode" class="px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
             <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M7 7a2 2 0 11-4 0 2 2 0 014 0zM17 17a2 2 0 11-4 0 2 2 0 014 0zM7 7h10M7 17h10" />
             </svg>
             <span class="text-xs text-amber-700 font-medium">{{ m.promoDiscount }}</span>
-            <span class="text-xs text-amber-600 font-mono bg-amber-100 px-2 py-0.5 rounded ml-auto">
-              推广码: {{ m.promoCode }}
-            </span>
+            <button
+              class="text-xs text-amber-600 font-mono bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded ml-auto flex items-center gap-1 transition-colors"
+              @click="copyPromoCode(m.promoCode!, $event)"
+            >
+              <span v-if="copiedCode === m.promoCode">✓ 已复制</span>
+              <template v-else>
+                推广码: {{ m.promoCode }}
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </template>
+            </button>
           </div>
 
           <!-- 内容区 -->
