@@ -10,3 +10,4 @@ PyJWT>=2.8.0
 # 终端服务需要 ttyd（系统级安装，非 pip）：
 #   macOS:   brew install ttyd
 #   Windows: winget install ttyd
+# 注：ttyd 终端功能已隐藏，此依赖暂不需要
