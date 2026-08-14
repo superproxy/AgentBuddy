@@ -2,9 +2,9 @@
 """
 飞翼 Web UI 后端
 
-启动: python tools/config_server.py
+启动: python desktop/service/config_server.py
 访问: http://127.0.0.1:5050
-依赖: flask, pyyaml, requests
+依赖: flask, pyyaml, requests, agentctl（pip install -e cli/）
 """
 
 import argparse
@@ -99,7 +99,7 @@ def _shell_quote(s: str) -> str:
 
 def _resolve_project_root() -> Path:
     """Frozen-aware 项目根定位。
-    - dev: 仓库根（tools/config_server.py 的上两级）
+    - dev: 仓库根（desktop/service/config_server.py 的上三级）
     - frozen (PyInstaller onedir): exe 所在目录（_MEIPASS == exe dir，可写）
     - macOS .app bundle: exe 在 /Applications 下不可写，改用
       ~/Library/Application Support/AgentBuddy/ 作为用户数据目录
@@ -114,20 +114,19 @@ def _resolve_project_root() -> Path:
 
 
 PROJECT_ROOT = _resolve_project_root()
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # 全局：litellm 网关进程引用（供 /api/proxy/stop 使用）
 _proxy_proc = None
 
 
 def _script_run_cmd(script_name: str, args: list) -> list:
-    """构建运行 scripts/ 下脚本的命令列表（frozen-aware）。
-    - dev: [python, scripts/<name>.py, *args]
-    - frozen: [exe, --run, <name>, *args]（由 app.py 的 --run 派发器执行）
+    """构建运行 agentctl 子命令的命令列表（frozen-aware）。
+    - dev: [python, -m, agentctl.agentctl, *args]（依赖 editable install）
+    - frozen: [exe, --run, <name>, *args]（由 desktop/launcher.py 的 --run 派发器执行）
     """
     if getattr(sys, "frozen", False):
         return [sys.executable, "--run", script_name, *args]
-    return [sys.executable, str(SCRIPTS_DIR / f"{script_name}.py"), *args]
+    return [sys.executable, "-m", "agentctl.agentctl", *args]
 
 
 def _script_run_shell_cmd(script_name: str, args: list) -> str:
@@ -188,10 +187,9 @@ def _load_script_module(module_name: str, file_path: Path):
     return mod
 
 
-# 从 lib/ 公共库导入（替代旧脚本的 importlib 加载）
-sys.path.insert(0, str(SCRIPTS_DIR))
-from lib.config_io import load_env_config_file, save_env_config_file
-from lib.skills import (
+# 从 agentctl 包导入共享业务库（pip install -e cli/）
+from agentctl.lib.config_io import load_env_config_file, save_env_config_file
+from agentctl.lib.skills import (
     build_install_command, parse_shorthand, enable_skill, disable_skill,
     get_enabled_skills, list_remote_skills, ensure_npx_yes,
     record_skill_source, remove_skill_source, remove_skill_reference,
@@ -199,28 +197,28 @@ from lib.skills import (
     resolve_github_owner_repo, find_source_via_search, fill_sources_via_search,
     link_skill_dir,
 )
-from lib.plugins import install_plugin, update_env_file, add_to_installed
-from lib.ide.detect import detect_ide, detect_all
-from lib.ide.session import list_sessions, export_session, import_session_to_ide
-from lib.ide.launch import launch_ide, launch_ide_resume_session
-from lib.ide.install import (
+from agentctl.lib.plugins import install_plugin, update_env_file, add_to_installed
+from agentctl.lib.ide.detect import detect_ide, detect_all
+from agentctl.lib.ide.session import list_sessions, export_session, import_session_to_ide
+from agentctl.lib.ide.launch import launch_ide, launch_ide_resume_session
+from agentctl.lib.ide.install import (
     install_ide, uninstall_ide, reinstall_ide, get_install_info,
     IDE_INSTALL_META, validate_ide_meta,
 )
-from lib.provider_catalog import (
+from agentctl.lib.provider_catalog import (
     apply_provider_to_env,
     classify_api_key,
     detect_providers,
     load_provider_catalog,
     needs_choice_for_candidates,
 )
-from lib.mcp_market import (
+from agentctl.lib.mcp_market import (
     SOURCE_LABELS,
     SOURCE_PRIORITY,
     resolve_mcp_install,
     search_mcp_market,
 )
-from lib.skill_market import (
+from agentctl.lib.skill_market import (
     SOURCE_LABELS as SKILL_SOURCE_LABELS,
     SOURCE_PRIORITY as SKILL_SOURCE_PRIORITY,
     search_skill_market,
@@ -298,7 +296,7 @@ HTTP_TIMEOUT = 15  # 外部 API 超时秒数
 def _ensure_config_dirs() -> None:
     """确保 config/ 下的所有子目录存在（打包后首次运行时创建）。
 
-    _bootstrap_from_bundle 只复制 scripts/template/tools，
+    _bootstrap_from_bundle 只复制 template/ 和 desktop/service/，
     config/ 目录由 _ensure_llm_file / _ensure_mcp_config_file 部分创建，
     但 skills/cmd/subagent/ide/proxy 等子目录需要显式创建。
     """
@@ -625,7 +623,7 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
 @app.route("/")
 def index():
     """根路由：返回 Vite 构建产物（Vue 3 + Vite）。"""
-    dist_ui = PROJECT_ROOT / "tools" / "dist-ui" / "index.html"
+    dist_ui = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "index.html"
     if dist_ui.exists():
         with open(dist_ui, "r", encoding="utf-8") as f:
             html = f.read()
@@ -635,14 +633,14 @@ def index():
             "Pragma": "no-cache",
             "Expires": "0",
         })
-    return "Frontend not built. Run: cd frontend && npm run build-only", 503
+    return "Frontend not built. Run: cd desktop/frontend && npm run build-only", 503
 
 
 @app.route("/assets/<path:filename>")
 def dist_assets(filename):
     """Vite 构建产物（JS/CSS chunk）。"""
     from flask import send_from_directory
-    resp = send_from_directory(PROJECT_ROOT / "tools" / "dist-ui" / "assets", filename)
+    resp = send_from_directory(PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "assets", filename)
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
@@ -704,7 +702,7 @@ def _read_version() -> tuple[str, str]:
 
     frozen 模式：从 _MEIPASS（bundle 内）读取，Inno Setup 每次安装都会覆盖 _internal/，
     不依赖 bootstrap 复制（bootstrap 可能因文件占用等原因未覆盖旧版本）。
-    dev 模式：从 PROJECT_ROOT/tools/dist-ui/version.json 读取（构建产物）。
+    dev 模式：从 PROJECT_ROOT/desktop/service/dist-ui/version.json 读取（构建产物）。
     都不存在时 fallback 到 git tag。
 
     返回 (version, build_time)。version 为 "dev" 表示开发模式。
@@ -715,8 +713,8 @@ def _read_version() -> tuple[str, str]:
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            candidates.append(Path(meipass) / "tools" / "dist-ui" / "version.json")
-    candidates.append(PROJECT_ROOT / "tools" / "dist-ui" / "version.json")
+            candidates.append(Path(meipass) / "desktop" / "service" / "dist-ui" / "version.json")
+    candidates.append(PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "version.json")
 
     for version_file in candidates:
         if version_file.exists():
@@ -731,7 +729,7 @@ def _read_version() -> tuple[str, str]:
 
 @app.route("/api/version", methods=["GET"])
 def api_version():
-    """返回应用版本号。构建时由 build.py 写入 tools/dist-ui/version.json，供运行时 /api/version 读取。"""
+    """返回应用版本号。构建时由 build.py 写入 desktop/service/dist-ui/version.json，供运行时 /api/version 读取。"""
     version, build_time = _read_version()
     return jsonify({"version": version, "build_time": build_time})
 
@@ -1049,7 +1047,7 @@ def get_llm():
             save_env_config_file(path, data)
         # 归一化 _enabled（内存）：旧格式缺失字段时按"有 api_key 视为启用"补默认，
         # 保证前端开关状态与后端同步过滤一致
-        from lib.llm import normalize_provider_enabled
+        from agentctl.lib.llm import normalize_provider_enabled
         normalize_provider_enabled(data.get("llm"))
         return jsonify({
             "ok": True,
@@ -1070,7 +1068,7 @@ def save_llm():
         path = _ensure_llm_file()
         # 保存时补默认 _enabled 字段：缺失的按"有 api_key 视为启用"补 True/False，
         # 确保旧格式配置保存一次后过滤即可生效
-        from lib.llm import normalize_provider_enabled
+        from agentctl.lib.llm import normalize_provider_enabled
         normalize_provider_enabled(data.get("llm"))
         # 保存后必须 generate + sync，不能依赖前端再发第二个请求。
         save_env_config_file(path, data)
@@ -1155,7 +1153,7 @@ def apply_llm_provider():
             entry = cmap.get(provider)
             if not entry:
                 return jsonify({"ok": False, "error": f"未知 provider: {provider}"}), 400
-            from lib.provider_catalog import infer_protocol
+            from agentctl.lib.provider_catalog import infer_protocol
             detected, p_reason = infer_protocol(
                 api_key, base_url, entry.get("protocols"),
             )
@@ -1182,7 +1180,7 @@ def apply_llm_provider():
             protocol=protocol,
         )
         # 保存时补默认 _enabled 字段（旧格式缺失的按有 key 视为启用）
-        from lib.llm import normalize_provider_enabled
+        from agentctl.lib.llm import normalize_provider_enabled
         normalize_provider_enabled(env_data.get("llm"))
         save_env_config_file(path, env_data)
         return jsonify({
@@ -2125,7 +2123,7 @@ def import_skills():
         added.append(name)
 
     try:
-        from lib.skills import load_skill_yaml, save_skill_yaml
+        from agentctl.lib.skills import load_skill_yaml, save_skill_yaml
         data = load_skill_yaml(SKILL_YAML)
         cur = data.get("enabled", []) or []
         if mode == "overwrite":
@@ -2739,7 +2737,7 @@ def mcp_detail():
     # 先尽量拉取原始详情（便于「查看配置」）
     try:
         if source == "modelscope":
-            from lib.mcp_market import ModelScopeClient
+            from agentctl.lib.mcp_market import ModelScopeClient
             # 必须优先用完整 id（如 @modelcontextprotocol/github）；
             # item.name 常为展示名「GitHub」，不能用来拼详情路径。
             detail_data = ModelScopeClient().detail(
@@ -2748,13 +2746,13 @@ def mcp_detail():
                 name=name if not sid else "",
             )
         elif source == "registry":
-            from lib.mcp_market import RegistryClient
+            from agentctl.lib.mcp_market import RegistryClient
             detail_data = RegistryClient().detail(sid or name)
         elif source == "smithery":
-            from lib.mcp_market import SmitheryClient
+            from agentctl.lib.mcp_market import SmitheryClient
             detail_data = SmitheryClient().detail(sid or name)
         elif source == "glama":
-            from lib.mcp_market import GlamaClient, _glama_ns_slug, _glama_repo_fallback
+            from agentctl.lib.mcp_market import GlamaClient, _glama_ns_slug, _glama_repo_fallback
             ns, slug = _glama_ns_slug(server_id=sid, owner=owner, name=name)
             try:
                 detail_data = GlamaClient().detail(namespace=ns, slug=slug, server_id=sid)
@@ -2771,7 +2769,7 @@ def mcp_detail():
                     "url": "",
                 }
         elif source == "pulsemcp":
-            from lib.mcp_market import PulseMCPClient
+            from agentctl.lib.mcp_market import PulseMCPClient
             hits = PulseMCPClient().search(sid or name, limit=5)
             detail_data = (hits[0].get("raw") if hits else None) or {"id": sid or name}
     except Exception as e:
@@ -3292,7 +3290,7 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
 
 @app.route("/api/plugins", methods=["GET"])
 def list_plugins():
-    from lib.plugins import read_installed_plugins, iter_plugin_files
+    from agentctl.lib.plugins import read_installed_plugins, iter_plugin_files
     installed_names = set(read_installed_plugins(PROJECT_ROOT))
     plugins = []
     seen_files = set()  # 按文件名去重（config/plugins/ 优先覆盖 template/plugins/）
@@ -3436,7 +3434,7 @@ def delete_plugin():
 
     # 扫描其他插件是否引用同一 skill（用于无 sources 记录时的保守判断）
     other_plugin_skills: set = set()
-    from lib.plugins import iter_plugin_files as _iter_pf
+    from agentctl.lib.plugins import iter_plugin_files as _iter_pf
     for plugins_dir in _plugin_search_dirs():
         for f in _iter_pf(plugins_dir):
             if f == path:
@@ -3463,7 +3461,7 @@ def delete_plugin():
 
     # 从已安装清单移除
     try:
-        from lib.plugins import remove_from_installed
+        from agentctl.lib.plugins import remove_from_installed
         remove_from_installed(PROJECT_ROOT, plugin_name)
     except Exception:
         pass
@@ -3600,7 +3598,7 @@ def export_all_plugins():
     seen_skills: set[str] = set()
     seen_files: set[str] = set()
     seen_extras: set[str] = set()  # 去重 llm.yaml / subagents.yaml 等
-    from lib.plugins import iter_plugin_files as _iter_pf3
+    from agentctl.lib.plugins import iter_plugin_files as _iter_pf3
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for plugins_dir in _plugin_search_dirs():
             if not plugins_dir.exists():
@@ -4082,7 +4080,7 @@ def uninstall_plugin_api():
     """卸载插件：从清单移除 + 删除已安装 skill + generate + sync。
     Body: { name: "plugin-name", ides: ["Codex", "Claude"] }
     """
-    from lib.plugins import remove_from_installed
+    from agentctl.lib.plugins import remove_from_installed
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip()
     if not name:
@@ -4102,7 +4100,7 @@ def uninstall_plugin_api():
     # 2. 删除 config/skills/ 下该插件关联的 skill（通过查找 plugin.yaml 获取 skills 列表）
     # 在 config/plugins/ + template/plugins/ 中查找
     plugin_file = None
-    from lib.plugins import iter_plugin_files as _iter_pf2
+    from agentctl.lib.plugins import iter_plugin_files as _iter_pf2
     for plugins_dir in _plugin_search_dirs():
         for f in _iter_pf2(plugins_dir):
             try:
@@ -4594,7 +4592,7 @@ def start_proxy_sse():
 
     从 llm.yaml 的 proxy.gateway 读取监听地址和端口，不再接受任意命令。
     """
-    from lib.llm import load_split_env_config
+    from agentctl.lib.llm import load_split_env_config
     env_config = load_split_env_config(PROJECT_ROOT, silent=True)
     proxy_gateway = (env_config.get("proxy") or {}).get("gateway", {}) or {}
     host = proxy_gateway.get("listen_host", "127.0.0.1")
@@ -4772,7 +4770,7 @@ def api_ide_launch():
 
 def _web_credentials(ide_key: str, regenerate: bool = False) -> dict:
     """查询/重置某 IDE Web 服务的随机密码（仅 auth=password 的 web_install 有效）。"""
-    from lib.ide.webpass import get_or_create_password, regenerate_password, web_urls
+    from agentctl.lib.ide.webpass import get_or_create_password, regenerate_password, web_urls
     web_install = IDE_INSTALL_META.get(ide_key, {}).get("web_install", {})
     port = web_install.get("port")
     auth = web_install.get("auth")
@@ -4966,7 +4964,7 @@ def api_ide_install_info():
 # ============================================================
 # IDE 图标提取（macOS 从 .app 包读取真实程序图标）
 # ============================================================
-IDE_ICON_CACHE_DIR = PROJECT_ROOT / "tools" / "dist-ui" / "ide-icons"
+IDE_ICON_CACHE_DIR = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "ide-icons"
 # 防御：如果路径被错误地创建为文件，先删除再建目录
 if IDE_ICON_CACHE_DIR.exists() and not IDE_ICON_CACHE_DIR.is_dir():
     IDE_ICON_CACHE_DIR.unlink()
@@ -5091,7 +5089,7 @@ def api_ide_icon(ide_key: str):
     - macOS：从 .app 包提取 ICNS/PNG，ICNS 用 sips 转 PNG
     - Windows：从 .exe 用 PowerShell + System.Drawing 提取图标
     - 其他平台 / 未安装：返回 404 让前端回退到字母
-    缓存到 tools/dist-ui/ide-icons/<key>.png，避免重复提取。
+    缓存到 desktop/service/dist-ui/ide-icons/<key>.png，避免重复提取。
     404 响应带 no-store，避免前端缓存"未安装"状态后无法刷新。
     """
     from flask import Response
