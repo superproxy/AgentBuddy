@@ -134,7 +134,7 @@ install_meta:
     version: "0.144.5"
     release_date: "2026-07-17"
     homepage: https://openai.com/codex
-    web_chat: https://chatgpt.com/codex
+    web_chat: https://chatgpt.com/
     docs_url: https://developers.openai.com/codex/cli
     release_url: https://github.com/openai/codex/releases
     cli_install:
