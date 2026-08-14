@@ -57,8 +57,8 @@ jobs:
           # 三层分离：agentctl 包以 editable install 方式注册（PyInstaller 通过 import 探测收集）
           pip install -e cli/
 
-      - name: Build app + .pkg + .dmg
-        run: python build.py --clean --skip-tests --cli --version ${{ steps.ver.outputs.version }}
+      - name: Build app + .pkg + .dmg + CLI + SDK
+        run: python build.py --clean --skip-tests --cli --cli-sdk --version ${{ steps.ver.outputs.version }}
 
       - name: Verify macOS artifacts
         shell: bash
@@ -136,11 +136,11 @@ jobs:
           # 三层分离：agentctl 包以 editable install 方式注册（PyInstaller 通过 import 探测收集）
           pip install -e cli/
 
-      - name: Build app + installer
+      - name: Build app + installer + CLI + SDK
         env:
           PYTHONIOENCODING: utf-8
           PYTHONUTF8: "1"
-        run: python build.py --clean --skip-tests --cli --version ${{ steps.ver.outputs.version }}
+        run: python build.py --clean --skip-tests --cli --cli-sdk --version ${{ steps.ver.outputs.version }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

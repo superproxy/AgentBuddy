@@ -18,6 +18,7 @@
   python build.py --no-verify     # 跳过密钥泄漏扫描（不推荐）
   python build.py --cli           # 同时构建 agentctl CLI 独立可执行文件
   python build.py --cli-only      # 仅构建 agentctl CLI（跳过桌面应用）
+  python build.py --cli-sdk       # 构建 agentctl Python SDK wheel（pip install 用）
 
 环境要求：
   Python 3.10+
@@ -388,6 +389,16 @@ def report() -> None:
         for ca in cli_archives:
             print(f"  CLI 分发包: {ca.relative_to(PROJECT_ROOT)}")
 
+    # SDK 产物
+    sdk_files = list(INSTALLER_OUT_DIR.glob("agentctl-*.whl")) + \
+                list(INSTALLER_OUT_DIR.glob("agentctl-*.tar.gz")) if INSTALLER_OUT_DIR.exists() else []
+    # 排除 CLI 可执行分发包（agentctl-{version}-macos.tar.gz）
+    sdk_files = [f for f in sdk_files if "-py3-none-any.whl" in f.name or f.name.count("-") <= 2]
+    if sdk_files:
+        print(f"\n  SDK wheel: pip install {sdk_files[0].name}")
+        for sf in sdk_files:
+            print(f"  SDK 包:  {sf.relative_to(PROJECT_ROOT)}")
+
     print("\n  首次运行会自动从模板生成 config/llm/llm.yaml 与 config/mcp/mcp.yaml")
     print("  用户在 UI 中填入真实 API Key 即可。\n")
 
@@ -597,6 +608,78 @@ def build_cli_dist(version: str = "1.0.0") -> None:
         fail(f"CLI 分发包未生成: {archive_name}")
 
 
+def build_cli_sdk(version: str = "1.0.0") -> None:
+    """构建 agentctl Python SDK wheel + sdist。
+
+    产物:
+      - dist/installer/agentctl-{version}-py3-none-any.whl  (pip install 用)
+      - dist/installer/agentctl-{version}.tar.gz            (sdist 源码包)
+
+    用法:
+      pip install agentctl-{version}-py3-none-any.whl
+      # 然后可 import agentctl.lib.config_io / agentctl.lib.skills 等
+    """
+    cli_dir = PROJECT_ROOT / "cli"
+    if not (cli_dir / "pyproject.toml").is_file():
+        fail(f"找不到 cli/pyproject.toml")
+
+    INSTALLER_OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 确保 build 工具可用
+    try:
+        import build  # noqa: F401
+    except ImportError:
+        info("安装 python-build...")
+        rc = subprocess.call([sys.executable, "-m", "pip", "install", "build"])
+        if rc != 0:
+            fail("安装 python-build 失败，请手动 pip install build")
+
+    info("构建 agentctl wheel + sdist...")
+    tmp_out = DIST_DIR / "_cli_sdk_build"
+    tmp_out.mkdir(parents=True, exist_ok=True)
+
+    # 用 pip wheel 构建 wheel（避免 python -m build 被项目根目录 build.py 拦截）
+    cmd = [sys.executable, "-m", "pip", "wheel", "--no-deps",
+           "--wheel-dir", str(tmp_out), str(cli_dir)]
+    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+    if rc != 0:
+        fail(f"pip wheel 构建失败 (exit={rc})")
+
+    # 构建 sdist（源码包）
+    cmd = [sys.executable, "-m", "pip", "install", "--no-deps", "--quiet", "build"]
+    subprocess.call(cmd)
+    # 用 python -c 调用 build 模块，避免被 build.py 拦截
+    sdist_cmd = [sys.executable, "-c",
+                 "import sys, os; sys.argv = ['build', '--sdist', '--outdir', "
+                 f"'{tmp_out}', '{cli_dir}']; "
+                 "from build.__main__ import main; main()"]
+    rc = subprocess.call(sdist_cmd, cwd="/tmp")  # cwd 设为 /tmp 避免 build.py 拦截
+    if rc != 0:
+        info(f"sdist 构建跳过 (exit={rc})")
+
+    # 移动产物到 installer 目录
+    wheels = list(tmp_out.glob("agentctl-*.whl"))
+    sdists = list(tmp_out.glob("agentctl-*.tar.gz"))
+    if not wheels:
+        fail("未生成 wheel 文件")
+
+    for w in wheels:
+        dst = INSTALLER_OUT_DIR / w.name
+        if dst.exists():
+            dst.unlink()
+        shutil.move(str(w), str(dst))
+        info(f"SDK wheel: {dst.relative_to(PROJECT_ROOT)}")
+    for s in sdists:
+        dst = INSTALLER_OUT_DIR / s.name
+        if dst.exists():
+            dst.unlink()
+        shutil.move(str(s), str(dst))
+        info(f"SDK sdist: {dst.relative_to(PROJECT_ROOT)}")
+
+    # 清理临时目录
+    shutil.rmtree(tmp_out, ignore_errors=True)
+
+
 def _step_timer(step_name: str):
     """步骤计时上下文管理器，结束时打印耗时。"""
     from contextlib import contextmanager
@@ -633,11 +716,15 @@ def main():
                     help="同时构建 agentctl CLI 独立可执行文件（cli.spec）")
     ap.add_argument("--cli-only", action="store_true",
                     help="仅构建 agentctl CLI，跳过桌面应用（快速迭代 CLI 用）")
+    ap.add_argument("--cli-sdk", action="store_true",
+                    help="构建 agentctl Python SDK wheel（pip install 用，可 import agentctl.lib）")
     ap.add_argument("--version", default="1.0.0", help="安装包版本号（默认 1.0.0）")
     args = ap.parse_args()
 
     build_cli = args.cli or args.cli_only
-    build_app = not args.cli_only
+    want_cli_sdk = args.cli_sdk
+    # --cli-only 或 --cli-sdk 单独使用时跳过桌面应用
+    build_app = not (args.cli_only or (args.cli_sdk and not args.cli))
 
     info(f"平台: {sys.platform} | Python: {sys.version.split()[0]} | 版本: {args.version}")
     if build_app:
@@ -680,6 +767,10 @@ def main():
             run_pyinstaller_cli(version=args.version)
         with _step_timer("打包 CLI 分发包"):
             build_cli_dist(version=args.version)
+
+    if want_cli_sdk:
+        with _step_timer("构建 agentctl SDK wheel"):
+            build_cli_sdk(version=args.version)
 
     total = time.perf_counter() - total_t0
     info(f"═══ 总耗时: {total/60:.1f}m ═══" if total >= 60 else f"═══ 总耗时: {total:.1f}s ═══")

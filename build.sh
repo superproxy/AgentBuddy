@@ -31,6 +31,7 @@ for arg in "$@"; do
     --no-verify)    NO_VERIFY=true ;;
     --no-installer) NO_INSTALLER=true ;;
     --cli)          BUILD_CLI=true ;;
+    --cli-sdk)      BUILD_CLI_SDK=true ;;
     --version=*)    VERSION="${arg#--version=}" ;;
     --version)      shift_next=true ;;
     *) if [ "$shift_next" = true ]; then VERSION="$arg"; shift_next=false; fi ;;
@@ -85,6 +86,7 @@ if [ "$CLEAN" = true ]; then BUILD_ARGS="$BUILD_ARGS --clean"; fi
 if [ "$NO_VERIFY" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-verify"; fi
 if [ "$NO_INSTALLER" = true ]; then BUILD_ARGS="$BUILD_ARGS --no-installer"; fi
 if [ "$BUILD_CLI" = true ]; then BUILD_ARGS="$BUILD_ARGS --cli"; fi
+if [ "$BUILD_CLI_SDK" = true ]; then BUILD_ARGS="$BUILD_ARGS --cli-sdk"; fi
 BUILD_ARGS="$BUILD_ARGS --version $VERSION"
 "$PY" build.py $BUILD_ARGS || fail "PyInstaller 打包失败"
 info "后端打包完成: dist/AgentBuddy/"

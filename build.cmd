@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul 2>&1
 REM AgentBuddy Build Script (Frontend + Backend + PyInstaller + Installer)
-REM Usage: build.cmd [--windowed] [--clean] [--no-frontend] [--no-verify] [--no-installer] [--cli] [--version 1.0.0]
+REM Usage: build.cmd [--windowed] [--clean] [--no-frontend] [--no-verify] [--no-installer] [--cli] [--cli-sdk] [--version 1.0.0]
 setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
