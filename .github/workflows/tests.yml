@@ -17,7 +17,10 @@ jobs:
           cache-dependency-path: requirements-build.txt
 
       - name: Install test dependencies
-        run: pip install -r requirements-build.txt
+        run: |
+          pip install -r requirements-build.txt
+          # 三层分离：测试需通过 agentctl 包导入共享库
+          pip install -e cli/
 
       - name: Run regression tests
         run: python -m pytest -q

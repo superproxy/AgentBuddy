@@ -20,10 +20,11 @@ import unittest
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+_DESKTOP_DIR = ROOT / "desktop"
+if str(_DESKTOP_DIR) not in sys.path:
+    sys.path.insert(0, str(_DESKTOP_DIR))
 
-import app as app_mod
+import launcher as app_mod
 
 # 数据源：模板文件（被 git 跟踪，本地与 CI 均存在）
 SOURCE_LLM_FILE = ROOT / "template" / "llm" / "llm-template.yaml"

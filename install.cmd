@@ -37,6 +37,17 @@ if errorlevel 1 (
     )
 )
 
+REM 三层分离：agentctl 包以 editable install 方式注册（共享业务库 cli/lib/）
+python -c "import agentctl" 2>nul
+if errorlevel 1 (
+    echo [INFO] Installing agentctl package (cli/ shared libs^)...
+    python -m pip install -e cli/
+    if errorlevel 1 (
+        echo [ERROR] agentctl install failed. Run manually: python -m pip install -e cli/
+        exit /b 1
+    )
+)
+
 REM === Bootstrap config files from templates (first run) ===
 echo.
 echo [Step 1/3] Init config files
@@ -64,7 +75,7 @@ if not exist "config\mcp\mcp.yaml" (
 REM === generate ===
 echo.
 echo [Step 2/3] Generate runtime configs (mcp.json + IDE templates)
-python scripts\agentctl.py generate
+python -m agentctl.agentctl generate
 if errorlevel 1 (
     echo [ERROR] generate failed
     exit /b 1
@@ -73,7 +84,7 @@ if errorlevel 1 (
 REM === sync ===
 echo.
 echo [Step 3/3] Sync to all IDEs
-python scripts\agentctl.py sync --ide All --force %*
+python -m agentctl.agentctl sync --ide All --force %*
 if errorlevel 1 (
     echo [ERROR] sync failed
     exit /b 1

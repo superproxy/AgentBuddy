@@ -8,15 +8,11 @@
 """
 import os
 import pathlib
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lib import llm as llm_mod
+from agentctl.lib import llm as llm_mod
 
 
 class LoadSplitEnvConfigKeysYamlTests(unittest.TestCase):

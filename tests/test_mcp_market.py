@@ -1,11 +1,7 @@
 """mcp_market 去重与安装 hint 单元测试（不依赖外网）。"""
 import pathlib
-import sys
 
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lib.mcp_market import (
+from agentctl.lib.mcp_market import (
     _dedupe,
     _dedupe_key,
     _local_name,
@@ -64,7 +60,7 @@ def test_registry_install_hint_from_npm_package():
 
 
 def test_modelscope_owner_name():
-    from lib.mcp_market import _modelscope_owner_name
+    from agentctl.lib.mcp_market import _modelscope_owner_name
     assert _modelscope_owner_name("@modelcontextprotocol/github") == (
         "modelcontextprotocol",
         "github",
@@ -73,7 +69,7 @@ def test_modelscope_owner_name():
 
 
 def test_modelscope_id_candidates_preserve_at():
-    from lib.mcp_market import _modelscope_id_candidates, _modelscope_mcp_id
+    from agentctl.lib.mcp_market import _modelscope_id_candidates, _modelscope_mcp_id
     assert _modelscope_id_candidates(server_id="@modelcontextprotocol/github") == [
         "@modelcontextprotocol/github"
     ]
@@ -84,7 +80,7 @@ def test_modelscope_id_candidates_preserve_at():
 
 
 def test_extract_modelscope_install_from_server_config_list():
-    from lib.mcp_market import _extract_modelscope_install
+    from agentctl.lib.mcp_market import _extract_modelscope_install
     local, cfg = _extract_modelscope_install({
         "id": "@modelcontextprotocol/github",
         "name": "GitHub",
@@ -104,7 +100,7 @@ def test_extract_modelscope_install_from_server_config_list():
 
 
 def test_modelscope_detail_uses_full_mcp_id(monkeypatch):
-    from lib import mcp_market as mm
+    from agentctl.lib import mcp_market as mm
 
     called = {}
 
@@ -147,7 +143,7 @@ def test_modelscope_detail_uses_full_mcp_id(monkeypatch):
 
 
 def test_modelscope_parses_mcp_server_list(monkeypatch):
-    from lib import mcp_market as mm
+    from agentctl.lib import mcp_market as mm
 
     class FakeResp:
         def raise_for_status(self):
@@ -178,7 +174,7 @@ def test_modelscope_parses_mcp_server_list(monkeypatch):
 
 
 def test_glama_ns_slug_prefers_id_over_display_name():
-    from lib.mcp_market import _glama_ns_slug
+    from agentctl.lib.mcp_market import _glama_ns_slug
     assert _glama_ns_slug(
         server_id="LauraMattz/mcp_ai_news",
         owner="LauraMattz",
@@ -189,7 +185,7 @@ def test_glama_ns_slug_prefers_id_over_display_name():
 
 
 def test_glama_detail_uses_id_slug(monkeypatch):
-    from lib import mcp_market as mm
+    from agentctl.lib import mcp_market as mm
 
     called = {}
 
@@ -224,7 +220,7 @@ def test_glama_detail_uses_id_slug(monkeypatch):
 
 
 def test_glama_resolve_from_readme_without_refetching_glama(monkeypatch):
-    from lib import mcp_market as mm
+    from agentctl.lib import mcp_market as mm
 
     def boom(*a, **k):
         raise AssertionError("should not refetch glama detail")
@@ -276,7 +272,7 @@ def test_glama_resolve_from_readme_without_refetching_glama(monkeypatch):
 
 
 def test_extract_mcp_from_readme_and_package_json():
-    from lib.mcp_market import _extract_mcp_from_readme, _cfg_from_package_json, _parse_github_repo
+    from agentctl.lib.mcp_market import _extract_mcp_from_readme, _cfg_from_package_json, _parse_github_repo
     assert _parse_github_repo("https://github.com/Anicodeth/breaking-changes-mcp.git") == (
         "Anicodeth", "breaking-changes-mcp"
     )
@@ -292,7 +288,7 @@ def test_extract_mcp_from_readme_and_package_json():
 
 
 def test_glama_resolve_falls_back_to_package_json(monkeypatch):
-    from lib import mcp_market as mm
+    from agentctl.lib import mcp_market as mm
 
     monkeypatch.setattr(mm.GlamaClient, "detail", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no")))
 

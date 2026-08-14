@@ -37,6 +37,12 @@ if ! $PY -c "import flask, yaml, requests" 2>/dev/null; then
     $PY -m pip install flask pyyaml requests
 fi
 
+# 三层分离：agentctl 包以 editable install 方式注册（共享业务库 cli/lib/）
+if ! $PY -c "import agentctl" 2>/dev/null; then
+    echo "[INFO] 安装 agentctl 包（cli/ 共享业务库）..."
+    $PY -m pip install -e cli/
+fi
+
 # === Step 2: 首次运行时从模板生成配置文件 ===
 echo
 echo "[Step 1/3] 初始化配置文件"
@@ -62,11 +68,11 @@ fi
 # === Step 3: generate + sync ===
 echo
 echo "[Step 2/3] 生成运行态配置 (mcp.json + IDE 模板)"
-$PY scripts/agentctl.py generate
+$PY -m agentctl.agentctl generate
 
 echo
 echo "[Step 3/3] 同步配置到所有 IDE"
-$PY scripts/agentctl.py sync --ide All --force "$@"
+$PY -m agentctl.agentctl sync --ide All --force "$@"
 
 echo
 echo "========================================"

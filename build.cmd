@@ -12,18 +12,18 @@ echo.
 
 REM ===== Step 1/5: Frontend Build =====
 echo [build] Step 1/5: Frontend build (Vue 3 + Vite)...
-if not exist "frontend\node_modules" (
+if not exist "desktop\frontend\node_modules" (
     echo [build]   Installing npm dependencies...
-    cd frontend && call npm install && cd ..
+    cd desktop\frontend && call npm install && cd ..\..
 )
-cd frontend
+cd desktop\frontend
 call npm run build-only
 if errorlevel 1 (
     echo [build][ERROR] Frontend build failed
     exit /b 1
 )
-cd ..
-echo [build]   OK: tools\dist-ui\
+cd ..\..
+echo [build]   OK: desktop\service\dist-ui\
 echo.
 
 REM ===== Step 2/5: Python Dependencies =====
@@ -32,6 +32,12 @@ python -c "import flask, yaml, requests" 2>nul
 if errorlevel 1 (
     echo [build]   Installing runtime deps...
     python -m pip install flask pyyaml requests pywebview
+)
+REM 三层分离：agentctl 包以 editable install 方式注册
+python -c "import agentctl" 2>nul
+if errorlevel 1 (
+    echo [build]   Installing agentctl package (cli/ shared libs^)...
+    python -m pip install -e cli\
 )
 python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
@@ -52,10 +58,10 @@ echo.
 
 REM ===== Step 4/5: Verify Frontend Bundle =====
 echo [build] Step 4/5: Verify frontend in bundle...
-if exist "dist\AgentBuddy\_internal\tools\dist-ui\index.html" (
-    echo [build]   OK: _internal\tools\dist-ui\index.html
-) else if exist "dist\AgentBuddy\tools\dist-ui\index.html" (
-    echo [build]   OK: tools\dist-ui\index.html
+if exist "dist\AgentBuddy\_internal\desktop\service\dist-ui\index.html" (
+    echo [build]   OK: _internal\desktop\service\dist-ui\index.html
+) else if exist "dist\AgentBuddy\desktop\service\dist-ui\index.html" (
+    echo [build]   OK: desktop\service\dist-ui\index.html
 ) else (
     echo [build][WARN] Frontend assets not found in bundle
 )

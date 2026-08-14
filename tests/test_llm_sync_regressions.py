@@ -1,28 +1,16 @@
 """LLM generate/sync regression tests for OpenCode and OpenWorker."""
 
 import argparse
-import importlib.util
 import json
 import os
-import sys
 import types
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
-
-spec = importlib.util.spec_from_file_location("agentctl_under_test", SCRIPTS / "agentctl.py")
-agentctl = importlib.util.module_from_spec(spec)
-assert spec.loader is not None
-spec.loader.exec_module(agentctl)
-
-from lib.ide.openworker import OpenWorkerTarget, openworker_state_dir
+from agentctl import agentctl
+from agentctl.lib.ide.openworker import OpenWorkerTarget, openworker_state_dir
 
 
 def _sync_args(ide="OpenCode"):
@@ -145,7 +133,7 @@ def test_llm_only_sync_does_not_append_agents_target(monkeypatch):
 
 
 def test_opencode_injection_syncs_all_enabled_providers_by_name(tmp_path):
-    from lib.llm import inject_opencode_native_providers
+    from agentctl.lib.llm import inject_opencode_native_providers
 
     target = tmp_path / "opencode.json"
     target.write_text(json.dumps({"provider": {"stale": {}}}), encoding="utf-8")

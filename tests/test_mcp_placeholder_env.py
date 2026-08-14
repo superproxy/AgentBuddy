@@ -8,15 +8,11 @@
 """
 import os
 import pathlib
-import sys
 import tempfile
 import unittest
 from unittest import mock
 
-SCRIPTS_DIR = pathlib.Path(__file__).resolve().parents[1] / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-from lib import mcp as mcp_mod
+from agentctl.lib import mcp as mcp_mod
 
 
 class ResolvePlaceholdersEnvTests(unittest.TestCase):
