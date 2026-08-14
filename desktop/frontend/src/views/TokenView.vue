@@ -291,7 +291,7 @@ const modelFilter = ref<string>('all')
 const allModelNames = computed(() => {
   const set = new Set<string>()
   codingPlans.forEach(p => p.modelNames.forEach(m => set.add(m)))
-  markets.forEach(m => m.models.forEach(mo => {
+  tokenMarkets.forEach(m => m.models.forEach(mo => {
     // 从模型名中提取厂商关键词
     const name = mo.name.toLowerCase()
     if (name.includes('deepseek')) set.add('DeepSeek')
@@ -315,9 +315,9 @@ const filteredPlans = computed(() => {
 
 const filterMode = ref<'all' | 'free' | 'paid'>('all')
 const filteredMarkets = computed(() => {
-  if (filterMode.value === 'free') return markets.filter(m => m.pricing.free)
-  if (filterMode.value === 'paid') return markets.filter(m => m.pricing.paid)
-  return markets
+  if (filterMode.value === 'free') return tokenMarkets.filter(m => m.pricing.free)
+  if (filterMode.value === 'paid') return tokenMarkets.filter(m => m.pricing.paid)
+  return tokenMarkets
 })
 </script>
 
