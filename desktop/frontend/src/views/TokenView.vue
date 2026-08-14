@@ -18,6 +18,9 @@ interface TokenMarket {
   }
   highlight?: boolean
   gradient: string
+  promoCode?: string
+  promoDiscount?: string
+  cheapestPrice?: string
 }
 
 const markets: TokenMarket[] = [
@@ -28,6 +31,9 @@ const markets: TokenMarket[] = [
     badge: '免费',
     highlight: true,
     gradient: 'from-green-500 to-emerald-700',
+    promoCode: 'e1c028955e',
+    promoDiscount: '专属推广码已内置',
+    cheapestPrice: '¥0',
     features: [
       'DeepSeek V4 模型免费用',
       'Codex（GPT-5.5）免费用',
@@ -41,35 +47,20 @@ const markets: TokenMarket[] = [
     pricing: { free: '全部免费', currency: '¥' },
   },
   {
-    name: 'OpenRouter',
-    description: '全球最大 LLM API 聚合平台，一个 Key 访问 300+ 模型',
-    url: 'https://openrouter.ai/',
-    badge: '聚合',
-    gradient: 'from-blue-500 to-indigo-700',
-    features: [
-      '300+ 模型统一 API',
-      '按量付费，无月费',
-      '支持 Claude / GPT / Gemini / Llama',
-      '自带负载均衡和故障转移',
-    ],
-    models: [
-      { name: 'Claude Sonnet 4.5', price: '3', unit: '/1M tokens' },
-      { name: 'GPT-4o', price: '2.5', unit: '/1M tokens' },
-      { name: 'DeepSeek V3', price: '0.27', unit: '/1M tokens' },
-    ],
-    pricing: { paid: '按量付费', currency: '$' },
-  },
-  {
     name: '硅基流动',
-    description: '国内优质 API 中转，支持 DeepSeek / Qwen / GLM 等国产模型',
-    url: 'https://siliconflow.cn/',
-    badge: '国产',
+    description: '国内最便宜的 DeepSeek API，新用户送 ¥14 额度',
+    url: 'https://cloud.siliconflow.cn/i/e1c028955e',
+    badge: '最便宜',
+    highlight: true,
     gradient: 'from-orange-500 to-red-600',
+    promoCode: 'e1c028955e',
+    promoDiscount: '新用户送 ¥14 + 推广返佣',
+    cheapestPrice: '¥1/1M',
     features: [
-      'DeepSeek V3 / R1 官方价格',
+      'DeepSeek V3 仅 ¥1/1M tokens（全网最低）',
+      'DeepSeek R1 仅 ¥4/1M tokens',
       'Qwen / GLM / Yi 等国产模型',
-      '国内直连，延迟低',
-      '支持人民币支付',
+      '国内直连，延迟低，人民币支付',
     ],
     models: [
       { name: 'DeepSeek V3', price: '1', unit: '/1M tokens' },
@@ -79,11 +70,32 @@ const markets: TokenMarket[] = [
     pricing: { paid: '按量付费', currency: '¥' },
   },
   {
+    name: 'OpenRouter',
+    description: '全球最大 LLM API 聚合平台，一个 Key 访问 300+ 模型',
+    url: 'https://openrouter.ai/',
+    badge: '聚合',
+    gradient: 'from-blue-500 to-indigo-700',
+    cheapestPrice: '$0.27/1M',
+    features: [
+      '300+ 模型统一 API',
+      '按量付费，无月费',
+      '支持 Claude / GPT / Gemini / Llama',
+      '自带负载均衡和故障转移',
+    ],
+    models: [
+      { name: 'DeepSeek V3', price: '0.27', unit: '/1M tokens' },
+      { name: 'GPT-4o', price: '2.5', unit: '/1M tokens' },
+      { name: 'Claude Sonnet 4.5', price: '3', unit: '/1M tokens' },
+    ],
+    pricing: { paid: '按量付费', currency: '$' },
+  },
+  {
     name: 'AiHubMix',
     description: 'Claude / GPT / Gemini 官方模型中转，OpenAI 兼容 API',
     url: 'https://aihubmix.com/',
     badge: '中转',
     gradient: 'from-purple-500 to-pink-600',
+    cheapestPrice: '¥12.5/1M',
     features: [
       'Claude / GPT / Gemini 官方模型',
       'OpenAI 兼容 API 格式',
@@ -91,9 +103,9 @@ const markets: TokenMarket[] = [
       '稳定可靠，SLA 99.9%',
     ],
     models: [
-      { name: 'Claude Sonnet 4.5', price: '21', unit: '/1M tokens' },
-      { name: 'GPT-4o', price: '18', unit: '/1M tokens' },
       { name: 'Gemini 2.5 Pro', price: '12.5', unit: '/1M tokens' },
+      { name: 'GPT-4o', price: '18', unit: '/1M tokens' },
+      { name: 'Claude Sonnet 4.5', price: '21', unit: '/1M tokens' },
     ],
     pricing: { paid: '按量付费', currency: '¥' },
   },
@@ -117,7 +129,7 @@ const filteredMarkets = computed(() => {
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-ink-900">Token 市场</h1>
       <p class="text-sm text-ink-600 mt-1">
-        精选 LLM API Token 渠道，对比价格后选择最划算的方案，配置到「LLM 配置」即可使用。
+        精选 LLM API Token 渠道，按价格从低到高排列，推广码已内置到链接中。
       </p>
     </div>
 
@@ -140,7 +152,7 @@ const filteredMarkets = computed(() => {
       </button>
     </div>
 
-    <!-- Hero 大图卡片网格 -->
+    <!-- Hero 大图卡片 -->
     <div class="grid gap-5">
       <div
         v-for="m in filteredMarkets"
@@ -154,7 +166,6 @@ const filteredMarkets = computed(() => {
           class="h-28 bg-gradient-to-r relative flex items-center px-6"
           :class="m.gradient"
         >
-          <!-- 装饰圆 -->
           <div class="absolute right-0 top-0 w-32 h-32 rounded-full bg-white/10 -translate-y-8 translate-x-8"></div>
           <div class="absolute right-12 top-4 w-20 h-20 rounded-full bg-white/5"></div>
 
@@ -177,26 +188,40 @@ const filteredMarkets = computed(() => {
             <p class="text-sm text-white/80 mt-0.5">{{ m.description }}</p>
           </div>
 
-          <!-- 右侧价格摘要 -->
+          <!-- 右侧最低价 -->
           <div class="relative z-10 text-white text-right">
-            <p class="text-[11px] text-white/70 uppercase tracking-wide">{{ m.pricing.free || m.pricing.paid }}</p>
-            <p class="text-lg font-bold">
-              <template v-if="m.pricing.free">¥0</template>
-              <template v--else>按量</template>
-            </p>
+            <p class="text-[11px] text-white/70 uppercase tracking-wide">最低价</p>
+            <p class="text-lg font-bold">{{ m.cheapestPrice }}</p>
           </div>
+        </div>
+
+        <!-- 推广码横幅 -->
+        <div
+          v-if="m.promoCode"
+          class="px-5 py-2 bg-amber-50 border-b border-amber-100 flex items-center gap-2"
+        >
+          <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M7 7a2 2 0 11-4 0 2 2 0 014 0zM17 17a2 2 0 11-4 0 2 2 0 014 0zM7 7h10M7 17h10" />
+          </svg>
+          <span class="text-xs text-amber-700 font-medium">{{ m.promoDiscount }}</span>
+          <span class="text-xs text-amber-600 font-mono bg-amber-100 px-2 py-0.5 rounded ml-auto">
+            推广码: {{ m.promoCode }}
+          </span>
         </div>
 
         <!-- 内容区 -->
         <div class="p-5">
           <!-- 模型价格表 -->
           <div class="mb-4">
-            <p class="text-[11px] text-ink-500 uppercase tracking-wide font-medium mb-2">模型价格</p>
+            <p class="text-[11px] text-ink-500 uppercase tracking-wide font-medium mb-2">模型价格（从低到高）</p>
             <div class="grid grid-cols-3 gap-2">
               <div
                 v-for="model in m.models"
                 :key="model.name"
-                class="rounded-lg border border-ink-200 px-3 py-2 text-center"
+                class="rounded-lg border px-3 py-2 text-center"
+                :class="model.price === '0'
+                  ? 'border-green-200 bg-green-50'
+                  : 'border-ink-200'"
               >
                 <p class="text-xs text-ink-600 truncate">{{ model.name }}</p>
                 <p class="text-sm font-bold mt-0.5" :class="model.price === '0' ? 'text-green-600' : 'text-ink-900'">
