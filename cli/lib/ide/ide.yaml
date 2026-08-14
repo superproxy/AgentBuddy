@@ -378,7 +378,13 @@ install_meta:
       windows_arm64: https://github.com/anomalyco/opencode/releases/latest
       linux_x64: https://github.com/anomalyco/opencode/releases/latest
       linux_arm64: https://github.com/anomalyco/opencode/releases/latest
-    install_methods: [script, npm, brew, app, choco, scoop, mise, docker, arch, bun, pnpm, yarn]
+    install_methods: [script, npm, brew, app, choco, scoop, mise, docker, arch, bun, pnpm, yarn, vscode]
+    # OpenCode VSCode 扩展（扩展 ID: sst-dev.opencode）
+    vscode_install:
+      method: extension
+      url: vscode:extension/sst-dev.opencode
+      extension_id: sst-dev.opencode
+      note: "点击安装将在 VS Code 中打开 OpenCode 扩展页面"
     # OpenCode ACP：通过 ACP 协议接入 JetBrains IDE
     acp_install:
       method: manual
@@ -400,7 +406,7 @@ install_meta:
       note: opencode web 启动 Web UI（OPENCODE_SERVER_PASSWORD 注入随机密码，HTTP Basic Auth），浏览器访问 http://localhost:4096（带密码链接免登录）
     brand: OpenCode
     category: code
-    forms: [cli, app, acp, web]
+    forms: [cli, app, vscode, acp, web]
 
   DeepSeek:
     # DeepSeek Harness（DeepSeek 官方开源 Agent Harness，"一切皆插件"）
