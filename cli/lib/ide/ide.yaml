@@ -933,15 +933,78 @@ install_meta:
       method: manual
       url: https://github.com/features/copilot/ai-code-editor
       note: "在 VS Code 扩展市场搜索 GitHub Copilot 安装（扩展 ID: GitHub.copilot）"
+    idea_install:
+      # JetBrains 插件（Marketplace ID: 17718, xmlId: com.github.copilot）
+      # 命令行安装：idea installPlugins com.github.copilot
+      # 来源：https://plugins.jetbrains.com/plugin/17718-github-copilot
+      method: jetbrains_cli
+      plugin_id: "com.github.copilot"
+      url: https://plugins.jetbrains.com/plugin/17718-github-copilot
+      note: "JetBrains 插件（xmlId: com.github.copilot），支持 idea installPlugins 命令行安装"
+    acp_install:
+      # ACP 模式（Agent Client Protocol）：通过 copilot-language-server --acp 启动
+      # 使 JetBrains AI Assistant / Zed 等 ACP 客户端能调用 Copilot
+      # 来源：https://www.npmjs.com/package/@github/copilot-language-server
+      method: cli
+      url: https://agentclientprotocol.com/
+      cmd: "npx -y @github/copilot-language-server@latest --acp"
+      note: "ACP 模式：npx -y @github/copilot-language-server@latest --acp（写入 ~/.jetbrains/acp.json）"
     download_urls:
       macos_arm64: https://github.com/features/ai/github-app
       macos_x64: https://github.com/features/ai/github-app
       windows_x64: https://github.com/features/ai/github-app
       linux_x64: https://github.com/features/ai/github-app
-    install_methods: [npm, brew, app, vscode]
+    install_methods: [npm, brew, app, vscode, idea, acp]
     brand: Copilot
     category: code
-    forms: [cli, app, vscode]
+    forms: [cli, app, vscode, idea, acp]
+
+  Cline:
+    # Cline（开源 AI 编程代理，Apache 2.0，原 Claude Dev）
+    # 官网：https://cline.bot
+    # 仓库：https://github.com/cline/cline
+    # 四种形态：CLI（cline）、VS Code 扩展、JetBrains 插件、ACP 模式
+    # 配置目录：~/.cline/（mcp.json + rules/ + skills/）
+    # 安装：npm install -g cline（CLI）或从扩展市场安装（IDE）
+    # ACP：通过 cline acp 启动，写入 ~/.jetbrains/acp.json 的 agent_servers.Cline
+    label: Cline
+    version: "3.83.0"
+    release_date: "2026-05-13"
+    homepage: https://cline.bot
+    docs_url: https://docs.cline.bot
+    release_url: https://github.com/cline/cline/releases
+    cli_install:
+      # npm 全局安装：npm install -g cline（需 Node.js 20+，22 推荐）
+      method: npm
+      package: "cline"
+      url: https://www.npmjs.com/package/cline
+      uninstall_cmd_mac: "npm uninstall -g cline 2>/dev/null; rm -rf ~/.cline; true"
+      uninstall_cmd_win: "npm uninstall -g cline 2>nul & rmdir /s /q \"%USERPROFILE%\\.cline\" 2>nul & exit /b 0"
+    vscode_install:
+      # VS Code / Cursor / Windsurf / VSCodium / Antigravity 扩展
+      # 扩展 ID: saoudrizwan.claude-dev
+      method: manual
+      url: https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev
+      note: "在 VS Code 扩展市场搜索 Cline 安装（扩展 ID: saoudrizwan.claude-dev）"
+    idea_install:
+      # JetBrains 插件（Marketplace ID: 27189）
+      # 命令行安装：idea installPlugins com.cline
+      # 来源：https://plugins.jetbrains.com/plugin/27189-cline
+      method: jetbrains_cli
+      plugin_id: "com.cline"
+      url: https://plugins.jetbrains.com/plugin/27189-cline
+      note: "JetBrains 插件（Marketplace ID: 27189），支持 idea installPlugins 命令行安装"
+    acp_install:
+      # ACP 模式：通过 cline acp 启动，使 JetBrains AI Assistant / Zed 等 ACP 客户端能调用 Cline
+      # 来源：https://docs.cline.bot/usage/acp
+      method: cli
+      url: https://docs.cline.bot/usage/acp
+      cmd: "npx -y cline@latest acp"
+      note: "ACP 模式：npx -y cline@latest acp（写入 ~/.jetbrains/acp.json）"
+    install_methods: [npm, vscode, idea, acp]
+    brand: Cline
+    category: code
+    forms: [cli, vscode, idea, acp]
 
   CodeBuddy:
     # 腾讯云 CodeBuddy（腾讯官方 AI 编程助手）
@@ -1318,13 +1381,31 @@ detect_meta:
     label: GitHub Copilot
     # CLI: copilot 命令（npm @github/copilot 或 brew copilot-cli）
     cli_names: [copilot]
+    # ACP 进程：npx @github/copilot-language-server --acp（通过 ~/.jetbrains/acp.json 注册）
+    acp_commands: ["npx -y @github/copilot-language-server@latest --acp"]
     # App: GitHub Copilot.app（桌面应用）
     macos_apps: ["/Applications/GitHub Copilot.app"]
     windows_apps:
       - "{LOCALAPPDATA}/Programs/GitHub Copilot/GitHub Copilot.exe"
       - "{ProgramFiles}/GitHub Copilot/GitHub Copilot.exe"
-    config_dirs: [.copilot, .config/gh]
+    # JetBrains 插件 xmlId（用于 idea installPlugins 命令行安装）
+    jetbrains_plugin_id: "com.github.copilot"
+    config_dirs: [.copilot, .config/gh, .jetbrains]
     is_tui: false
+
+  Cline:
+    label: Cline
+    # CLI: cline 命令（npm i -g cline，需 Node.js 20+）
+    cli_names: [cline]
+    # ACP 进程：npx cline acp（通过 ~/.jetbrains/acp.json 注册）
+    acp_commands: ["npx -y cline@latest acp"]
+    # JetBrains 插件 xmlId（用于 idea installPlugins 命令行安装）
+    jetbrains_plugin_id: "com.cline"
+    # VS Code 扩展 ID
+    vscode_extension_id: "saoudrizwan.claude-dev"
+    config_dirs: [.cline, .jetbrains]
+    sessions_subdir: sessions
+    is_tui: true
 
   CodeBuddy:
     label: CodeBuddy CN

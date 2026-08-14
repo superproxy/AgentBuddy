@@ -27,6 +27,8 @@ from .pi import PiTarget
 from .commandcode import CommandCodeTarget
 from .vscode import VSCodeTarget
 from .deepseek import DeepSeekTarget
+from .copilot import CopilotTarget
+from .cline import ClineTarget
 
 
 # IDE 注册表：名称 → 类（按字母顺序排列）
@@ -34,9 +36,11 @@ IDE_REGISTRY = {
     "Agents": AgentsTarget,
     "Claude": ClaudeTarget,
     "CherryStudio": CherryStudioTarget,
+    "Cline": ClineTarget,
     "CodeBuddy": CodeBuddyTarget,
     "Codex": CodexTarget,
     "CommandCode": CommandCodeTarget,
+    "Copilot": CopilotTarget,
     "Cursor": CursorTarget,
     "DeepSeek": DeepSeekTarget,
     "IDEA": IdeATarget,
@@ -101,5 +105,5 @@ __all__ = [
     "TraeTarget", "TraeCNTarget", "TraeSoloCNTarget",
     "ClaudeTarget", "WorkBuddyTarget", "QoderTarget", "QoderCNTarget",
     "OpenClawTarget", "IdeATarget", "AgentsTarget", "ZCodeTarget", "PiTarget", "CommandCodeTarget",
-    "VSCodeTarget", "DeepSeekTarget",
+    "VSCodeTarget", "DeepSeekTarget", "CopilotTarget", "ClineTarget",
 ]

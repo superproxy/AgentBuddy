@@ -304,6 +304,117 @@ def _select_link_dir() -> Path:
     return Path.home() / ".local" / "bin"
 
 
+def _find_jetbrains_launcher() -> str | None:
+    """查找系统中的 JetBrains IDE 可执行文件（用于命令行安装插件）。
+
+    按优先级查找：IntelliJ IDEA > PyCharm > WebStorm > GoLand > PhpStorm >
+                  RubyMine > CLion > Android Studio > Rider > 其他
+
+    来源: https://www.jetbrains.com.cn/help/idea/install-plugins-from-the-command-line.html
+    语法: <ide>.exe installPlugins <plugin-id> [repository-url]
+          <ide> installPlugins <plugin-id> [repository-url]   (macOS)
+          <ide>.sh installPlugins <plugin-id> [repository-url] (Linux)
+
+    Returns:
+        可执行文件路径（字符串），或 None（未找到）。
+    """
+    if sys.platform == "win32":
+        # Windows: 优先 idea64.exe（IntelliJ IDEA），回退到其他 IDE
+        candidates = [
+            "idea64.exe", "idea.exe",
+            "pycharm64.exe", "pycharm.exe",
+            "webstorm64.exe", "webstorm.exe",
+            "goland64.exe", "goland.exe",
+            "phpstorm64.exe", "phpstorm.exe",
+        ]
+        # 检查 PATH
+        for name in candidates:
+            path = shutil.which(name)
+            if path:
+                return path
+        # 检查常见安装目录
+        program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
+        install_dirs = [
+            Path(program_files) / "JetBrains",
+            Path(local_appdata) / "Programs" / "JetBrains" if local_appdata else None,
+        ]
+        for base in install_dirs:
+            if not base or not base.exists():
+                continue
+            for ide_dir in base.iterdir():
+                if not ide_dir.is_dir():
+                    continue
+                bin_dir = ide_dir / "bin"
+                if not bin_dir.exists():
+                    continue
+                for name in candidates:
+                    exe = bin_dir / name
+                    if exe.exists():
+                        return str(exe)
+        return None
+
+    elif sys.platform == "darwin":
+        # macOS: 优先 /Applications/IntelliJ IDEA.app/Contents/MacOS/idea
+        apps = [
+            ("IntelliJ IDEA.app", "idea"),
+            ("IntelliJ IDEA CE.app", "idea"),
+            ("IntelliJ IDEA Ultimate.app", "idea"),
+            ("PyCharm.app", "pycharm"),
+            ("PyCharm CE.app", "pycharm"),
+            ("PyCharm Professional.app", "pycharm"),
+            ("WebStorm.app", "webstorm"),
+            ("GoLand.app", "goland"),
+            ("PhpStorm.app", "phpstorm"),
+            ("RubyMine.app", "rubymine"),
+            ("CLion.app", "clion"),
+            ("Android Studio.app", "studio"),
+        ]
+        for app_name, launcher in apps:
+            exe = Path("/Applications") / app_name / "Contents" / "MacOS" / launcher
+            if exe.exists():
+                return str(exe)
+        # 检查 PATH（用户可能配置了命令行启动器）
+        for launcher in ["idea", "pycharm", "webstorm", "goland", "phpstorm", "clion"]:
+            path = shutil.which(launcher)
+            if path:
+                return path
+        return None
+
+    else:
+        # Linux: 优先 ~/.local/share/JetBrains/Toolbox/apps/<IDE>/bin/<ide>.sh
+        home = Path.home()
+        toolbox_apps = home / ".local" / "share" / "JetBrains" / "Toolbox" / "apps"
+        if toolbox_apps.exists():
+            for app_dir in toolbox_apps.iterdir():
+                if not app_dir.is_dir():
+                    continue
+                bin_dir = app_dir / "bin"
+                if not bin_dir.exists():
+                    continue
+                for sh in bin_dir.glob("*.sh"):
+                    return str(sh)
+        # 检查 PATH
+        for launcher in ["idea", "pycharm", "webstorm", "goland", "phpstorm", "clion"]:
+            path = shutil.which(launcher)
+            if path:
+                return path
+        # 检查 /opt/jetbrains 等常见目录
+        opt_dirs = [Path("/opt/jetbrains"), Path("/usr/local/jetbrains")]
+        for base in opt_dirs:
+            if not base.exists():
+                continue
+            for ide_dir in base.iterdir():
+                if not ide_dir.is_dir():
+                    continue
+                bin_dir = ide_dir / "bin"
+                if not bin_dir.exists():
+                    continue
+                for sh in bin_dir.glob("*.sh"):
+                    return str(sh)
+        return None
+
+
 def install_ide(ide_key: str, mode: str = "cli") -> dict:
     """安装 IDE。
 
@@ -319,8 +430,10 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         return {"ok": False, "ide": ide_key, "mode": mode, "method": "",
                 "message": f"Unknown IDE: {ide_key}", "cmd": "", "stdout": "", "stderr": ""}
 
-    # 扩展安装维度（vscode/idea/acp）：仅返回 URL，由前端通过 open-url 接口打开
-    # 这些维度通常是 deep link 协议（vscode:extension/xxx, jetbrains://plugin/xxx）或市场页面
+    # 扩展安装维度（vscode/idea/acp）
+    # - vscode/acp：仅返回 URL/命令，由前端通过 open-url 接口打开或用户手动运行
+    # - idea + method=jetbrains_cli：实际执行 <ide> installPlugins <plugin_id>
+    #   参考文档：https://www.jetbrains.com.cn/help/idea/install-plugins-from-the-command-line.html
     if mode in ("vscode", "idea", "acp"):
         install_meta_key = f"{mode}_install"
         ext_meta = meta.get(install_meta_key, {})
@@ -331,6 +444,43 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         method = ext_meta.get("method", "manual")
         note = ext_meta.get("note", "")
         cmd = ext_meta.get("cmd", "")  # ACP 类型的运行命令（如 "codex acp"）
+
+        # —— JetBrains 插件命令行安装 ——
+        # 语法: <ide> installPlugins <plugin-id> [repository-url ...]
+        # 需要先关闭 IDE 再执行，安装完成后重启 IDE 生效
+        if mode == "idea" and method == "jetbrains_cli":
+            plugin_id = ext_meta.get("plugin_id", "")
+            if not plugin_id:
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": "jetbrains_cli 配置缺 plugin_id",
+                        "cmd": "", "stdout": "", "stderr": "", "url": url}
+            launcher = _find_jetbrains_launcher()
+            if not launcher:
+                msg = (f"未找到 JetBrains IDE 可执行文件（idea/pycharm/webstorm 等），"
+                       f"请先安装任意 JetBrains IDE 并加入 PATH，或手动从市场安装：{url}")
+                return {"ok": False, "ide": ide_key, "mode": mode, "method": method,
+                        "message": msg, "cmd": "", "stdout": "", "stderr": "",
+                        "url": url}
+            install_cmd = [launcher, "installPlugins", plugin_id]
+            result = _run_cmd(install_cmd, timeout=120)
+            ok = result["ok"]
+            message_parts = [f"插件 {plugin_id} 安装{'成功' if ok else '失败'}"]
+            message_parts.append(f"命令: {' '.join(install_cmd)}")
+            if not ok and result["stderr"]:
+                # 常见错误：IDE 未关闭
+                if "running" in result["stderr"].lower() or "process" in result["stderr"].lower():
+                    message_parts.append("提示：请先关闭所有 JetBrains IDE 进程再执行安装")
+                else:
+                    message_parts.append(f"错误: {result['stderr'][:200]}")
+            return {
+                "ok": ok, "ide": ide_key, "mode": mode, "method": method,
+                "message": " | ".join(message_parts),
+                "cmd": " ".join(install_cmd),
+                "stdout": result["stdout"], "stderr": result["stderr"],
+                "url": url,
+            }
+
+        # —— 默认：返回 URL/命令，由前端或用户处理 ——
         message = note or f"需手动安装，请访问: {url}"
         if cmd:
             message = f"{message}（运行命令: {cmd}）" if note else f"运行命令: {cmd}"

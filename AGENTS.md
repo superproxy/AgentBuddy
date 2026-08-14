@@ -5,7 +5,7 @@
 - **核心能力**：
   - **智能体构建**：LLM Provider、MCP 服务、Skills、Rules、Commands、Subagents、Hooks 的可视化编辑与组合
   - **插件分发**：插件打包（zip 含 yaml + skills + llm key + rules + commands + subagents + hooks）→ 导入导出 → 跨团队共享
-  - **多 IDE 同步**：一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy 等 IDE
+  - **多 IDE 同步**：一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy / Copilot / Cline / DeepSeek 等 IDE（含 ACP 协议）
   - **桌面应用**：pywebview 桌面版，无需部署服务端，本地运行
 - **主要业务流程**：智能体构建 → 插件打包 → 分发导入 → 同步多 IDE
 
@@ -144,11 +144,13 @@ python -m pytest -q
 - [x] 插件安装 / 卸载 / 列表
 
 ### 多 IDE 同步
-- [x] 一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy
+- [x] 一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy / Copilot / Cline / DeepSeek
 - [x] OpenCode 多 Provider 原生协议注入（openai / anthropic / openai-compatible）
 - [x] Codex / Claude 默认 LLM 源校验（Provider 或网关二选一）
 - [x] LLM 网关（LiteLLM）路由配置与模型列表生成
-- [x] IDE CLI 会话恢复命令（Claude / Codex / OpenCode / WorkBuddy 等）
+- [x] IDE CLI 会话恢复命令（Claude / Codex / OpenCode / WorkBuddy / Copilot / Cline / DeepSeek 等）
+- [x] ACP 协议支持：Copilot / Cline 通过 `~/.jetbrains/acp.json` 注册为 agent_servers（供 JetBrains AI Assistant / Zed 调用）
+- [x] JetBrains 插件命令行安装（`idea installPlugins <plugin-id>`，支持 Copilot / Cline）
 
 ### 桌面应用与工程
 - [x] pywebview 桌面版（Frozen-aware，macOS / Windows）
@@ -179,6 +181,9 @@ python -m pytest -q
 | QoderCN | `qoderclicn -r <id>` | help.aliyun.com/zh/lingma/qodercli-cn |
 | WorkBuddy | `codebuddy --resume <id>` | codebuddy.ai/docs/cli/slash-commands |
 | TraeCN | `traecli --resume <id>` | docs.trae.cn/cli |
+| Copilot | `copilot resume <id>` | docs.github.com/en/copilot/cli（CLI 预览版） |
+| Cline | `cline resume <session-id>` | docs.cline.bot/usage/cli-overview |
+| DeepSeek | `dsh resume <session-id>` | deepseek-harness.github.io/deepseek-harness/guide/cli |
 
 ### 不支持 CLI 会话恢复的 IDE
 
@@ -186,6 +191,8 @@ python -m pytest -q
 |-----|------|
 | OpenClaw | Gateway 服务架构，非 TUI CLI（`openclaw sessions` 仅列出会话，无 `--resume` 参数） |
 | ZCode | 桌面 IDE，非 TUI CLI（会话管理通过 UI 进行） |
+| Copilot (ACP) | ACP 模式作为 agent server，会话由 JetBrains/Zed 客户端管理，CLI 不直接支持 resume |
+| Cline (ACP) | ACP 模式作为 agent server，会话由 JetBrains/Zed 客户端管理 |
 
 ## Git 部署约定
 
