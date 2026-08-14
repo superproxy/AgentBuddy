@@ -82,7 +82,69 @@ def _check_node_version() -> None:
 
     在执行 npx skills 命令前调用，避免因 node 版本过低导致 skills 包加载失败、
     子命令未注册（如 'command not found: add'）等难以定位的错误。
+
+    检测顺序：
+    1. shutil.which("node") — 标准 PATH 查找
+    2. 常见安装路径（nvm/volta/fnm/brew）— frozen 模式下 PATH 可能不含这些
+    3. 交互式 shell — 加载 ~/.zshrc 获取 nvm PATH
     """
+    import shutil as _shutil
+
+    # 1. 直接用 shutil.which 查找
+    node_bin = _shutil.which("node")
+
+    # 2. frozen 模式下 PATH 可能不全，检查常见安装路径
+    if not node_bin:
+        candidate_paths = []
+        if sys.platform == "darwin":
+            home = Path.home()
+            candidate_paths = [
+                str(home / ".volta" / "bin" / "node"),
+                str(home / ".fnm" / "node-versions"),
+                "/opt/homebrew/bin/node",
+                "/usr/local/bin/node",
+            ]
+            nvm_node = home / ".nvm" / "versions" / "node"
+            if nvm_node.is_dir():
+                versions = sorted([d for d in nvm_node.iterdir() if d.is_dir()], reverse=True)
+                if versions:
+                    candidate_paths.insert(0, str(versions[0] / "bin" / "node"))
+        elif sys.platform == "win32":
+            candidate_paths = [
+                str(Path.home() / "AppData" / "Roaming" / "npm" / "node.exe"),
+                str(Path.home() / ".volta" / "bin" / "node.exe"),
+                "C:\\Program Files\\nodejs\\node.exe",
+            ]
+        for p in candidate_paths:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                node_bin = p
+                break
+
+    # 3. 如果直接找到了 node，直接执行版本检查（不走交互式 shell）
+    if node_bin:
+        try:
+            result = subprocess.run(
+                [node_bin, "--version"],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=10,
+            )
+            version_str = (result.stdout or "").strip() or (result.stderr or "").strip()
+            if version_str and version_str.startswith("v"):
+                parts = version_str.lstrip("v").split(".")
+                major = int(parts[0])
+                minor = int(parts[1]) if len(parts) > 1 else 0
+                if (major, minor) < (MIN_NODE_VERSION[0], MIN_NODE_VERSION[1]):
+                    raise RuntimeError(
+                        f"Node.js 版本过低: v{major}.{minor}，skills 需要 Node >= 18。"
+                        f"请升级 Node.js（推荐用 nvm 安装 LTS 版本: nvm install --lts）。"
+                    )
+                return  # 版本检查通过
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("检测 Node.js 版本超时，请检查环境配置")
+        except FileNotFoundError:
+            pass  # 继续尝试交互式 shell
+
+    # 4. 回退：用交互式 shell 查找（加载 ~/.zshrc 获取 nvm PATH）
     try:
         result = subprocess.run(
             _login_shell_cmd("node --version"),

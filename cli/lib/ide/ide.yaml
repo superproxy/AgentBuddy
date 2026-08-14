@@ -929,10 +929,11 @@ install_meta:
       uninstall_cmd_mac: "rm -rf '/Applications/GitHub Copilot.app' ~/.copilot 2>/dev/null; true"
       uninstall_cmd_win: "rmdir /s /q \"%LOCALAPPDATA%\\Programs\\GitHub Copilot\" 2>nul & rmdir /s /q \"%USERPROFILE%\\.copilot\" 2>nul & exit /b 0"
     vscode_install:
-      # Copilot in VS Code（需先安装 VS Code，然后在扩展市场搜索 GitHub Copilot）
-      method: manual
-      url: https://github.com/features/copilot/ai-code-editor
-      note: "在 VS Code 扩展市场搜索 GitHub Copilot 安装（扩展 ID: GitHub.copilot）"
+      # Copilot in VS Code（vscode:extension 深链一键安装）
+      method: extension
+      url: vscode:extension/GitHub.copilot
+      extension_id: GitHub.copilot
+      note: "点击安装将在 VS Code 中打开 GitHub Copilot 扩展页面"
     idea_install:
       # JetBrains 插件（Marketplace ID: 17718, xmlId: com.github.copilot）
       # 命令行安装：idea installPlugins com.github.copilot
