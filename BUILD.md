@@ -46,7 +46,7 @@ build.cmd --windowed --clean
 |---|---|
 | `--windowed` | 无控制台（macOS 生成 .app / Windows 无黑框） |
 | `--clean` | 构建前清理 dist/ build/ |
-| `--no-frontend` | 跳过前端构建（使用已有 tools/dist-ui） |
+| `--no-frontend` | 跳过前端构建（使用已有 desktop/service/dist-ui） |
 | `--no-verify` | 跳过密钥泄漏扫描（不推荐） |
 | `--no-installer` | 跳过 Inno Setup 安装包生成（仅 Windows） |
 | `--version 1.2.0` | 安装包版本号（默认 1.0.0） |
@@ -139,21 +139,19 @@ cd desktop/frontend && npm run build-only  # 构建前端
 ## 文件结构
 
 ```
-frontend/               # Vue 3 + Vite 工程（开发/构建用，不打包）
-  src/                  #   SFC 组件 + stores + api
-  dist-ui -> ../tools/  #   构建产物输出到 tools/dist-ui/
+desktop/                # 桌面应用层（API + Vue 前端 + 启动器）
+  launcher.py           #   pywebview 桌面启动器（Frozen-aware）
+  frontend/             #   Vue 3 + Vite 工程（开发/构建用）
+    src/                #     SFC 组件 + stores + api
+  service/
+    dist-ui/            #   Vue 3 构建产物（Flask 根路由 serve）
+    config_server.py    #   Flask 后端（API 层）
 
-tools/
-  config_ui.html        # 旧版 UI（/old 路由备用）
-  dist-ui/              # Vue 3 构建产物（Flask 根路由 serve）
-  config_server.py      # Flask 后端
-  static/               # 旧版 Vue/Tailwind 运行时（兼容期保留）
-
-scripts/
-  agentctl.py           # CLI 入口（sync/generate/env）
+cli/                    # CLI 层（独立可发布的 agentctl 包）
+  agentctl.py           #   CLI 入口（sync/generate/env）
   lib/                  #   llm/mcp/skills/plugins/ide 模块
+  pyproject.toml        #   包元数据（pip install -e cli/）
 
-app.py                  # pywebview 桌面启动器
 app.spec                # PyInstaller 打包配置
 build.sh / build.cmd    # 一键构建脚本
 run.sh / run.cmd        # 一键启动脚本
