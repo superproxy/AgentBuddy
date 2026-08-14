@@ -5,7 +5,13 @@
   - agents/mcp/mcp.yaml、agents/llm/llm.yaml 含真实 API Key，绝不打包进 bundle
   - agents/mcp/mcp.json、agents/skills/skill.yaml 为本地运行态，绝不打包进 bundle
   - 仅打包 *-env-example.yaml 模板；首次运行时由 config_server._ensure_*_file()
-    从模板复制生成 llm.yaml / mcp.yaml（见 app.py 的 _bootstrap_from_bundle）
+    从模板复制生成 llm.yaml / mcp.yaml（见 desktop/launcher.py 的 _bootstrap_from_bundle）
+
+三层分离后的目录映射：
+  - cli/          -> agentctl 包（pip install -e cli/），PyInstaller 通过 import 探测收集
+  - desktop/      -> 含 launcher.py（入口）+ service/（Flask API）+ frontend/（Vue SPA）
+  - template/     -> 配置模板
+  - server/       -> 远程服务（marketplace + ai_generator）
 
 构建：
   python build.py                 # 推荐（含依赖检查 + 密钥泄漏扫描）
@@ -60,8 +66,8 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
 
 
 datas = []
-datas += collect_dir('scripts', 'scripts')
-datas += collect_dir('tools', 'tools')
+datas += collect_dir('cli', 'cli')
+datas += collect_dir('desktop', 'desktop')
 datas += collect_dir('template', 'template')
 datas += collect_dir('server', 'server')
 
@@ -71,16 +77,20 @@ for f in ('AGENTS.md', 'README.md', 'install.sh', 'install.cmd',
     if os.path.exists(f):
         datas.append((f, '.'))
 
-# config_server 位于 tools/，lib.* 位于 scripts/，需显式声明 + pathex
+# agentctl 包（cli/）和 config_server（desktop/service/）通过 pathex + hiddenimports 收集
+# agentctl 已 pip install -e cli/，PyInstaller 通过 import 探测自动收集子模块
 hiddenimports = [
     'config_server',
-    'lib', 'lib.config_io', 'lib.llm', 'lib.mcp', 'lib.skills',
-    'lib.plugins', 'lib.placeholder', 'lib.paths', 'lib.logging',
-    'lib.ide', 'lib.ide.base', 'lib.ide.cursor', 'lib.ide.codex',
-    'lib.ide.opencode', 'lib.ide.trae', 'lib.ide.claude',
-    'lib.ide.workbuddy', 'lib.ide.qoder', 'lib.ide.openclaw',
-    'lib.ide.hermes',
-    'lib.ide.idea', 'lib.ide.agents',
+    'agentctl', 'agentctl.agentctl',
+    'agentctl.lib', 'agentctl.lib.config_io', 'agentctl.lib.llm',
+    'agentctl.lib.mcp', 'agentctl.lib.skills', 'agentctl.lib.plugins',
+    'agentctl.lib.placeholder', 'agentctl.lib.paths', 'agentctl.lib.logging',
+    'agentctl.lib.ide', 'agentctl.lib.ide.base', 'agentctl.lib.ide.cursor',
+    'agentctl.lib.ide.codex', 'agentctl.lib.ide.opencode', 'agentctl.lib.ide.trae',
+    'agentctl.lib.ide.claude', 'agentctl.lib.ide.workbuddy', 'agentctl.lib.ide.qoder',
+    'agentctl.lib.ide.openclaw', 'agentctl.lib.ide.hermes',
+    'agentctl.lib.ide.idea', 'agentctl.lib.ide.agents',
+    'agentctl.lib.ide.deepseek',
     # AI 生成服务
     'openai',
     'marketplace', 'marketplace.routes', 'marketplace.storage',
@@ -106,8 +116,8 @@ EXCLUDES = [
 # 若未安装则提示运行: pip install 'litellm[proxy]'
 
 a = Analysis(
-    ['app.py'],
-    pathex=['scripts', 'tools', 'server'],
+    ['desktop/launcher.py'],
+    pathex=['cli', 'desktop/service', 'server'],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
