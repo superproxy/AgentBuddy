@@ -489,9 +489,16 @@ install_meta:
       method: manual
       url: https://qoder.com/jetbrains
       note: "在 JetBrains IDE 中安装通义灵码插件"
+    # Qoder Remote Control：远程控制模式
+    # 来源：https://docs.qoder.cn/cli/remote-control#remote-control-mode
+    web_install:
+      method: cli
+      url: https://qoder.com/agents
+      cmd: qoder remote-control
+      note: "qoder remote-control 启动守护进程模式，浏览器访问 https://qoder.com/agents 远程管理（需 Qoder 账号登录）"
     brand: Qoder
     category: code
-    forms: [app, cli, vscode, idea]
+    forms: [app, cli, vscode, idea, web]
 
   QoderCN:
     # Qoder 国内版（阿里云通义灵码升级版，国内合规）
@@ -532,9 +539,21 @@ install_meta:
       method: manual
       url: https://qoder.cn/jetbrains
       note: "在 JetBrains IDE 中安装通义灵码插件（从 qoder.cn/jetbrains 下载安装）"
+    # Qoder CN Remote Control：远程控制模式，手机/Web 端远程操作 CLI 会话
+    # 来源：https://docs.qoder.cn/cli/remote-control#remote-control-mode
+    # 两种模式：
+    #   1. 远程控制模式：在运行中的 qodercn 会话输入 /remote-control
+    #   2. 守护进程模式：qodercn remote-control（无需先启动会话）
+    # 连接方式：二维码扫码 / URL 浏览器访问 https://qoder.cn/agents
+    # 认证：Qoder 账号体系（移动端需相同账号登录）
+    web_install:
+      method: cli
+      url: https://qoder.cn/agents
+      cmd: qodercn remote-control
+      note: "qodercn remote-control 启动守护进程模式，浏览器访问 https://qoder.cn/agents 远程管理（需 Qoder 账号登录）"
     brand: Qoder CN
     category: code
-    forms: [app, cli, vscode, idea]
+    forms: [app, cli, vscode, idea, web]
 
   OpenClaw:
     # OpenClaw（开源个人 AI 助手平台 / Agent 调度框架）
