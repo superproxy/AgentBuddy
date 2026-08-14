@@ -79,6 +79,9 @@ datas = []
 # CLI 只需要 template/（配置模板）和 cli/ 包数据（.yaml 等）
 datas += collect_dir('template', 'template')
 datas += collect_dir('cli', 'cli')
+# agentctl 包数据文件：_meta.py 用 Path(__file__).parent / "ide.yaml" 查找，
+# frozen 模式下 __file__ 在 _MEIPASS/agentctl/lib/ide/_meta.py
+datas += collect_dir('cli/lib/ide', 'agentctl/lib/ide')
 
 # agentctl 包子模块（自动收集，避免手动列举遗漏）
 hiddenimports = collect_submodules('agentctl')

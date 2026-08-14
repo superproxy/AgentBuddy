@@ -91,6 +91,10 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
 
 datas = []
 datas += collect_dir('cli', 'cli')
+# agentctl 包数据文件：_meta.py 用 Path(__file__).parent / "ide.yaml" 查找，
+# frozen 模式下 __file__ 在 _MEIPASS/agentctl/lib/ide/_meta.py，
+# 需把 ide.yaml 也收集到 agentctl/lib/ide/ 目录
+datas += collect_dir('cli/lib/ide', 'agentctl/lib/ide')
 # desktop/ 只打包 dist-ui（前端构建产物）+ 单文件，不打包 frontend/ 源码（85MB）和 __pycache__
 datas += collect_dir('desktop/dist-ui', 'desktop/dist-ui')
 datas += collect_dir('template', 'template')
