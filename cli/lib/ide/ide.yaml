@@ -769,9 +769,11 @@ install_meta:
       extension_id: moonshot-ai.kimi-code
       note: 点击安装将在 VS Code 中打开扩展页面（Kimi Code，需 VS Code 1.100.0+）
     idea_install:
+      # Kimi Code 无专用 JetBrains 插件，通过 ACP 协议接入 JetBrains AI Assistant
+      # 来源：https://www.kimi.com/code/docs/kimi-code-cli/guides/ides.html
       method: manual
-      url: https://plugins.jetbrains.com/search?search=kimi+code
-      note: 在 JetBrains IDE 插件市场搜索 Kimi Code 安装
+      url: https://www.kimi.com/code/docs/kimi-code-cli/guides/ides.html
+      note: "Kimi Code 无 JetBrains 专用插件，通过 ACP 协议接入：在 JetBrains AI Assistant 中配置 ACP agent，运行 kimi acp 后连接"
     download_urls:
       macos_arm64: https://code.kimi.com/kimi-code/install.sh
       macos_x64: https://code.kimi.com/kimi-code/install.sh
@@ -983,18 +985,19 @@ install_meta:
       uninstall_cmd_win: "npm uninstall -g cline 2>nul & rmdir /s /q \"%USERPROFILE%\\.cline\" 2>nul & exit /b 0"
     vscode_install:
       # VS Code / Cursor / Windsurf / VSCodium / Antigravity 扩展
-      # 扩展 ID: saoudrizwan.claude-dev
-      method: manual
-      url: https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev
-      note: "在 VS Code 扩展市场搜索 Cline 安装（扩展 ID: saoudrizwan.claude-dev）"
+      # 扩展 ID: saoudrizwan.claude-dev（原名 Claude Dev，后更名为 Cline，ID 不可变）
+      method: extension
+      url: vscode:extension/saoudrizwan.claude-dev
+      extension_id: saoudrizwan.claude-dev
+      note: "点击安装将在 VS Code 中打开 Cline 扩展页面"
     idea_install:
-      # JetBrains 插件（Marketplace ID: 27189）
-      # 命令行安装：idea installPlugins com.cline
-      # 来源：https://plugins.jetbrains.com/plugin/27189-cline
+      # JetBrains 插件（Marketplace ID: 28247, xmlId: cline）
+      # 命令行安装：idea installPlugins cline
+      # 来源：https://plugins.jetbrains.com/plugin/28247-cline
       method: jetbrains_cli
-      plugin_id: "com.cline"
-      url: https://plugins.jetbrains.com/plugin/27189-cline
-      note: "JetBrains 插件（Marketplace ID: 27189），支持 idea installPlugins 命令行安装"
+      plugin_id: "cline"
+      url: https://plugins.jetbrains.com/plugin/28247-cline
+      note: "JetBrains 插件（Marketplace ID: 28247），支持 idea installPlugins 命令行安装"
     acp_install:
       # ACP 模式：通过 cline acp 启动，使 JetBrains AI Assistant / Zed 等 ACP 客户端能调用 Cline
       # 来源：https://docs.cline.bot/usage/acp
@@ -1401,7 +1404,7 @@ detect_meta:
     # ACP 进程：npx cline acp（通过 ~/.jetbrains/acp.json 注册）
     acp_commands: ["npx -y cline@latest acp"]
     # JetBrains 插件 xmlId（用于 idea installPlugins 命令行安装）
-    jetbrains_plugin_id: "com.cline"
+    jetbrains_plugin_id: "cline"
     # VS Code 扩展 ID
     vscode_extension_id: "saoudrizwan.claude-dev"
     config_dirs: [.cline, .jetbrains]
