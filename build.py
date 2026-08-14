@@ -648,12 +648,15 @@ def build_cli_sdk(version: str = "1.0.0") -> None:
     # 构建 sdist（源码包）
     cmd = [sys.executable, "-m", "pip", "install", "--no-deps", "--quiet", "build"]
     subprocess.call(cmd)
-    # 用 python -c 调用 build 模块，避免被 build.py 拦截
+    # 用 python -c 调用 build 模块，避免被项目根目录 build.py 拦截
+    # cwd 设为临时目录（跨平台：Windows 无 /tmp）
+    import tempfile
+    sdist_cwd = tempfile.gettempdir()
     sdist_cmd = [sys.executable, "-c",
                  "import sys, os; sys.argv = ['build', '--sdist', '--outdir', "
                  f"'{tmp_out}', '{cli_dir}']; "
                  "from build.__main__ import main; main()"]
-    rc = subprocess.call(sdist_cmd, cwd="/tmp")  # cwd 设为 /tmp 避免 build.py 拦截
+    rc = subprocess.call(sdist_cmd, cwd=sdist_cwd)
     if rc != 0:
         info(f"sdist 构建跳过 (exit={rc})")
 
