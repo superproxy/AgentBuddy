@@ -33,12 +33,6 @@ server/
 - 使用 openai SDK（兼容 OpenAI / Anthropic / 火山引擎 / DeepSeek 等）
 - 流式输出 LLM 生成的 plugin.yaml
 
-### 终端服务
-- 直接在 `config_server.py` 中实现（无需独立模块）
-- API 端点：`POST /api/terminal/start` + `POST /api/terminal/stop` + `GET /api/terminal/status`
-- 基于 ttyd（系统级安装），前端用 iframe 嵌入
-- 安装：`brew install ttyd`（macOS）/ `winget install ttyd`（Windows）
-
 ## 安装依赖
 
 ```bash

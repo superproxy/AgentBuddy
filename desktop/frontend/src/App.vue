@@ -19,7 +19,6 @@ import RulesView from './views/RulesView.vue'
 import HooksView from './views/HooksView.vue'
 import MemoryView from './views/MemoryView.vue'
 import MarketplaceView from './views/MarketplaceView.vue'
-import TerminalView from './views/TerminalView.vue' // eslint-disable-line @typescript-eslint/no-unused-vars
 import { useIdeStore } from './stores/ide'
 import { useEnvStore } from './stores/env'
 import { useMcpStore } from './stores/mcp'
@@ -96,7 +95,6 @@ onBeforeUnmount(() => {})
       <HooksView v-else-if="tab === 'hooks'" />
       <MemoryView v-else-if="tab === 'memory'" />
       <MarketplaceView v-else-if="tab === 'marketplace'" />
-      <TerminalView v-else-if="tab === 'terminal'" />
     </main>
 
     <Toast />
