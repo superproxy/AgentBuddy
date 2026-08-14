@@ -34,7 +34,7 @@ build.cmd --windowed --clean
 
 `build.sh` / `build.cmd` 自动完成 5 步：
 
-1. **前端构建**：`cd frontend && npm run build-only` -> 产出 `tools/dist-ui/`
+1. **前端构建**：`cd desktop/frontend && npm run build-only` -> 产出 `desktop/service/dist-ui/`
 2. **Python 依赖检查**：自动安装缺失的 flask/pyyaml/requests/pywebview/pyinstaller
 3. **PyInstaller 打包**：`python build.py` -> 产出 `dist/AgentBuddy/`
 4. **验证**：确认前端产物（dist-ui/index.html）已进 bundle
@@ -125,15 +125,15 @@ build.cmd --windowed --clean --no-installer
 
 ```bash
 # 前端热更新（5173）+ 后端 Flask（5050）
-cd frontend && npm run dev        # 终端 1
+cd desktop/frontend && npm run dev        # 终端 1
 ./run.sh --no-webview             # 终端 2，浏览器开 http://127.0.0.1:5173
 ```
 
 ## 生产模式
 
 ```bash
-cd frontend && npm run build-only  # 构建前端
-./run.sh                           # pywebview 加载 tools/dist-ui
+cd desktop/frontend && npm run build-only  # 构建前端
+./run.sh                           # pywebview 加载 desktop/service/dist-ui
 ```
 
 ## 文件结构

@@ -30,7 +30,7 @@
 | `config/`（llm.yaml/mcp.yaml/ide 配置/含密钥） | **保留** | 不在安装包 `dist\AgentBuddy\` 内，安装器不触及；bootstrap `resources` 列表不含它 |
 | `.agents/`（技能/插件安装目标） | **保留** | 同上，不在安装包内 |
 | `AgentBuddy.exe` + `_internal/` | **替换** | 安装器 `ignoreversion recursesubdirs` 覆盖到 `{app}` |
-| `scripts/` `template/` `tools/` `AGENTS.md` | **替换** | bootstrap 每次启动从 `_internal/` 覆盖到顶层（`dirs_exist_ok=True`） |
+| `cli/` `template/` `desktop/` `AGENTS.md` | **替换** | bootstrap 每次启动从 `_internal/` 覆盖到顶层（`dirs_exist_ok=True`） |
 | `app.log` `.bundle_bootstrapped` | 替换/清理 | `[UninstallDelete]` 卸载时清理 |
 
 ### Windows（Inno Setup）
@@ -47,8 +47,8 @@
 - **配置保留**：`config/` 和 `.agents/` 在 `AgentBuddy/` 目录内，dmg 里不含这俩目录，拖拽覆盖不删除已存在文件
 - **Gatekeeper**：首次启动若被拦截，右键 → 打开 → 确认（未签名时的标准处理）
 
-### Bootstrap 覆盖机制（app.py `_bootstrap_from_bundle`）
-- frozen 模式每次启动，从 `_MEIPASS`（=`_internal/`）把 `scripts/`、`template/`、`tools/`、`AGENTS.md` 覆盖到 exe 所在目录（`dirs_exist_ok=True`）
+### Bootstrap 覆盖机制（desktop/launcher.py `_bootstrap_from_bundle`）
+- frozen 模式每次启动，从 `_MEIPASS`（=`_internal/`）把 `cli/`、`template/`、`desktop/`、`AGENTS.md` 覆盖到 exe 所在目录（`dirs_exist_ok=True`）
 - 保证升级后顶层程序资源与 bundle 一致；`config/`、`.agents/` 不在 `resources` 列表，始终保留
 - `.bundle_bootstrapped` 写 `"1"` 仅作诊断标记，不读回、不参与版本比较
 

@@ -14,13 +14,18 @@
   setup     一键全流程（generate + plugin install all + sync）
 
 用法示例：
-  python scripts/agentctl.py generate
-  python scripts/agentctl.py sync --ide Cursor --force
-  python scripts/agentctl.py sync --ide All --skills tdd,mermaid
-  python scripts/agentctl.py plugin install template/plugins/core.plugin.yaml
-  python scripts/agentctl.py plugin list
-  python scripts/agentctl.py provider openai
-  python scripts/agentctl.py setup
+  python -m agentctl.agentctl generate
+  python -m agentctl.agentctl sync --ide Cursor --force
+  python -m agentctl.agentctl sync --ide All --skills tdd,mermaid
+  python -m agentctl.agentctl plugin install template/plugins/core.plugin.yaml
+  python -m agentctl.agentctl plugin list
+  python -m agentctl.agentctl provider openai
+  python -m agentctl.agentctl setup
+
+或安装后直接使用 agentctl 命令：
+  agentctl generate
+  agentctl sync --ide Cursor --force
+  agentctl setup
 """
 import argparse
 import sys

@@ -282,7 +282,7 @@ GUI 顶部有 8 个功能标签页：
 
 ## 2. 命令总览（CLI）
 
-所有功能通过统一 CLI 入口 `scripts/agentctl.py` 提供，合并了原 `init-env.py` / `init-ide.py` / `plugin-manager.py` 三个脚本。
+所有功能通过统一 CLI 入口 `python -m agentctl.agentctl`（或安装后的 `agentctl` 命令）提供，合并了原 `init-env.py` / `init-ide.py` / `plugin-manager.py` 三个脚本。
 
 > **提示**：以下 CLI 操作均可通过上方 GUI 完成，GUI 底层调用相同的 `agentctl` 命令。
 
@@ -313,42 +313,42 @@ GUI 顶部有 8 个功能标签页：
 
 ```bash
 # 默认：生成所有运行态配置
-python scripts/agentctl.py generate
+python -m agentctl.agentctl generate
 
 # 同时切换 LLM provider
-python scripts/agentctl.py generate --provider volcengine
+python -m agentctl.agentctl generate --provider volcengine
 
 # 同时切换 provider 与协议
-python scripts/agentctl.py generate --provider volcengine --protocol anthropic
+python -m agentctl.agentctl generate --provider volcengine --protocol anthropic
 ```
 
 ### 3.2 sync — 同步到 IDE
 
 ```bash
 # 初始化所有支持的 IDE，写到当前用户主目录
-python scripts/agentctl.py sync
+python -m agentctl.agentctl sync
 
 # 强制覆盖已有配置
-python scripts/agentctl.py sync -f
+python -m agentctl.agentctl sync -f
 
 # 仅初始化指定 IDE
-python scripts/agentctl.py sync -i Cursor
-python scripts/agentctl.py sync -i TraeCN
-python scripts/agentctl.py sync -i TraeSoloCN
-python scripts/agentctl.py sync -i Codex
-python scripts/agentctl.py sync -i Claude
-python scripts/agentctl.py sync -i WorkBuddy
-python scripts/agentctl.py sync -i Qoder
-python scripts/agentctl.py sync -i OpenClaw
-python scripts/agentctl.py sync -i OpenCode
-python scripts/agentctl.py sync -i IDEA
-python scripts/agentctl.py sync -i Agents
+python -m agentctl.agentctl sync -i Cursor
+python -m agentctl.agentctl sync -i TraeCN
+python -m agentctl.agentctl sync -i TraeSoloCN
+python -m agentctl.agentctl sync -i Codex
+python -m agentctl.agentctl sync -i Claude
+python -m agentctl.agentctl sync -i WorkBuddy
+python -m agentctl.agentctl sync -i Qoder
+python -m agentctl.agentctl sync -i OpenClaw
+python -m agentctl.agentctl sync -i OpenCode
+python -m agentctl.agentctl sync -i IDEA
+python -m agentctl.agentctl sync -i Agents
 
 # 按技能白名单同步（仅同步列出的技能）
-python scripts/agentctl.py sync --skills tdd,mermaid
+python -m agentctl.agentctl sync --skills tdd,mermaid
 
 # 指定同步范围（默认 llm,mcp,skill,rules）
-python scripts/agentctl.py sync --scope mcp,rules
+python -m agentctl.agentctl sync --scope mcp,rules
 ```
 
 ### 3.3 provider — 切换 / 查看活跃 LLM
@@ -357,13 +357,13 @@ python scripts/agentctl.py sync --scope mcp,rules
 
 ```bash
 # 查看当前状态与可用 provider 列表
-python scripts/agentctl.py provider
+python -m agentctl.agentctl provider
 
 # 切换到火山引擎（沿用当前协议）
-python scripts/agentctl.py provider volcengine
+python -m agentctl.agentctl provider volcengine
 
 # 同时指定协议
-python scripts/agentctl.py provider volcengine --protocol anthropic
+python -m agentctl.agentctl provider volcengine --protocol anthropic
 ```
 
 支持的 provider 来自 `llm.yaml` 中 `llm.*` 节点（默认包含 `openicu` / `openai` / `openrouter` / `deepseek` / `volcengine` 等）。
@@ -372,47 +372,47 @@ python scripts/agentctl.py provider volcengine --protocol anthropic
 
 ```bash
 # 仅设置当前进程环境变量（默认）
-python scripts/agentctl.py env
+python -m agentctl.agentctl env
 
 # 写入用户级环境变量（持久化，跨终端有效）
-python scripts/agentctl.py env --scope user --force
+python -m agentctl.agentctl env --scope user --force
 ```
 
 ### 3.5 shell — 导出 shell 语句
 
 ```bash
 # 输出 export 语句供 shell 直接 eval
-eval "$(python scripts/agentctl.py shell)"
+eval "$(python -m agentctl.agentctl shell)"
 ```
 
 ### 3.6 plugin — 插件管理
 
 ```bash
 # 列出可用插件
-python scripts/agentctl.py plugin list
+python -m agentctl.agentctl plugin list
 
 # 安装单个插件
-python scripts/agentctl.py plugin install agents/plugins/core.plugin.yaml
+python -m agentctl.agentctl plugin install agents/plugins/core.plugin.yaml
 
 # 模拟安装（不写文件）
-python scripts/agentctl.py plugin install agents/plugins/core.plugin.yaml --dry-run
+python -m agentctl.agentctl plugin install agents/plugins/core.plugin.yaml --dry-run
 ```
 
 ### 3.7 skill — 技能管理
 
 ```bash
 # 列出 agents/skills/skills-index.csv 中的所有技能
-python scripts/agentctl.py skill list
+python -m agentctl.agentctl skill list
 
 # 根据 CSV 生成插件配置
-python scripts/agentctl.py skill gen-plugin --name frontend --category 前端
+python -m agentctl.agentctl skill gen-plugin --name frontend --category 前端
 ```
 
 ### 3.8 setup — 一键全流程
 
 ```bash
 # 依次执行：generate → plugin install all → sync All
-python scripts/agentctl.py setup
+python -m agentctl.agentctl setup
 ```
 
 ### 3.9 参数速查
@@ -529,7 +529,7 @@ python scripts/agentctl.py setup
 }
 ```
 
-重新运行 `python scripts/agentctl.py generate`，新模型会自动注入到 OpenCode 等多模型 IDE 的配置中。如需更改默认模型，将目标模型 Key 移到 `models` 对象的第一位。
+重新运行 `python -m agentctl.agentctl generate`，新模型会自动注入到 OpenCode 等多模型 IDE 的配置中。如需更改默认模型，将目标模型 Key 移到 `models` 对象的第一位。
 
 ---
 
@@ -558,7 +558,7 @@ python scripts/agentctl.py setup
 ./init-env.sh          # macOS / Linux
 ```
 
-等价于 `python scripts/agentctl.py generate`。
+等价于 `python -m agentctl.agentctl generate`。
 
 ### 4.2 全量初始化
 
@@ -567,7 +567,7 @@ python scripts/agentctl.py setup
 ./install.sh           # macOS / Linux
 ```
 
-等价于 `python scripts/agentctl.py setup`，依次执行：
+等价于 `python -m agentctl.agentctl setup`，依次执行：
 
 1. `plugin install all`（执行各插件 install 脚本 → 下载 skill → 合并 mcp/env 到 `llm.yaml` / `mcp.yaml`）
 2. `generate`（生成 `mcp.json` / `auth.json` / `config.toml` / `opencode.json` 等）
@@ -615,23 +615,23 @@ python scripts/agentctl.py setup
 
 ```bash
 # 安装一个插件后，再单独执行 generate + sync
-python scripts/agentctl.py plugin install agents/plugins/core.plugin.yaml
-python scripts/agentctl.py generate
-python scripts/agentctl.py sync -i All -f
+python -m agentctl.agentctl plugin install agents/plugins/core.plugin.yaml
+python -m agentctl.agentctl generate
+python -m agentctl.agentctl sync -i All -f
 ```
 
 ### 5.2 一键全流程
 
 ```bash
 # 等价于上面三步合并（针对 agents/plugins/*.plugin.yaml 全部插件）
-python scripts/agentctl.py setup
+python -m agentctl.agentctl setup
 ```
 
 ### 5.3 模拟安装
 
 ```bash
 # 不写文件，仅打印将要做什么
-python scripts/agentctl.py plugin install agents/plugins/core.plugin.yaml --dry-run
+python -m agentctl.agentctl plugin install agents/plugins/core.plugin.yaml --dry-run
 ```
 
 ---
@@ -652,27 +652,27 @@ cp agents/mcp/mcp-template.yaml agents/mcp/mcp.yaml
 ### 场景 B：切换到火山引擎跑 Codex
 
 ```bash
-python scripts/agentctl.py provider volcengine
-python scripts/agentctl.py generate
+python -m agentctl.agentctl provider volcengine
+python -m agentctl.agentctl generate
 # 重启 Codex，base_url / api_key 已自动更新
 ```
 
 ### 场景 C：只想刷新某个 IDE
 
 ```bash
-python scripts/agentctl.py sync -i Cursor -f
+python -m agentctl.agentctl sync -i Cursor -f
 ```
 
 ### 场景 D：临时调试，把密钥仅写入当前会话
 
 ```bash
-python scripts/agentctl.py env --scope process
+python -m agentctl.agentctl env --scope process
 ```
 
 ### 场景 E：把密钥持久化到用户级环境变量
 
 ```bash
-python scripts/agentctl.py env --scope user --force
+python -m agentctl.agentctl env --scope user --force
 ```
 
 ### 场景 F：在 OpenCode 里新增一个 LLM provider
@@ -682,16 +682,16 @@ python scripts/agentctl.py env --scope user --force
    "groq": { "openai": { "base_url": "https://api.groq.com/openai/v1", "api_key": "..." } }
    ```
 2. 在 `ide/opencode/opencode.template.json` 的 `provider` 下新增条目，引用 `${LLM_GROQ_OPENAI_*}` 占位符
-3. 重新生成：`python scripts/agentctl.py generate`
+3. 重新生成：`python -m agentctl.agentctl generate`
 
 ### 场景 G：新增一个插件并同步到所有 IDE
 
 ```bash
 # 1. 准备 agents/plugins/my.plugin.yaml
 # 2. 安装 + 生成 + 同步
-python scripts/agentctl.py plugin install agents/plugins/my.plugin.yaml
-python scripts/agentctl.py generate
-python scripts/agentctl.py sync -i All -f
+python -m agentctl.agentctl plugin install agents/plugins/my.plugin.yaml
+python -m agentctl.agentctl generate
+python -m agentctl.agentctl sync -i All -f
 ```
 
 ---
@@ -762,14 +762,14 @@ Junction 创建需要管理员权限。右键终端 → "以管理员身份运�
 ### Q5：如何只刷新某个 IDE？
 
 ```bash
-python scripts/agentctl.py sync -i Cursor -f
+python -m agentctl.agentctl sync -i Cursor -f
 ```
 
 ### Q6：Codex / Claude 切到别的 LLM？
 
 ```bash
-python scripts/agentctl.py provider <provider_name>
-python scripts/agentctl.py generate
+python -m agentctl.agentctl provider <provider_name>
+python -m agentctl.agentctl generate
 ```
 
 ### Q7：OpenCode 里看不到我新加的 provider？
@@ -777,4 +777,4 @@ python scripts/agentctl.py generate
 OpenCode 是从 `opencode.json` 的 `provider` 段读取的。新加 provider 需要：
 1. `llm.yaml` 加节点
 2. `ide/opencode/opencode.template.json` 加引用
-3. 重新生成：`python scripts/agentctl.py generate`
+3. 重新生成：`python -m agentctl.agentctl generate`

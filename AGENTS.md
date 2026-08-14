@@ -80,8 +80,8 @@
 #    未完成的功能特性不得随版本发布
 
 # 1. generate + sync 全流程
-python scripts/agentctl.py generate
-python scripts/agentctl.py sync --ide All --force --scope llm,mcp,skill,rules
+python -m agentctl.agentctl generate
+python -m agentctl.agentctl sync --ide All --force --scope llm,mcp,skill,rules
 
 # 2. 检查产物无占位符残留
 # codex
@@ -97,7 +97,7 @@ grep '\${' config/proxy/config.yaml
 # proxy config.yaml: 路由条目正确
 
 # 4. 前端构建
-cd frontend && npx vite build
+cd desktop/frontend && npx vite build
 
 # 5. 单元测试
 python -m pytest -q
