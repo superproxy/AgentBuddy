@@ -74,6 +74,7 @@ export const BRAND_META: Record<string, { vendor: string; color: string; logo: s
   Pi:        { vendor: 'earendil-works',           color: '#7c3aed', logo: 'Pi' },
   'Trae Work': { vendor: '字节跳动 · ByteDance',   color: '#f59e0b', logo: 'TW' },
   'Command Code': { vendor: 'Command Code',       color: '#0891b2', logo: 'CC' },
+  DeepSeek:  { vendor: 'DeepSeek AI · 深度求索',  color: '#4D6BFE', logo: 'DS' },
 }
 
 // 形式徽章配色

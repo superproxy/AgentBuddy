@@ -26,6 +26,7 @@ from .kimi import KimiCLITarget, KimiCodeTarget, KimiWorkTarget
 from .pi import PiTarget
 from .commandcode import CommandCodeTarget
 from .vscode import VSCodeTarget
+from .deepseek import DeepSeekTarget
 
 
 # IDE 注册表：名称 → 类（按字母顺序排列）
@@ -37,6 +38,7 @@ IDE_REGISTRY = {
     "Codex": CodexTarget,
     "CommandCode": CommandCodeTarget,
     "Cursor": CursorTarget,
+    "DeepSeek": DeepSeekTarget,
     "IDEA": IdeATarget,
     "KimiCLI": KimiCLITarget,
     "KimiCode": KimiCodeTarget,
@@ -99,5 +101,5 @@ __all__ = [
     "TraeTarget", "TraeCNTarget", "TraeSoloCNTarget",
     "ClaudeTarget", "WorkBuddyTarget", "QoderTarget", "QoderCNTarget",
     "OpenClawTarget", "IdeATarget", "AgentsTarget", "ZCodeTarget", "PiTarget", "CommandCodeTarget",
-    "VSCodeTarget",
+    "VSCodeTarget", "DeepSeekTarget",
 ]

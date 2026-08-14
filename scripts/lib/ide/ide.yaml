@@ -395,6 +395,48 @@ install_meta:
     category: code
     forms: [cli, app, acp, remote]
 
+  DeepSeek:
+    # DeepSeek Harness（DeepSeek 官方开源 Agent Harness，"一切皆插件"）
+    # 最新版本：0.1.0-rc.6（2026-08-13，开发者预览版，快速迭代中）
+    # 来源：https://github.com/deepseek-ai/deepseek-harness
+    # 特性：标准/极简/PTC/创造四种工作模式、Web UI + CLI(headless/tui) + Python SDK、
+    #       MCP 兼容、会话事件日志（恢复/回放/分叉）
+    # 平台：macOS / Linux / Windows（需 Node.js 18+）
+    # 配置：$DSH_HOME（默认 ~/.dsh）下 settings.yaml + .credentials.yaml
+    # 安装：npx @deepseek-ai/dsh web 一键启动（npm 包，二进制入口 dsh）
+    label: DeepSeek Harness
+    version: "0.1.0-rc.6"
+    release_date: "2026-08-13"
+    homepage: https://www.deepseek.com/harness/
+    docs_url: https://deepseek-harness.github.io/deepseek-harness/guide/quickstart
+    release_url: https://github.com/deepseek-ai/deepseek-harness/releases
+    cli_install:
+      method: npm
+      package: "@deepseek-ai/dsh"
+      url: https://github.com/deepseek-ai/deepseek-harness
+      uninstall_cmd_mac: "npm uninstall -g @deepseek-ai/dsh 2>/dev/null; rm -rf ~/.dsh; true"
+      uninstall_cmd_win: "npm uninstall -g @deepseek-ai/dsh 2>nul & rmdir /s /q \"%USERPROFILE%\\.dsh\" 2>nul & exit /b 0"
+    app_install:
+      method: manual
+      url: https://github.com/deepseek-ai/deepseek-harness
+    download_urls:
+      macos_arm64: https://github.com/deepseek-ai/deepseek-harness
+      macos_x64: https://github.com/deepseek-ai/deepseek-harness
+      windows_x64: https://github.com/deepseek-ai/deepseek-harness
+      linux_x64: https://github.com/deepseek-ai/deepseek-harness
+    install_methods: [npm]
+    # DeepSeek Harness Web：npx @deepseek-ai/dsh web 启动本地 Web UI
+    #   （无需密码认证，首次打开在 Settings→Models 输入 DeepSeek API Key）
+    web_install:
+      method: cli
+      url: https://deepseek-harness.github.io/deepseek-harness/guide/quickstart
+      cmd: npx @deepseek-ai/dsh web
+      port: 3080
+      note: dsh web 启动 Web UI（无密码，首次打开需输入 DeepSeek API Key 并选择工作区），浏览器访问 http://127.0.0.1:3080
+    brand: DeepSeek
+    category: code
+    forms: [cli, remote]
+
   Qoder:
     # Qoder 国际版（阿里云通义灵码升级版）
     # 最新版本：v1.4.1（2026-06）
@@ -1073,6 +1115,16 @@ detect_meta:
     sessions_subdir: sessions
     is_tui: true
     protocols: [openaiv1, anthropic]
+
+  DeepSeek:
+    label: DeepSeek Harness
+    cli_names: [dsh]
+    macos_apps: []
+    windows_apps: []
+    config_dirs: [".dsh"]
+    sessions_subdir: sessions
+    is_tui: false
+    protocols: [openaiv1]
 
   Qoder:
     label: Qoder

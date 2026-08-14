@@ -97,3 +97,10 @@ server/data/
 # 设计预览 mockup（仅本地参考，不发布）
 frontend/aide-redesign-mockup.html
 frontend/menu-mockup.html
+
+# SDD 工作区（task briefs / reports / ledger，短生命周期）
+.superpowers/sdd/
+
+# 调研临时目录
+.dsh-ref/
+.tmp-dsh/
