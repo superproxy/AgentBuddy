@@ -37,7 +37,7 @@ done
 
 info "AgentBuddy 完整构建 (platform=$(uname -s))"
 
-# ===== 1. 前端构建（Vue 3 + Vite -> desktop/service/dist-ui）=====
+# ===== 1. 前端构建（Vue 3 + Vite -> desktop/dist-ui）=====
 if [ "$NO_FRONTEND" = false ]; then
   info "步骤 1/4: 构建前端 (Vue 3 + Vite)..."
   if [ ! -d "desktop/frontend/node_modules" ]; then
@@ -47,7 +47,7 @@ if [ "$NO_FRONTEND" = false ]; then
   cd desktop/frontend
   npm run build-only || fail "前端构建失败"
   cd "$ROOT"
-  info "前端产物: desktop/service/dist-ui/ ($(du -sh desktop/service/dist-ui 2>/dev/null | cut -f1))"
+  info "前端产物: desktop/dist-ui/ ($(du -sh desktop/dist-ui 2>/dev/null | cut -f1))"
 else
   warn "跳过前端构建 (--no-frontend)"
 fi
@@ -89,13 +89,13 @@ info "后端打包完成: dist/AgentBuddy/"
 # ===== 4. 验证前端产物已进 bundle =====
 info "步骤 4/4: 验证前端产物..."
 BUNDLE_DESKTOP="dist/AgentBuddy/_internal/desktop"
-if [ ! -d "$BUNDLE_DESKTOP/service" ]; then
+if [ ! -d "$BUNDLE_DESKTOP/dist-ui" ]; then
   BUNDLE_DESKTOP="dist/AgentBuddy/desktop"
 fi
-if [ -f "$BUNDLE_DESKTOP/service/dist-ui/index.html" ]; then
-  info "前端产物已进 bundle: $BUNDLE_DESKTOP/service/dist-ui/index.html"
+if [ -f "$BUNDLE_DESKTOP/dist-ui/index.html" ]; then
+  info "前端产物已进 bundle: $BUNDLE_DESKTOP/dist-ui/index.html"
 else
-  warn "前端产物未在 bundle 中找到（desktop/service/dist-ui），打包后 UI 可能无法显示"
+  warn "前端产物未在 bundle 中找到（desktop/dist-ui），打包后 UI 可能无法显示"
 fi
 
 echo ""

@@ -9,7 +9,7 @@
 
 三层分离后的目录映射：
   - cli/          -> agentctl 包（pip install -e cli/），PyInstaller 通过 import 探测收集
-  - desktop/      -> 含 launcher.py（入口）+ service/（Flask API）+ frontend/（Vue SPA）
+  - desktop/      -> 含 launcher.py（入口）+ config_server.py（Flask API）+ frontend/（Vue SPA）+ dist-ui/（构建产物）
   - template/     -> 配置模板
   - server/       -> 远程服务（marketplace + ai_generator）
 
@@ -77,7 +77,7 @@ for f in ('AGENTS.md', 'README.md', 'install.sh', 'install.cmd',
     if os.path.exists(f):
         datas.append((f, '.'))
 
-# agentctl 包（cli/）和 config_server（desktop/service/）通过 pathex + hiddenimports 收集
+# agentctl 包（cli/）和 config_server（desktop/）通过 pathex + hiddenimports 收集
 # agentctl 已 pip install -e cli/，PyInstaller 通过 import 探测自动收集子模块
 hiddenimports = [
     'config_server',
@@ -117,7 +117,7 @@ EXCLUDES = [
 
 a = Analysis(
     ['desktop/launcher.py'],
-    pathex=['cli', 'desktop/service', 'server'],
+    pathex=['cli', 'desktop', 'server'],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,

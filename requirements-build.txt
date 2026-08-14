@@ -13,7 +13,7 @@ litellm[proxy]>=1.0  # LLM 网关代理（多协议路由）
 # 前端构建依赖（仅开发/构建时需要，不打包进产物）：
 #   Node.js 18+ / npm
 #   cd frontend && npm install
-#   cd frontend && npm run build-only  (产出 tools/dist-ui/)
+#   cd frontend && npm run build-only  (产出 desktop/dist-ui/)
 
 # pywebview 平台后端（按平台安装其一，pyinstaller 需将其一并打包）：
 #   macOS : 已含 pyobjc-*（pywebview 在 macOS 自动依赖）

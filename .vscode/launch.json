@@ -1,0 +1,77 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flask 后端 (5050)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "config_server",
+      "cwd": "${workspaceFolder}/desktop",
+      "args": ["--no-open"],
+      "env": {
+        "FLASK_DEBUG": "1",
+        "PYTHONPATH": "${workspaceFolder}/desktop:${workspaceFolder}/cli"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "前端 Vite (19527)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npx vite",
+      "cwd": "${workspaceFolder}/desktop/frontend",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "远程服务端 (5001)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/app.py",
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "AGENTBUDDY_SERVER_HOST": "0.0.0.0",
+        "AGENTBUDDY_SERVER_PORT": "5001",
+        "PYTHONPATH": "${workspaceFolder}/server:${workspaceFolder}/cli"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "agentctl CLI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "agentctl.agentctl",
+      "cwd": "${workspaceFolder}",
+      "args": ["generate"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/cli"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "桌面启动器 launcher",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/desktop/launcher.py",
+      "cwd": "${workspaceFolder}",
+      "args": ["--port", "5050", "--no-webview"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/desktop:${workspaceFolder}/cli"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "桌面开发 (Flask + Vite)",
+      "configurations": ["Flask 后端 (5050)", "前端 Vite (19527)"]
+    },
+    {
+      "name": "全栈开发 (Flask + Vite + Server)",
+      "configurations": ["Flask 后端 (5050)", "前端 Vite (19527)", "远程服务端 (5001)"]
+    }
+  ]
+}

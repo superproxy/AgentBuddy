@@ -55,7 +55,12 @@ ENV/
 desktop/frontend/node_modules/
 desktop/frontend/dist/
 desktop/frontend/*.tsbuildinfo
-desktop/service/dist-ui/
+
+# 桌面端 Vite 构建产物（由 build.py 生成）
+desktop/dist-ui/
+
+# 桌面端运行时配置（frozen 模式首次运行生成，含真实密钥）
+desktop/config/
 
 # 工具缓存
 .pytest_cache/
@@ -93,10 +98,6 @@ template/plugins/Plugin.plugin.yaml
 
 # 服务端运行态数据（SQLite 数据库等，由运行时生成）
 server/data/
-
-# 设计预览 mockup（仅本地参考，不发布）
-desktop/frontend/aide-redesign-mockup.html
-desktop/frontend/menu-mockup.html
 
 # SDD 工作区（task briefs / reports / ledger，短生命周期）
 .superpowers/sdd/

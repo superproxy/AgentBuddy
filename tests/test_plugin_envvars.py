@@ -17,10 +17,10 @@ import zipfile
 
 import yaml
 
-# 导入 desktop/service/config_server.py（Flask 后端）
-_SERVICE_DIR = pathlib.Path(__file__).resolve().parents[1] / "desktop" / "service"
-if str(_SERVICE_DIR) not in sys.path:
-    sys.path.insert(0, str(_SERVICE_DIR))
+# 导入 desktop/config_server.py（Flask 后端）
+_DESKTOP_DIR = pathlib.Path(__file__).resolve().parents[1] / "desktop"
+if str(_DESKTOP_DIR) not in sys.path:
+    sys.path.insert(0, str(_DESKTOP_DIR))
 
 
 class PluginEnvVarsImportTests(unittest.TestCase):

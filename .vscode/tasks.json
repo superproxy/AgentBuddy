@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "vite-dev",
+      "type": "shell",
+      "command": "npx vite",
+      "options": { "cwd": "${workspaceFolder}/desktop/frontend" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" }
+    },
+    {
+      "label": "flask-backend",
+      "type": "shell",
+      "command": "python config_server.py --no-open",
+      "options": { "cwd": "${workspaceFolder}/desktop" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" }
+    },
+    {
+      "label": "server-remote",
+      "type": "shell",
+      "command": "python app.py",
+      "options": { "cwd": "${workspaceFolder}/server" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "group": "dev" }
+    },
+    {
+      "label": "build-frontend",
+      "type": "shell",
+      "command": "npx vite build",
+      "options": { "cwd": "${workspaceFolder}/desktop/frontend" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "dev-all (Flask + Vite)",
+      "dependsOn": ["flask-backend", "vite-dev"],
+      "problemMatcher": []
+    }
+  ]
+}

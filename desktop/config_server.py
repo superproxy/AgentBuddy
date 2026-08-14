@@ -2,7 +2,7 @@
 """
 飞翼 Web UI 后端
 
-启动: python desktop/service/config_server.py
+启动: python desktop/config_server.py
 访问: http://127.0.0.1:5050
 依赖: flask, pyyaml, requests, agentctl（pip install -e cli/）
 """
@@ -99,7 +99,7 @@ def _shell_quote(s: str) -> str:
 
 def _resolve_project_root() -> Path:
     """Frozen-aware 项目根定位。
-    - dev: 仓库根（desktop/service/config_server.py 的上三级）
+    - dev: 仓库根（desktop/config_server.py 的上两级）
     - frozen (PyInstaller onedir): exe 所在目录（_MEIPASS == exe dir，可写）
     - macOS .app bundle: exe 在 /Applications 下不可写，改用
       ~/Library/Application Support/AgentBuddy/ 作为用户数据目录
@@ -296,7 +296,7 @@ HTTP_TIMEOUT = 15  # 外部 API 超时秒数
 def _ensure_config_dirs() -> None:
     """确保 config/ 下的所有子目录存在（打包后首次运行时创建）。
 
-    _bootstrap_from_bundle 只复制 template/ 和 desktop/service/，
+    _bootstrap_from_bundle 只复制 template/ 和 desktop/，
     config/ 目录由 _ensure_llm_file / _ensure_mcp_config_file 部分创建，
     但 skills/cmd/subagent/ide/proxy 等子目录需要显式创建。
     """
@@ -623,7 +623,7 @@ def _stream_process_rc(cmd: str, cwd: Optional[Path] = None):
 @app.route("/")
 def index():
     """根路由：返回 Vite 构建产物（Vue 3 + Vite）。"""
-    dist_ui = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "index.html"
+    dist_ui = PROJECT_ROOT / "desktop" / "dist-ui" / "index.html"
     if dist_ui.exists():
         with open(dist_ui, "r", encoding="utf-8") as f:
             html = f.read()
@@ -640,7 +640,7 @@ def index():
 def dist_assets(filename):
     """Vite 构建产物（JS/CSS chunk）。"""
     from flask import send_from_directory
-    resp = send_from_directory(PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "assets", filename)
+    resp = send_from_directory(PROJECT_ROOT / "desktop" / "dist-ui" / "assets", filename)
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     resp.headers["Expires"] = "0"
@@ -702,7 +702,7 @@ def _read_version() -> tuple[str, str]:
 
     frozen 模式：从 _MEIPASS（bundle 内）读取，Inno Setup 每次安装都会覆盖 _internal/，
     不依赖 bootstrap 复制（bootstrap 可能因文件占用等原因未覆盖旧版本）。
-    dev 模式：从 PROJECT_ROOT/desktop/service/dist-ui/version.json 读取（构建产物）。
+    dev 模式：从 PROJECT_ROOT/desktop/dist-ui/version.json 读取（构建产物）。
     都不存在时 fallback 到 git tag。
 
     返回 (version, build_time)。version 为 "dev" 表示开发模式。
@@ -713,8 +713,8 @@ def _read_version() -> tuple[str, str]:
     if getattr(sys, "frozen", False):
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            candidates.append(Path(meipass) / "desktop" / "service" / "dist-ui" / "version.json")
-    candidates.append(PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "version.json")
+            candidates.append(Path(meipass) / "desktop" / "dist-ui" / "version.json")
+    candidates.append(PROJECT_ROOT / "desktop" / "dist-ui" / "version.json")
 
     for version_file in candidates:
         if version_file.exists():
@@ -729,7 +729,7 @@ def _read_version() -> tuple[str, str]:
 
 @app.route("/api/version", methods=["GET"])
 def api_version():
-    """返回应用版本号。构建时由 build.py 写入 desktop/service/dist-ui/version.json，供运行时 /api/version 读取。"""
+    """返回应用版本号。构建时由 build.py 写入 desktop/dist-ui/version.json，供运行时 /api/version 读取。"""
     version, build_time = _read_version()
     return jsonify({"version": version, "build_time": build_time})
 
@@ -3992,6 +3992,103 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
         "skill_count": len(imported_skills),
         "extras_count": len(imported_extras),
     }
+
+    # ---- 导入后自动执行：环境变量生效 + generate + sync ----
+    # 前端只负责交互编排，真正的运行逻辑在后端一次完成。
+    env_applied = 0
+    sync_ok = False
+    sync_error = ""
+
+    # 1. 环境变量生效到操作系统（跨平台：Windows 写注册表 / macOS 写 .zshrc / Linux 写 .bashrc）
+    #    仅当 keys.yaml 已存在时才加载，避免导入无 envVars 插件时副作用创建空文件
+    try:
+        if KEYS_FILE.exists():
+            keys_full = _load_keys_full()
+            mcp_keys = keys_full.get("mcp", {}) if isinstance(keys_full, dict) else {}
+        else:
+            mcp_keys = {}
+        if isinstance(mcp_keys, dict) and mcp_keys:
+            for k, v in mcp_keys.items():
+                value = v.get("value", "") if isinstance(v, dict) else (v or "")
+                if value:
+                    os.environ[k] = str(value)
+                    env_applied += 1
+            # 持久化到操作系统（shell rc / 注册表）
+            import platform as _pf
+            if _pf.system() == "Windows":
+                try:
+                    import winreg
+                    import ctypes
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0,
+                                        winreg.KEY_READ | winreg.KEY_WRITE) as reg_key:
+                        for k, v in mcp_keys.items():
+                            value = v.get("value", "") if isinstance(v, dict) else (v or "")
+                            if value:
+                                winreg.SetValueEx(reg_key, k, 0, winreg.REG_SZ, str(value))
+                    ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0, "Environment", 0x0002, 1000)
+                except Exception:
+                    pass
+            else:
+                shell = os.environ.get("SHELL", "")
+                if "zsh" in shell:
+                    rc_path = Path.home() / ".zshrc"
+                elif "bash" in shell:
+                    rc_path = Path.home() / ".bash_profile" if (Path.home() / ".bash_profile").exists() else Path.home() / ".bashrc"
+                else:
+                    rc_path = Path.home() / ".profile"
+                try:
+                    rc_content = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
+                    MARKER_S = "# >>> AgentBuddy ENV START >>>"
+                    MARKER_E = "# <<< AgentBuddy ENV END <<<"
+                    if MARKER_S in rc_content:
+                        import re as _re
+                        rc_content = _re.sub(_re.escape(MARKER_S) + r".*?" + _re.escape(MARKER_E), "", rc_content, flags=_re.DOTALL)
+                    lines = [MARKER_S]
+                    for k, v in sorted(mcp_keys.items()):
+                        value = v.get("value", "") if isinstance(v, dict) else (v or "")
+                        if value:
+                            escaped = str(value).replace("'", "'\\''")
+                            lines.append(f"export {k}='{escaped}'")
+                    lines.append(MARKER_E)
+                    rc_content = rc_content.rstrip("\n") + "\n\n" + "\n".join(lines) + "\n"
+                    rc_path.write_text(rc_content, encoding="utf-8")
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 2. generate（刷新 mcp.json + config/ide/ 产物）
+    try:
+        subprocess.run(
+            _script_run_cmd("agentctl", ["generate"]),
+            cwd=str(PROJECT_ROOT),
+            capture_output=True, text=True,
+            encoding="utf-8", errors="ignore",
+            timeout=60,
+        )
+    except Exception:
+        pass
+
+    # 3. sync（同步到所有 IDE）
+    try:
+        sync_result = subprocess.run(
+            _script_run_cmd("agentctl", ["sync", "--ide", "All", "--force", "--scope", "llm,mcp"]),
+            cwd=str(PROJECT_ROOT),
+            capture_output=True, text=True,
+            encoding="utf-8", errors="ignore",
+            timeout=120,
+        )
+        sync_ok = sync_result.returncode == 0
+        if not sync_ok:
+            sync_error = (sync_result.stderr or sync_result.stdout or "")[-500:]
+    except Exception as e:
+        sync_error = str(e)
+
+    result["env_applied"] = env_applied
+    result["synced"] = sync_ok
+    if sync_error:
+        result["sync_error"] = sync_error
+
     return (jsonify(result), 200)
 
 
@@ -4987,7 +5084,7 @@ def api_ide_install_info():
 # ============================================================
 # IDE 图标提取（macOS 从 .app 包读取真实程序图标）
 # ============================================================
-IDE_ICON_CACHE_DIR = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "ide-icons"
+IDE_ICON_CACHE_DIR = PROJECT_ROOT / "desktop" / "dist-ui" / "ide-icons"
 # 防御：如果路径被错误地创建为文件，先删除再建目录
 if IDE_ICON_CACHE_DIR.exists() and not IDE_ICON_CACHE_DIR.is_dir():
     IDE_ICON_CACHE_DIR.unlink()
@@ -5112,7 +5209,7 @@ def api_ide_icon(ide_key: str):
     - macOS：从 .app 包提取 ICNS/PNG，ICNS 用 sips 转 PNG
     - Windows：从 .exe 用 PowerShell + System.Drawing 提取图标
     - 其他平台 / 未安装：返回 404 让前端回退到字母
-    缓存到 desktop/service/dist-ui/ide-icons/<key>.png，避免重复提取。
+    缓存到 desktop/dist-ui/ide-icons/<key>.png，避免重复提取。
     404 响应带 no-store，避免前端缓存"未安装"状态后无法刷新。
     """
     from flask import Response

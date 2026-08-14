@@ -153,11 +153,46 @@ def clean() -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
+def build_frontend() -> None:
+    """构建前端 Vue SPA，产物输出到 desktop/dist-ui/。
+
+    Vite 配置 outDir: '../dist-ui'，构建后自动就位。
+    若 node_modules 不存在则先 npm install。
+    """
+    frontend_dir = PROJECT_ROOT / "desktop" / "frontend"
+    dist_ui = PROJECT_ROOT / "desktop" / "dist-ui" / "index.html"
+
+    if not (frontend_dir / "package.json").is_file():
+        info("desktop/frontend/package.json 不存在，跳过前端构建")
+        return
+
+    npm = shutil.which("npm")
+    if not npm:
+        fail("未找到 npm，请先安装 Node.js")
+
+    # 确保依赖已安装
+    if not (frontend_dir / "node_modules").is_dir():
+        info("安装前端依赖 (npm install)...")
+        rc = subprocess.call([npm, "install"], cwd=str(frontend_dir))
+        if rc != 0:
+            fail(f"npm install 失败 (exit={rc})")
+
+    # 构建前端（vite build，产物直接输出到 ../dist-ui/）
+    info("构建前端 (vite build)...")
+    rc = subprocess.call([npm, "run", "build-only"], cwd=str(frontend_dir))
+    if rc != 0:
+        fail(f"前端构建失败 (exit={rc})")
+
+    if not dist_ui.is_file():
+        fail(f"前端构建完成但未找到产物: {dist_ui.relative_to(PROJECT_ROOT)}")
+    info(f"前端产物已就位: {dist_ui.relative_to(PROJECT_ROOT)}")
+
+
 def write_version(version: str) -> None:
-    """构建时写入版本信息到 desktop/service/dist-ui/version.json，供运行时 /api/version 读取。"""
+    """构建时写入版本信息到 desktop/dist-ui/version.json，供运行时 /api/version 读取。"""
     import json
     from datetime import datetime, timezone
-    version_file = PROJECT_ROOT / "desktop" / "service" / "dist-ui" / "version.json"
+    version_file = PROJECT_ROOT / "desktop" / "dist-ui" / "version.json"
     data = {
         "version": version,
         "build_time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -540,6 +575,8 @@ def main():
     else:
         info("已启用 --skip-tests：跳过自动测试（CI 发布构建）")
     ensure_pyinstaller()
+    with _step_timer("构建前端"):
+        build_frontend()
     with _step_timer("写版本号"):
         write_version(args.version)
     with _step_timer("生成 icns"):

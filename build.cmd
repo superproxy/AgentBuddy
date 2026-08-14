@@ -23,7 +23,7 @@ if errorlevel 1 (
     exit /b 1
 )
 cd ..\..
-echo [build]   OK: desktop\service\dist-ui\
+echo [build]   OK: desktop\dist-ui\
 echo.
 
 REM ===== Step 2/5: Python Dependencies =====
@@ -58,10 +58,10 @@ echo.
 
 REM ===== Step 4/5: Verify Frontend Bundle =====
 echo [build] Step 4/5: Verify frontend in bundle...
-if exist "dist\AgentBuddy\_internal\desktop\service\dist-ui\index.html" (
-    echo [build]   OK: _internal\desktop\service\dist-ui\index.html
-) else if exist "dist\AgentBuddy\desktop\service\dist-ui\index.html" (
-    echo [build]   OK: desktop\service\dist-ui\index.html
+if exist "dist\AgentBuddy\_internal\desktop\dist-ui\index.html" (
+    echo [build]   OK: _internal\desktop\dist-ui\index.html
+) else if exist "dist\AgentBuddy\desktop\dist-ui\index.html" (
+    echo [build]   OK: desktop\dist-ui\index.html
 ) else (
     echo [build][WARN] Frontend assets not found in bundle
 )

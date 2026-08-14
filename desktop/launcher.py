@@ -212,11 +212,10 @@ def _redirect_stdio_to_log(project_root: Path) -> None:
 
 PROJECT_ROOT = _resolve_project_root()
 DESKTOP_DIR = PROJECT_ROOT / "desktop"
-SERVICE_DIR = DESKTOP_DIR / "service"
 
-# 把 desktop/service/ 加入 sys.path 以便 import config_server
-if str(SERVICE_DIR) not in sys.path:
-    sys.path.insert(0, str(SERVICE_DIR))
+# 把 desktop/ 加入 sys.path 以便 import config_server
+if str(DESKTOP_DIR) not in sys.path:
+    sys.path.insert(0, str(DESKTOP_DIR))
 
 
 def _run_bundled_script(script_name: str, extra_args: list) -> int:
@@ -361,7 +360,7 @@ def _bootstrap_from_bundle() -> None:
 
 def start_flask_thread(host: str, port: int) -> threading.Thread:
     """在守护线程中启动 Flask 服务（不自动打开浏览器）。"""
-    import config_server  # noqa: E402  (位于 tools/)
+    import config_server  # noqa: E402  (位于 desktop/)
 
     # 调用 ensure 函数确保配置文件存在
     config_server._ensure_llm_file()

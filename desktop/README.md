@@ -2,7 +2,7 @@
 
 桌面应用的 API 层，Flask 后端，通过浏览器或 pywebview 窗口管理 `llm.yaml` / `mcp.yaml`、插件、MCP、Skill。
 
-> 三层分离后位于 `desktop/service/`，通过 `pip install -e cli/` 引入 `agentctl` 包共享业务库。
+> 三层分离后位于 `desktop/`，通过 `pip install -e cli/` 引入 `agentctl` 包共享业务库。
 
 ## 启动
 
@@ -12,10 +12,10 @@ pip install flask pyyaml requests
 pip install -e cli/    # 三层分离：共享业务库
 
 # 启动
-python desktop/service/config_server.py
+python desktop/config_server.py
 
 # 自定义端口/不自动开浏览器
-python desktop/service/config_server.py --port 8080 --no-open
+python desktop/config_server.py --port 8080 --no-open
 ```
 
 启动后自动打开 `http://127.0.0.1:5050`。
@@ -48,10 +48,9 @@ python desktop/service/config_server.py --port 8080 --no-open
 ```
 desktop/
   ├── launcher.py             # pywebview 桌面启动器（Frozen-aware）
-  └── service/
-      ├── config_server.py    # Flask 后端（API 层）
-      ├── dist-ui/            # Vue 前端构建产物（由 desktop/frontend 构建生成）
-      └── README.md           # 本文件
+  ├── config_server.py        # Flask 后端（API 层）
+  ├── dist-ui/               # Vue 前端构建产物（由 desktop/frontend 构建生成）
+  └── README.md              # 本文件
 desktop/frontend/             # Vue 3 + Vite + Pinia + TailwindCSS（前端层）
 cli/                          # agentctl 包（CLI 层，pip install -e cli/）
 ```

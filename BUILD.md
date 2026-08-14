@@ -34,7 +34,7 @@ build.cmd --windowed --clean
 
 `build.sh` / `build.cmd` 自动完成 5 步：
 
-1. **前端构建**：`cd desktop/frontend && npm run build-only` -> 产出 `desktop/service/dist-ui/`
+1. **前端构建**：`cd desktop/frontend && npm run build-only` -> 产出 `desktop/dist-ui/`
 2. **Python 依赖检查**：自动安装缺失的 flask/pyyaml/requests/pywebview/pyinstaller
 3. **PyInstaller 打包**：`python build.py` -> 产出 `dist/AgentBuddy/`
 4. **验证**：确认前端产物（dist-ui/index.html）已进 bundle
@@ -46,7 +46,7 @@ build.cmd --windowed --clean
 |---|---|
 | `--windowed` | 无控制台（macOS 生成 .app / Windows 无黑框） |
 | `--clean` | 构建前清理 dist/ build/ |
-| `--no-frontend` | 跳过前端构建（使用已有 desktop/service/dist-ui） |
+| `--no-frontend` | 跳过前端构建（使用已有 desktop/dist-ui） |
 | `--no-verify` | 跳过密钥泄漏扫描（不推荐） |
 | `--no-installer` | 跳过 Inno Setup 安装包生成（仅 Windows） |
 | `--version 1.2.0` | 安装包版本号（默认 1.0.0） |
@@ -133,7 +133,7 @@ cd desktop/frontend && npm run dev        # 终端 1
 
 ```bash
 cd desktop/frontend && npm run build-only  # 构建前端
-./run.sh                           # pywebview 加载 desktop/service/dist-ui
+./run.sh                           # pywebview 加载 desktop/dist-ui
 ```
 
 ## 文件结构
@@ -143,9 +143,8 @@ desktop/                # 桌面应用层（API + Vue 前端 + 启动器）
   launcher.py           #   pywebview 桌面启动器（Frozen-aware）
   frontend/             #   Vue 3 + Vite 工程（开发/构建用）
     src/                #     SFC 组件 + stores + api
-  service/
-    dist-ui/            #   Vue 3 构建产物（Flask 根路由 serve）
-    config_server.py    #   Flask 后端（API 层）
+  dist-ui/              #   Vue 3 构建产物（Flask 根路由 serve）
+  config_server.py      #   Flask 后端（API 层）
 
 cli/                    # CLI 层（独立可发布的 agentctl 包）
   agentctl.py           #   CLI 入口（sync/generate/env）

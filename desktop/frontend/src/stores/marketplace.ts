@@ -291,7 +291,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       }
       const zipBlob = await resp.blob()
 
-      // 2. 本地导入 zip
+      // 2. 本地导入 zip（后端自动完成：导入 -> 注册 -> 环境变量生效 -> generate + sync）
       const fd = new FormData()
       const fileName = items.value.find(i => i.id === id)?.file || 'plugin.zip'
       fd.append('file', zipBlob, fileName.split('/').pop() || 'plugin.zip')
@@ -299,45 +299,24 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
       const result = await importResp.json() as {
         ok: boolean; error?: string;
         plugin_count?: number; skill_count?: number; extras_count?: number;
-        skipped?: any[]
+        skipped?: any[]; env_applied?: number; synced?: boolean; sync_error?: string;
       }
       if (result.ok) {
         const parts: string[] = []
         if (result.plugin_count) parts.push(`${result.plugin_count} 个插件`)
         if (result.skill_count) parts.push(`${result.skill_count} 个技能`)
         if (result.extras_count) parts.push(`${result.extras_count} 项扩展`)
+        if (result.env_applied) parts.push(`${result.env_applied} 个环境变量`)
         const detail = parts.length ? '：' + parts.join('、') : ''
         const skippedNote = result.skipped?.length ? `，跳过 ${result.skipped.length} 项` : ''
         ui.toast('安装成功' + detail + skippedNote)
+        if (result.synced) {
+          ui.toast('已同步到 IDE')
+        } else if (result.sync_error) {
+          ui.toast('同步到 IDE 失败: ' + result.sync_error, 'warn')
+        }
         plugin.refreshPluginList()
         skill.loadInstalledSkills()
-
-        // 3. 环境变量自动生效到操作系统（跨平台：Windows 写注册表 / macOS 写 .zshrc / Linux 写 .bashrc）
-        try {
-          const envResp = await api<{ ok: boolean; applied?: any[]; skipped?: any[]; note?: string }>('/api/keys/apply-env', {
-            method: 'POST',
-            body: JSON.stringify({ include_empty: false }),
-          })
-          if (envResp.ok && envResp.applied?.length) {
-            ui.toast(`已设置 ${envResp.applied.length} 个环境变量到系统`)
-          }
-        } catch (envErr: any) {
-          ui.toast('环境变量设置失败: ' + (envErr?.message || ''), 'warn')
-        }
-
-        // 4. 同步到 IDE（generate + sync）
-        try {
-          const syncResp = await api<{ ok: boolean; error?: string }>('/api/sync', {
-            method: 'POST',
-          })
-          if (syncResp.ok) {
-            ui.toast('已同步到 IDE')
-          } else {
-            ui.toast('同步到 IDE 失败: ' + (syncResp.error || ''), 'warn')
-          }
-        } catch (syncErr: any) {
-          ui.toast('同步到 IDE 失败: ' + (syncErr?.message || ''), 'warn')
-        }
 
         const item = items.value.find(i => i.id === id)
         if (item) item.downloads = (item.downloads || 0) + 1
