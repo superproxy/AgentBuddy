@@ -67,7 +67,8 @@ def collect_dir(root, prefix, excludes=SENSITIVE):
 
 datas = []
 datas += collect_dir('cli', 'cli')
-datas += collect_dir('desktop', 'desktop')
+# desktop/ 只打包 dist-ui（前端构建产物）+ 单文件，不打包 frontend/ 源码（85MB）和 __pycache__
+datas += collect_dir('desktop/dist-ui', 'desktop/dist-ui')
 datas += collect_dir('template', 'template')
 datas += collect_dir('server', 'server')
 
