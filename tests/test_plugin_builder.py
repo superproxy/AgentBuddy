@@ -111,3 +111,79 @@ class TestSlugify(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAnalyzeCacheAndRateLimit(unittest.TestCase):
+    """缓存与限流：不依赖网络（mock _analyze_github / requests）。"""
+
+    def _builder(self):
+        from pathlib import Path
+        from agentctl.lib import plugin_builder as pb
+        pb._ANALYZE_CACHE.clear()
+        return pb.PluginBuilder(Path("/tmp/ab-test-root")), pb
+
+    def test_cache_hit_same_source(self):
+        from unittest import mock
+        b, pb = self._builder()
+        calls = []
+
+        def fake_analyze(self, source):
+            calls.append(source)
+            m = pb.PluginMeta(name="demo", source_type="github", source_url=source)
+            m.skills = [pb.SkillInfo(name="s1", description="d1", source=source)]
+            return m
+
+        with mock.patch.object(pb.PluginBuilder, "_analyze_github", fake_analyze):
+            m1 = b.analyze_source("owner/repo")
+            m2 = b.analyze_source("owner/repo")
+        self.assertEqual(len(calls), 1, "同一来源应只分析一次（缓存命中）")
+        self.assertEqual(m2.name, "demo")
+        # 拷贝隔离：修改 m2 不污染缓存
+        m2.name = "changed"
+        m3 = b.analyze_source("owner/repo")
+        self.assertEqual(m3.name, "demo")
+
+    def test_cache_expires(self):
+        from unittest import mock
+        b, pb = self._builder()
+        calls = []
+
+        def fake_analyze(self, source):
+            calls.append(1)
+            return pb.PluginMeta(name="demo", source_type="github", source_url=source)
+
+        with mock.patch.object(pb.PluginBuilder, "_analyze_github", fake_analyze), \
+             mock.patch.object(pb.time, "time", side_effect=[0, pb.ANALYZE_CACHE_TTL + 1]):
+            b.analyze_source("owner/repo")
+            b.analyze_source("owner/repo")
+        self.assertEqual(len(calls), 2, "TTL 过期后应重新分析")
+
+    def test_rate_limit_raises_clear_error(self):
+        from unittest import mock
+        b, pb = self._builder()
+
+        class FakeResp:
+            status_code = 403
+            headers = {"X-RateLimit-Remaining": "0"}
+            text = "API rate limit exceeded"
+
+        # 纯函数行为：限流 403 + Remaining=0 → 抛明确错误
+        resp = FakeResp()
+        with self.assertRaises(ValueError) as ctx:
+            pb._raise_if_rate_limited(resp, "获取文件树")
+        self.assertIn("限流", str(ctx.exception))
+        self.assertIn("GITHUB_TOKEN", str(ctx.exception))
+        # 非限流 403 不抛
+        class FakeResp2:
+            status_code = 404
+            headers = {}
+        pb._raise_if_rate_limited(FakeResp2(), "x")  # 不应抛
+
+
+class TestControlCharSanitize(unittest.TestCase):
+    def test_truncate_strips_control_chars(self):
+        out = truncate_description("abc\x00def\x07g\x1fh")
+        self.assertEqual(out, "abcdefgh")
+
+    def test_truncate_keeps_newline_flattened(self):
+        self.assertEqual(truncate_description("a\nb\tc"), "a b c")

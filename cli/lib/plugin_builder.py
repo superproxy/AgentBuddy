@@ -12,6 +12,7 @@ import copy
 import io
 import json
 import re
+import time
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,10 @@ MAX_NAME_LENGTH = 64
 MAX_DESCRIPTION_LENGTH = 500
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
+# 分析结果 TTL 缓存（秒）：同一来源短时间复用，避免「分析→构建」重复消耗 GitHub API 配额
+ANALYZE_CACHE_TTL = 600
+_ANALYZE_CACHE: dict[tuple[str, bool], tuple[float, "PluginMeta"]] = {}
+
 
 def sanitize_name(raw: str) -> str:
     """清洗插件名：kebab-case、小写、截断到 MAX_NAME_LENGTH。"""
@@ -37,7 +42,9 @@ def sanitize_name(raw: str) -> str:
 
 def truncate_description(raw: str, max_len: int = MAX_DESCRIPTION_LENGTH) -> str:
     """描述截断：压平空白后截到 max_len，不在半个词中间断（尽量按词/句边界收尾）。"""
-    text = re.sub(r"\s+", " ", (raw or "").strip())
+    # 剔除控制字符（\x00-\x08 等），避免混入 JSON 响应导致前端严格解析失败
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", (raw or ""))
+    text = re.sub(r"\s+", " ", text.strip())
     if len(text) <= max_len:
         return text
     cut = text[:max_len]
@@ -117,16 +124,49 @@ class PluginBuilder:
         if not source:
             raise ValueError("来源不能为空")
 
+        # TTL 缓存：同一来源的分析结果短期复用。
+        # 背景：GitHub 匿名 API 限流 60 次/小时，UI「分析 → 构建」流程会让 build 把
+        # 刚分析过的源从头再调一遍 API（repo info + git tree + N 个 SKILL.md），
+        # 几次操作就耗光配额，之后所有分析/构建全部报错或挂起。
+        cache_key = (source, bool(ai))
+        now = time.time()
+        hit = _ANALYZE_CACHE.get(cache_key)
+        if hit and now - hit[0] < ANALYZE_CACHE_TTL:
+            # 返回浅拷贝，调用方对 meta 的修改（参数覆盖）不污染缓存
+            cached = hit[1]
+            return PluginMeta(
+                name=cached.name, version=cached.version,
+                description=cached.description, author=cached.author,
+                license=cached.license, homepage=cached.homepage,
+                repository=cached.repository,
+                skills=[SkillInfo(**vars(s)) for s in cached.skills],
+                mcp_servers=json.loads(json.dumps(cached.mcp_servers)),
+                env_vars=json.loads(json.dumps(cached.env_vars)),
+                tags=list(cached.tags),
+                source_type=cached.source_type, source_url=cached.source_url,
+            )
+
         if _is_local_path(source):
-            return self._analyze_local(source)
-        if _is_github_shorthand(source) or _is_github_url(source):
-            return self._analyze_github(source)
-        if _is_url(source):
+            meta = self._analyze_local(source)
+        elif _is_github_shorthand(source) or _is_github_url(source):
+            meta = self._analyze_github(source)
+        elif _is_url(source):
             if ai:
-                return self._analyze_url_with_ai(source)
-            # 非 AI 模式：尝试直接抓取页面内容提取信息
-            return self._analyze_url_simple(source)
-        raise ValueError(f"无法识别的来源: {source}")
+                meta = self._analyze_url_with_ai(source)
+            else:
+                # 非 AI 模式：尝试直接抓取页面内容提取信息
+                meta = self._analyze_url_simple(source)
+        else:
+            raise ValueError(f"无法识别的来源: {source}")
+
+        # 清洗 skill 描述中的控制字符（来源不可信：SKILL.md frontmatter / 网页抓取）
+        ctrl_re = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+        for s in meta.skills:
+            if s.description:
+                s.description = ctrl_re.sub("", s.description)
+
+        _ANALYZE_CACHE[cache_key] = (now, meta)
+        return meta
 
     def _analyze_local(self, path: str) -> PluginMeta:
         """分析本地目录。"""
@@ -207,11 +247,14 @@ class PluginBuilder:
             import requests
             headers = _github_headers()
             resp = requests.get(api_base, headers=headers, timeout=15)
+            _raise_if_rate_limited(resp, "获取仓库信息")
             if resp.ok:
                 data = resp.json()
                 meta.description = data.get("description", "") or ""
                 meta.license = (data.get("license") or {}).get("spdx_id", "") or ""
                 meta.homepage = data.get("homepage", "") or repo_url
+        except ValueError:
+            raise
         except Exception as e:
             warn(f"获取仓库信息失败: {e}")
 
@@ -221,11 +264,15 @@ class PluginBuilder:
             resp = requests.get(f"{api_base}/git/trees/main?recursive=1",
                                 headers=_github_headers(), timeout=15)
             if not resp.ok:
+                _raise_if_rate_limited(resp, "获取文件树")
                 resp = requests.get(f"{api_base}/git/trees/master?recursive=1",
                                     headers=_github_headers(), timeout=15)
+            _raise_if_rate_limited(resp, "获取文件树")
             if resp.ok:
                 tree = resp.json().get("tree", [])
                 meta = _extract_meta_from_tree(meta, tree, api_base, owner_repo)
+        except ValueError:
+            raise
         except Exception as e:
             warn(f"获取文件树失败: {e}")
 
@@ -544,6 +591,19 @@ def _github_headers() -> dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+def _raise_if_rate_limited(resp, where: str) -> None:
+    """GitHub 匿名限流（60 次/小时/IP）时给出明确错误，而不是静默返回空数据。
+
+    限流表现：HTTP 403 + X-RateLimit-Remaining: 0。静默吞掉会导致分析返回
+    空 skills/mcpServers、构建莫名报错，且难以定位。
+    """
+    if resp.status_code == 403 and resp.headers.get("X-RateLimit-Remaining") == "0":
+        raise ValueError(
+            f"GitHub API 限流（{where}）：匿名额度 60 次/小时已用完，"
+            f"请整点重置后重试，或设置 GITHUB_TOKEN 环境变量（5000 次/小时）"
+        )
 
 
 def _extract_meta_from_tree(
