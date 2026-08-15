@@ -260,7 +260,8 @@ def _launch_macos_app(app_path: str, cwd: str = "") -> dict:
         return {"ok": False, "pid": 0, "cmd": " ".join(cmd), "error": str(e)}
 
 
-def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = "", source: str = "") -> dict:
+def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = "", source: str = "",
+               extra_args: list[str] | None = None) -> dict:
     """启动 IDE。
 
     Args:
@@ -268,6 +269,7 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
         cwd: 工作目录（可选）
         session_id: 要恢复的会话 ID（可选，仅 CLI 支持）
         mode: 启动模式 - "cli" 仅启动 CLI，"app" 仅启动 App，"" 自动（先 CLI 后 App）
+        extra_args: 额外 CLI 参数（如 ["--remote"]），追加到命令末尾
 
     Returns:
         {ok, pid, cmd, error, ide, exe_path, app_path, mode}
@@ -293,6 +295,10 @@ def launch_ide(ide_key: str, cwd: str = "", session_id: str = "", mode: str = ""
                 parts = resume_cmd.split()
                 args = parts[1:]
                 _log(f"launch_ide({ide_key}): exe={exe_path}, args={args}")
+        # 追加额外参数（如 copilot --remote）
+        if extra_args:
+            args = args + list(extra_args)
+            _log(f"launch_ide({ide_key}): extra_args={extra_args}, final args={args}")
         if is_tui:
             result = _launch_cli_in_terminal(
                 exe_path, args, cwd,

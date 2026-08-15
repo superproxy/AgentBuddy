@@ -198,6 +198,29 @@
   .result-mark { display:grid; place-items:center; width:54px; height:54px; margin:34px 0 16px; border-radius:50%; background:var(--teal); color:#fff; font-size:22px; }
   .toast { position:fixed; right:22px; bottom:22px; z-index:30; display:none; padding:12px 15px; border-radius:5px; background:var(--ink); color:#fff; font-size:9px; box-shadow:0 10px 30px rgba(0,0,0,.2); }
   .toast.show { display:block; }
+  /* Agent management expansion */
+  .agent-tabs { display:flex; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+  .agent-tab { padding:8px 12px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); font-size:9px; cursor:pointer; }
+  .agent-tab.active { border-bottom-color:var(--teal); color:var(--ink); font-weight:800; }
+  .agent-detail-grid { display:grid; grid-template-columns:1.3fr .7fr; gap:10px; margin-bottom:10px; }
+  .agent-profile { padding:16px; border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:7px; background:#fff; }
+  .agent-profile h3 { margin:0 0 4px; font-size:13px; }
+  .agent-profile .agent-desc { margin:0 0 12px; color:var(--muted); font-size:9px; line-height:1.5; }
+  .agent-cap-list { display:grid; gap:6px; }
+  .agent-cap { display:grid; grid-template-columns:28px 1fr auto auto; align-items:center; gap:8px; padding:9px; border:1px solid #edf1ed; border-radius:5px; font-size:9px; }
+  .agent-cap .cap-icon { display:grid; place-items:center; width:26px; height:26px; border:1px solid #c8d4cb; background:var(--soft); color:var(--teal); border-radius:4px; }
+  .agent-cap b { font-size:9px; }
+  .agent-cap .cap-meta { color:var(--muted); font-size:8px; }
+  .agent-cap .cap-count { font-family:Georgia,serif; font-size:14px; color:var(--ink); }
+  .agent-side-panel { padding:14px; border:1px solid var(--line); border-radius:6px; background:#eef4ed; }
+  .agent-side-panel h3 { margin:0 0 8px; font-size:11px; }
+  .agent-side-panel .summary-line { display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid #dce8dd; color:#53635a; font-size:9px; }
+  .agent-side-panel .summary-line:first-of-type { border-top:0; }
+  .agent-side-panel .summary-line strong { color:var(--ink); font-family:Georgia,serif; font-size:15px; font-weight:500; }
+  .agent-recent { display:grid; gap:6px; }
+  .agent-recent .row { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; min-height:auto; padding:8px 0; border-top:1px solid #edf1ed; font-size:9px; }
+  .agent-recent .row:first-child { border-top:0; }
+  .agent-recent .row span { color:var(--muted); font-size:8px; }
   @media (max-width:800px) {
     .intro { align-items:start; flex-direction:column; }
     .frame { height:850px; }
@@ -227,6 +250,55 @@
 </style>
 
 <section class="page">
+<svg style="display:none">
+<symbol id="i-sync" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.7-3M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.7 3"/><path d="M21 3v6h-6M3 21v-6h6"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></symbol>
+<symbol id="i-ide" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M8 8l3 3-3 3M14 8l3 3-3 3"/></symbol>
+<symbol id="i-agent" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/><circle cx="12" cy="8" r="1.5" class="ico-fill"/></symbol>
+<symbol id="i-plugin" viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/><rect x="7" y="7" width="10" height="10" rx="1"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></symbol>
+<symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-1a7 7 0 0 1 14 0v1M15 21v-1a5 5 0 0 1 7-1"/></symbol>
+<symbol id="i-push" viewBox="0 0 24 24"><path d="M12 2v14M7 7l5-5 5 5"/><path d="M3 17v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/></symbol>
+<symbol id="i-mcp" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h0M18 9v3a3 3 0 0 1-3 3h0M12 15v0"/></symbol>
+<symbol id="i-skill" viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></symbol>
+<symbol id="i-market" viewBox="0 0 24 24"><path d="M3 7h18l-2 12H5z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></symbol>
+<symbol id="i-token" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 12h6M12 9v6"/><circle cx="12" cy="12" r="3" stroke-dasharray="2 2"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><path d="M11 11l9 9M16 16l2-2M14 18l2-2"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0 0 20 2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h3a5 5 0 0 0 0-10z"/><circle cx="7" cy="11" r="1" class="ico-fill"/><circle cx="9" cy="7" r="1" class="ico-fill"/><circle cx="14" cy="7" r="1" class="ico-fill"/><circle cx="17" cy="11" r="1" class="ico-fill"/></symbol>
+<symbol id="i-cpu" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+<symbol id="i-cmd" viewBox="0 0 24 24"><path d="M4 7l4-4 4 4M4 17l4 4 4-4M20 7l-4-4-4 4M20 17l-4 4-4-4"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+<symbol id="i-sub" viewBox="0 0 24 24"><circle cx="12" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M12 9v3M12 12l-4 4M12 12l4 4"/></symbol>
+<symbol id="i-rule" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h4"/></symbol>
+<symbol id="i-hook" viewBox="0 0 24 24"><path d="M12 3v6a4 4 0 0 1-4 4 4 4 0 0 0-4 4v4"/><circle cx="12" cy="3" r="1.5" class="ico-fill"/></symbol>
+<symbol id="i-mem" viewBox="0 0 24 24"><path d="M3 7h18v10H3z"/><path d="M7 7v10M11 7v10M15 7v10M19 7v10" stroke-dasharray="1 1"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17v.5"/></symbol>
+<symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.7-3M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.7 3"/><path d="M21 3v6h-6M3 21v-6h6"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" class="ico-fill"/><rect x="12" y="8" width="3" height="10" class="ico-fill"/><rect x="17" y="5" width="3" height="13" class="ico-fill"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+<symbol id="i-device" viewBox="0 0 24 24"><rect x="3" y="4" width="14" height="10" rx="1"/><path d="M3 14h14M8 18h4M10 14v4"/><rect x="17" y="9" width="4" height="8" rx="1"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1.5 1.5"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1.5-1.5"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" class="ico-fill"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-rocket" viewBox="0 0 24 24"><path d="M12 2c3 2 5 6 5 10l-2 3h-6l-2-3c0-4 2-8 5-10z"/><circle cx="12" cy="9" r="1.5" class="ico-fill"/><path d="M9 15l-3 3M15 15l3 3"/></symbol>
+<symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></symbol>
+<symbol id="i-terminal" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 9l3 3-3 3M13 15h4"/></symbol>
+<symbol id="i-git" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5" class="ico-fill"/><circle cx="6" cy="18" r="2.5" class="ico-fill"/><circle cx="18" cy="12" r="2.5" class="ico-fill"/><path d="M6 8.5v7M8 6h4a4 4 0 0 1 4 4"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+<symbol id="i-package" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 21s-7-4.5-9.5-9C1 9 2.5 5 6.5 5c2 0 3.5 1 5.5 3 2-2 3.5-3 5.5-3 4 0 5.5 4 4 7-2.5 4.5-9.5 9-9.5 9z"/></symbol>
+</svg>
   <header class="intro">
     <div><div class="eyebrow">Direction A · IDE delivery first</div><h1>同步到 IDE 是主干，市场退到资源发现层</h1><p>工作台优先解决“配置是否正确交付到各 IDE”。IDE 管理承载安装、会话、Remote、ACP 和 Token 用量；我的区域补足账号安全与额度；市场只作为 MCP、Skill、插件和模型 Token 的发现入口。</p></div>
     <div class="decision"><b>商业原则</b><br>不区隔核心能力版本，只对推荐次数、发布数量、团队成员/空间和自动推送规则数量设置额度；支持捐赠，不制造功能焦虑。</div>
@@ -237,27 +309,27 @@
     <div class="shell">
       <aside class="side">
         <div class="side-label">本地管理</div>
-        <button class="nav primary-nav" data-view="sync" onclick="showView('sync',this)"><span>同步到 IDE</span><small>核心</small></button>
-        <button class="nav active" data-view="overview" onclick="showView('overview',this)"><span>环境总览</span><small>⌂</small></button>
-        <button class="nav" data-view="ides" onclick="showView('ides',this)"><span>IDE 管理</span><small>12</small></button>
-        <button class="nav" data-view="agents" onclick="showView('agents',this)"><span>Agent 管理</span><small>8</small></button>
-        <button class="nav" data-view="plugins" onclick="showView('plugins',this)"><span>插件管理</span><small>18</small></button>
+        <button class="nav primary-nav" data-view="sync" onclick="showView('sync',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.7-3M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.7 3"/><path d="M21 3v6h-6M3 21v-6h6"/></svg><span>同步到 IDE</span><small>核心</small></button>
+        <button class="nav active" data-view="overview" onclick="showView('overview',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg><span>环境总览</span><small>⌂</small></button>
+        <button class="nav" data-view="ides" onclick="showView('ides',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>IDE 管理</span><small>12</small></button>
+        <button class="nav" data-view="agents" onclick="showView('agents',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg><span>Agent 管理</span><small>8</small></button>
+        <button class="nav" data-view="plugins" onclick="showView('plugins',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg><span>插件管理</span><small>18</small></button>
         <div class="side-label">协作</div>
-        <button class="nav" data-view="mine" onclick="showView('mine',this)"><span>我的</span><small>●</small></button>
-        <button class="nav" data-view="team" onclick="showView('team',this)"><span>团队空间</span><small>2</small></button>
-        <button class="nav" data-view="push" onclick="showView('push',this)"><span>自动推送</span><small>3</small></button>
+        <button class="nav" data-view="mine" onclick="showView('mine',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0 1 16 0v1"/></svg><span>我的</span><small>●</small></button>
+        <button class="nav" data-view="team" onclick="showView('team',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 21v-1a7 7 0 0 1 14 0v1M15 21v-1a5 5 0 0 1 7-1"/></svg><span>团队空间</span><small>2</small></button>
+        <button class="nav" data-view="push" onclick="showView('push',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v14M7 7l5-5 5 5"/><path d="M3 17v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/></svg><span>自动推送</span><small>3</small></button>
         <div class="side-label">资源市场</div>
-        <button class="nav" data-view="mcp-market" onclick="showView('mcp-market',this)"><span>MCP 市场</span><small>24</small></button>
-        <button class="nav" data-view="skill-market" onclick="showView('skill-market',this)"><span>Skill 市场</span><small>68</small></button>
-        <button class="nav" data-view="plugin-market" onclick="showView('plugin-market',this)"><span>插件市场</span><small>126</small></button>
-        <button class="nav" data-view="llm-market" onclick="showView('llm-market',this)"><span>模型 Token 市场</span><small>8</small></button>
+        <button class="nav" data-view="mcp-market" onclick="showView('mcp-market',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3M18 9v3a3 3 0 0 1-3 3"/></svg><span>MCP 市场</span><small>24</small></button>
+        <button class="nav" data-view="skill-market" onclick="showView('skill-market',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg><span>Skill 市场</span><small>68</small></button>
+        <button class="nav" data-view="plugin-market" onclick="showView('plugin-market',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18l-2 12H5z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg><span>插件市场</span><small>126</small></button>
+        <button class="nav" data-view="llm-market" onclick="showView('llm-market',this)"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12h6M12 9v6"/></svg><span>模型 Token 市场</span><small>8</small></button>
       </aside>
 
       <main class="main">
         <section class="view active" id="view-overview">
           <div class="head"><div><h2>环境与交付总览</h2><p class="sub">先发现配置差异，再直接修复或同步。</p></div><button class="secondary">刷新状态</button></div>
           <div class="theme-strip"><div><b>主题与背景规范</b><span>主题可作为团队配置：色板、背景、密度、卡片风格和状态色都可定制，并随团队空间同步。</span></div><div class="theme-actions"><button class="theme-dot active" onclick="setTheme('aurora',this)">Aurora</button><button class="theme-dot" onclick="setTheme('cyber',this)">Cyber</button><button class="theme-dot" onclick="setTheme('graphite',this)">Graphite</button></div></div>
-          <div class="metrics"><div class="metric"><small>已连接 IDE</small><strong>12</strong><span>9 桌面端 · 3 CLI</span></div><div class="metric"><small>安全 Token</small><strong>8</strong><span>全部保存在本机</span></div><div class="metric"><small>本地插件</small><strong>18</strong><span>3 个有新版本</span></div><div class="metric"><small>同步成功率</small><strong>98.7%</strong><span>近 30 天 462 次</span></div></div>
+          <div class="metrics"><div class="metric"><svg class="metric-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><small>已连接 IDE</small><strong>12</strong><span>9 桌面端 · 3 CLI</span></div><div class="metric"><svg class="metric-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg><small>安全 Token</small><strong>8</strong><span>全部保存在本机</span></div><div class="metric"><svg class="metric-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/></svg><small>本地插件</small><strong>18</strong><span>3 个有新版本</span></div><div class="metric"><svg class="metric-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><small>同步成功率</small><strong>98.7%</strong><span>近 30 天 462 次</span></div></div>
           <div class="grid"><section class="panel"><div class="panel-head"><h3>目标 IDE 健康度</h3><button class="secondary" onclick="showView('sync')">同步选中项</button></div><div class="row"><b>Codex</b><span>LLM · MCP · Plugin</span><i class="tag">已同步</i></div><div class="row"><b>Claude Code</b><span>LLM · Skills · Rules</span><i class="tag">已同步</i></div><div class="row"><b>Cursor</b><span>Plugin v1.3 → v1.4</span><i class="tag wait">待更新</i></div><div class="row"><b>JetBrains ACP</b><span>2 agent servers</span><i class="tag">已注册</i></div></section><aside class="panel"><div class="panel-head"><h3>本月用量</h3><button class="secondary" onclick="showView('mine')">查看我的</button></div><div class="usage"><b>Token 推荐 <span>6 / 10 次</span></b><div class="bar"><i style="width:60%"></i></div></div><div class="usage"><b>市场发布 <span>2 / 5 个</span></b><div class="bar"><i style="width:40%"></i></div></div><div class="usage"><b>自动推送 <span>3 / 3 条规则</span></b><div class="bar"><i style="width:100%;background:#d45b3c"></i></div></div><div class="quiet-support">达到额度时可单项扩容，也可通过捐赠支持项目持续维护。</div></aside></div>
         </section>
 
@@ -266,10 +338,10 @@
           <div class="ide-command"><section class="ide-hero"><div class="head-kicker">Selected IDE · Codex CLI</div><h3>当前选中：Codex</h3><p>路径 <code>/opt/homebrew/bin/codex</code> · 支持 CLI 会话恢复 · 已启用 Responses API · 最近同步 2 分钟前。</p><div class="ide-toolbar"><button class="primary">打开</button><button class="secondary">同步</button><button class="secondary">会话 18</button><button class="secondary">配置</button><button class="secondary">重装</button><button class="secondary">卸载</button></div></section><aside class="ide-dock-preview"><div class="dock-chip"><div><b>同步 Dock</b><span>打开、同步、配置、安装、卸载按选中 IDE 动态变化</span></div><i class="tag">核心</i></div><div class="dock-chip"><div><b>Remote Web</b><span>启动服务、查看密码、复制链接、重置密码</span></div><i class="tag">安全</i></div><div class="dock-chip"><div><b>ACP / JetBrains</b><span>启动 ACP、同步到 JetBrains、打开 IDEA</span></div><i class="tag wait">专属</i></div></aside></div>
           <div class="brand-filter"><button class="active">全部 AIDE</button><button>Claude</button><button>Codex</button><button>Cursor</button><button>JetBrains</button><button>OpenCode</button><button>更多 11</button></div>
           <div class="ide-list">
-            <article class="ide-row"><div class="ide-mark">CX</div><div><b>Codex CLI</b><span>已安装 · CLI · 18 个会话</span></div><div class="ide-meta"><b>GPT-5 Codex</b><span>Responses API · config.toml</span></div><div class="ide-usage"><strong>1.28M</strong><span>本月 Token · 64%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Codex','1.28M','64%')">用量</button><button class="secondary" onclick="openShare('Codex')">会话</button><button class="secondary">同步</button></div></article>
-            <article class="ide-row"><div class="ide-mark">CL</div><div><b>Claude Code</b><span>已安装 · CLI · 12 个会话</span></div><div class="ide-meta"><b>Claude Sonnet</b><span>Anthropic API · settings.json</span></div><div class="ide-usage"><strong>864K</strong><span>本月 Token · 43%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Claude Code','864K','43%')">用量</button><button class="secondary" onclick="openShare('Claude Code')">会话</button><button class="secondary">配置</button></div></article>
-            <article class="ide-row"><div class="ide-mark">JB</div><div><b>JetBrains ACP</b><span>已注册 · ACP · 2 agent servers</span></div><div class="ide-meta"><b>Copilot / Cline</b><span>~/.jetbrains/acp.json</span></div><div class="ide-usage"><strong>312K</strong><span>本月 Token · 15%</span></div><div class="ide-actions"><button class="secondary">启动 ACP</button><button class="secondary">同步到 JB</button></div></article>
-            <article class="ide-row"><div class="ide-mark">RW</div><div><b>OpenCode Remote Web</b><span>本地服务 · 密码保护</span></div><div class="ide-meta"><b>DeepSeek V3</b><span>复制免登录链接 · 可重置</span></div><div class="ide-usage"><strong>206K</strong><span>本月 Token · 10%</span></div><div class="ide-actions"><button class="secondary">启动</button><button class="secondary">复制链接</button><button class="secondary">重置</button></div></article>
+            <article class="ide-row"><div class="ide-mark"><svg class="ide-brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M8 8l3 3-3 3M14 8l3 3-3 3"/></svg></div><div><b>Codex CLI</b><span>已安装 · CLI · 18 个会话</span></div><div class="ide-meta"><b>GPT-5 Codex</b><span>Responses API · config.toml</span></div><div class="ide-usage"><strong>1.28M</strong><span>本月 Token · 64%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Codex','1.28M','64%')">用量</button><button class="secondary" onclick="openShare('Codex')">会话</button><button class="secondary">同步</button></div></article>
+            <article class="ide-row"><div class="ide-mark"><svg class="ide-brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div><div><b>Claude Code</b><span>已安装 · CLI · 12 个会话</span></div><div class="ide-meta"><b>Claude Sonnet</b><span>Anthropic API · settings.json</span></div><div class="ide-usage"><strong>864K</strong><span>本月 Token · 43%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Claude Code','864K','43%')">用量</button><button class="secondary" onclick="openShare('Claude Code')">会话</button><button class="secondary">配置</button></div></article>
+            <article class="ide-row"><div class="ide-mark"><svg class="ide-brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 12l10 10 10-10z"/><path d="M8 12l4 4 4-4"/></svg></div><div><b>JetBrains ACP</b><span>已注册 · ACP · 2 agent servers</span></div><div class="ide-meta"><b>Copilot / Cline</b><span>~/.jetbrains/acp.json</span></div><div class="ide-usage"><strong>312K</strong><span>本月 Token · 15%</span></div><div class="ide-actions"><button class="secondary">启动 ACP</button><button class="secondary">同步到 JB</button></div></article>
+            <article class="ide-row"><div class="ide-mark"><svg class="ide-brand-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div><div><b>OpenCode Remote Web</b><span>本地服务 · 密码保护</span></div><div class="ide-meta"><b>DeepSeek V3</b><span>复制免登录链接 · 可重置</span></div><div class="ide-usage"><strong>206K</strong><span>本月 Token · 10%</span></div><div class="ide-actions"><button class="secondary">启动</button><button class="secondary">复制链接</button><button class="secondary">重置</button></div></article>
           </div>
           <div class="quiet-support">Token 数据优先从 IDE 或 Provider 的可用接口读取；不支持查询的 IDE 显示本地估算，并明确标注数据来源。</div>
         </section>
@@ -339,14 +411,14 @@
         <section class="view" id="view-agents">
           <div class="head"><div><h2>Agent 原子能力</h2><p class="sub">每类能力独立创建、编辑、启停与同步；构建插件时只引用，不吞并其管理入口。</p></div><button class="primary">创建能力</button></div>
           <div class="atom-grid">
-            <article class="atom"><div class="atom-head"><span class="atom-icon">LLM</span><span class="atom-count">6</span></div><b>LLM 配置</b><p>Provider、协议、模型、路由与网关。</p><div class="atom-foot"><span>5 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">MCP</span><span class="atom-count">14</span></div><b>MCP 配置</b><p>工具服务、启动参数与环境变量。</p><div class="atom-foot"><span>11 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">SK</span><span class="atom-count">32</span></div><b>Skills 管理</b><p>搜索、安装、升级与启用技能。</p><div class="atom-foot"><span>28 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">/</span><span class="atom-count">9</span></div><b>Commands</b><p>可复用的斜杠命令与参数模板。</p><div class="atom-foot"><span>9 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">SA</span><span class="atom-count">7</span></div><b>Subagents</b><p>专业角色、系统提示与工具权限。</p><div class="atom-foot"><span>6 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">RU</span><span class="atom-count">18</span></div><b>Rules</b><p>项目约束、适用范围与执行规范。</p><div class="atom-foot"><span>16 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">HK</span><span class="atom-count">12</span></div><b>Hooks</b><p>会话与工具事件触发的自动动作。</p><div class="atom-foot"><span>8 个已启用</span><span>管理 →</span></div></article>
-            <article class="atom"><div class="atom-head"><span class="atom-icon">ME</span><span class="atom-count">2</span></div><b>Memory</b><p>用户记忆与技能记忆的持久上下文。</p><div class="atom-foot"><span>2 条已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></span><span class="atom-count">6</span></div><b>LLM 配置</b><p>Provider、协议、模型、路由与网关。</p><div class="atom-foot"><span>5 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3M18 9v3a3 3 0 0 1-3 3"/></svg></span><span class="atom-count">14</span></div><b>MCP 配置</b><p>工具服务、启动参数与环境变量。</p><div class="atom-foot"><span>11 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg></span><span class="atom-count">32</span></div><b>Skills 管理</b><p>搜索、安装、升级与启用技能。</p><div class="atom-foot"><span>28 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7l4-4 4 4M4 17l4 4 4-4M20 7l-4-4-4 4M20 17l-4 4-4-4"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg></span><span class="atom-count">9</span></div><b>Commands</b><p>可复用的斜杠命令与参数模板。</p><div class="atom-foot"><span>9 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M12 9v3M12 12l-4 4M12 12l4 4"/></svg></span><span class="atom-count">7</span></div><b>Subagents</b><p>专业角色、系统提示与工具权限。</p><div class="atom-foot"><span>6 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h4"/></svg></span><span class="atom-count">18</span></div><b>Rules</b><p>项目约束、适用范围与执行规范。</p><div class="atom-foot"><span>16 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v6a4 4 0 0 1-4 4 4 4 0 0 0-4 4v4"/><circle cx="12" cy="3" r="1.5" fill="currentColor"/></svg></span><span class="atom-count">12</span></div><b>Hooks</b><p>会话与工具事件触发的自动动作。</p><div class="atom-foot"><span>8 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon"><svg class="atom-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v10H3z"/><path d="M7 7v10M11 7v10M15 7v10M19 7v10" stroke-dasharray="1 1"/></svg></span><span class="atom-count">2</span></div><b>Memory</b><p>用户记忆与技能记忆的持久上下文。</p><div class="atom-foot"><span>2 条已启用</span><span>管理 →</span></div></article>
           </div>
           <div class="quiet-support"><b>密钥独立管理：</b>Keys 为 LLM、MCP 等能力提供安全引用，不作为 Agent 能力打包内容默认外泄。每个能力页都保留“同步到 IDE”，全局同步则批量选择多个能力域。</div>
         </section>

@@ -191,7 +191,7 @@ python -m pytest -q
 | QoderCN | `qoderclicn -r <id>` | help.aliyun.com/zh/lingma/qodercli-cn |
 | WorkBuddy | `codebuddy --resume <id>` | codebuddy.ai/docs/cli/slash-commands |
 | TraeCN | `traecli --resume <id>` | docs.trae.cn/cli |
-| Copilot | `copilot resume <id>` | docs.github.com/en/copilot/cli（CLI 预览版） |
+| Copilot | `copilot --resume <id>` | docs.github.com/en/copilot/cli（CLI 预览版，`--resume[=VALUE]`） |
 | Cline | `cline resume <session-id>` | docs.cline.bot/usage/cli-overview |
 | DeepSeek | `dsh resume <session-id>` | deepseek-harness.github.io/deepseek-harness/guide/cli |
 
@@ -203,6 +203,21 @@ python -m pytest -q
 | ZCode | 桌面 IDE，非 TUI CLI（会话管理通过 UI 进行） |
 | Copilot (ACP) | ACP 模式作为 agent server，会话由 JetBrains/Zed 客户端管理，CLI 不直接支持 resume |
 | Cline (ACP) | ACP 模式作为 agent server，会话由 JetBrains/Zed 客户端管理 |
+
+### Copilot 远程控制（Remote Control）
+
+> 来源：docs.github.com/zh/copilot/how-tos/copilot-cli/steer-remotely
+
+Copilot CLI 支持远程控制——从 GitHub.com 或 GitHub Mobile 操控本地 CLI 会话。
+
+| 命令 | 说明 |
+|------|------|
+| `copilot --remote` | 启动时启用远程控制 |
+| `copilot --no-remote` | 启动时禁用远程控制 |
+| `copilot --resume <id> --remote` | 恢复会话并重新启用远程控制 |
+| `/remote on` / `/remote off` | 会话内切换远程控制开关 |
+
+AgentBuddy 在 Copilot 卡片提供「远程控制」按钮，一键启动 `copilot --remote`。
 
 ## Git 部署约定
 

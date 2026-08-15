@@ -823,6 +823,10 @@ watch(
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               {{ ideLaunching === currentSelectedIde.key ? '...' : '打开' }}
             </button>
+            <button v-if="currentSelectedIde.key === 'Copilot'" @click="launchIde(currentSelectedIde.key, null, 'cli', cliCwd, ['--remote'])" :disabled="ideLaunching === currentSelectedIde.key || !!ideResuming" class="dock-item" type="button" title="启动 Copilot 并启用远程控制（从 GitHub.com / GitHub Mobile 操控会话）">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {{ ideLaunching === currentSelectedIde.key ? '...' : '远程控制' }}
+            </button>
             <button @click="syncIdeConfig(currentSelectedIde.key)" :disabled="ideSyncing === currentSelectedIde.key" class="dock-item" type="button">
               <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               {{ ideSyncing === currentSelectedIde.key ? '...' : '同步' }}

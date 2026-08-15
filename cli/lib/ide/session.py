@@ -826,6 +826,7 @@ IDE_RESUME_COMMANDS = {
     "WorkBuddy": "{exe} --resume {session_id}",               # codebuddy --resume <id>  (codebuddy.ai/docs)
     "CodeBuddy": "{exe} --resume {session_id}",               # codebuddy --resume <id>  (codebuddy.cn/docs/cli/headless)
     "TraeCN": "{exe} --resume {session_id}",                  # traecli --resume <id> (docs.trae.cn)
+    "Copilot": "{exe} --resume {session_id}",                  # copilot --resume <id>  (docs.github.com/en/copilot/cli)
 }
 
 

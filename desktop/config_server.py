@@ -4871,16 +4871,23 @@ def api_ide_launch():
     session_id = (body.get("session_id") or "").strip()
     mode = (body.get("mode") or "").strip()
     source = (body.get("source") or "").strip()
+    extra_args = body.get("extra_args") or None
+    if isinstance(extra_args, list):
+        extra_args = [str(a) for a in extra_args if str(a).strip()]
+        if not extra_args:
+            extra_args = None
+    else:
+        extra_args = None
     print(
         f"[ide-launch] request ide={ide_key!r} session_id={session_id!r} "
-        f"cwd={cwd!r} mode={mode!r} source={source!r}",
+        f"cwd={cwd!r} mode={mode!r} source={source!r} extra_args={extra_args!r}",
         flush=True,
     )
     try:
         if session_id:
             result = launch_ide_resume_session(ide_key, session_id, cwd, mode=mode, source=source)
         else:
-            result = launch_ide(ide_key, cwd, mode=mode, source=source)
+            result = launch_ide(ide_key, cwd, mode=mode, source=source, extra_args=extra_args)
         print(f"[ide-launch] result={result!r}", flush=True)
         return jsonify(result)
     except Exception as e:

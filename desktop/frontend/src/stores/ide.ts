@@ -410,17 +410,18 @@ export const useIdeStore = defineStore('ide', () => {
     sessionDrawerOpen.value = false
   }
 
-  async function launchIde(ideKey: string, session: IdeSession | null = null, mode?: string, cwd?: string) {
+  async function launchIde(ideKey: string, session: IdeSession | null = null, mode?: string, cwd?: string, extraArgs?: string[]) {
     const key = session ? `${ideKey}:${session.id}` : ideKey
     if (ideLaunching.value || ideResuming.value) return
     if (session) ideResuming.value = key
     else ideLaunching.value = ideKey
     try {
-      const body: Record<string, string> = session
+      const body: Record<string, any> = session
         ? { ide: ideKey, session_id: session.id, cwd: session.cwd || '' }
         : { ide: ideKey }
       if (cwd) body.cwd = cwd
       if (mode) body.mode = mode
+      if (extraArgs && extraArgs.length) body.extra_args = extraArgs
       const r = await api<{ ok: boolean; mode?: string; pid?: number; error?: string }>(
         '/api/ide/launch',
         {
