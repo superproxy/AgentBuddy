@@ -243,24 +243,7 @@ def _validate_default_llm_selection(env_config, targets):
     target_names = {getattr(target, "name", "") for target in targets}
     if not target_names.intersection({"Codex", "Claude"}):
         return None
-
-    llm_config = env_config.get("llm", {}) if isinstance(env_config, dict) else {}
-    gateway = env_config.get("proxy", {}).get("gateway", {}) if isinstance(env_config, dict) else {}
-    gateway_enabled = bool(gateway.get("enabled")) if isinstance(gateway, dict) else False
-    active_provider = llm_config.get("_active_provider", "") if isinstance(llm_config, dict) else ""
-    active_model = llm_config.get("_active_model", "") if isinstance(llm_config, dict) else ""
-    active_provider = active_provider.strip() if isinstance(active_provider, str) else ""
-    active_model = active_model.strip() if isinstance(active_model, str) else ""
-
-    if gateway_enabled == bool(active_provider):
-        return "同步 Codex/Claude 前必须选择且只能选择一个默认 LLM Provider 或 LLM 网关"
-    if active_provider:
-        provider_config = llm_config.get(active_provider)
-        if not isinstance(provider_config, dict) or provider_config.get("_enabled") is False:
-            return f"默认 LLM Provider '{active_provider}' 不存在或未启用，请重新选择"
-    if not active_model:
-        return "同步 Codex/Claude 前必须选择默认模型"
-    return None
+    return llm.validate_default_llm(env_config)
 
 
 def cmd_sync(args):

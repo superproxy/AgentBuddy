@@ -94,11 +94,42 @@ export const useEnvStore = defineStore('env', () => {
   function isProviderEnabled(pn: string): boolean {
     return enabledProviderNames.value.includes(pn)
   }
-  /** 切换 provider 启用状态（写入 _enabled 字段） */
+  /** 切换 provider 启用状态（写入 _enabled 字段）。
+   *  禁用"当前默认 Provider"时自动切换默认源（对齐 deleteProvider 行为），
+   *  避免出现"默认 Provider 已禁用"的坏状态——该状态会导致 sync/装插件持续报错。 */
   function toggleProviderEnabled(pn: string) {
     const provider = envData.llm?.[pn]
     if (!provider || typeof provider !== 'object') return
-      ;(provider as any)._enabled = !isProviderEnabled(pn)
+    const enabling = !isProviderEnabled(pn)
+    if (!enabling && envData.llm?._active_provider === pn && !proxyEnabled.value) {
+      // 找替代：其他已启用且有模型的 Provider
+      const alt = enabledProviderNames.value.find(n => n !== pn && providerFirstModel(n))
+      if (!alt) {
+        ui.toast('这是唯一的默认 LLM 源：请先启用网关或将其他 Provider 设为默认，再禁用它', 'warn')
+        return
+      }
+      envData.llm._active_provider = alt
+      envData.llm._active_model = providerFirstModel(alt) || ''
+      ;(provider as any)._enabled = false
+      ui.toast(`已禁用 ${pn}，默认 LLM 源切换为 ${alt}`)
+      return
+    }
+    ;(provider as any)._enabled = enabling
+  }
+
+  /** 取 provider 的第一个模型 id（跨协议），无模型返回 '' */
+  function providerFirstModel(pn: string): string {
+    const p = envData.llm?.[pn]
+    if (!p || typeof p !== 'object') return ''
+    for (const proto of Object.keys(p)) {
+      if (proto.startsWith('_')) continue
+      const cfg = (p as any)[proto]
+      if (cfg?.models && typeof cfg.models === 'object') {
+        const first = Object.keys(cfg.models)[0]
+        if (first) return first
+      }
+    }
+    return ''
   }
   const proxyEnabled = computed(() => !!(envData.proxy?.gateway?.enabled))
   const envVars = ref<string[]>([])

@@ -1070,6 +1070,19 @@ def save_llm():
         # 确保旧格式配置保存一次后过滤即可生效
         from agentctl.lib.llm import normalize_provider_enabled
         normalize_provider_enabled(data.get("llm"))
+        # 落盘前拦截"默认 Provider 指向已禁用/不存在的 Provider"这一类坏状态：
+        # 该状态一旦落盘，后续所有 sync（含装插件自动 sync）都会持续报错。
+        # 注意：只拦这一类（配置中途的"未选默认源/未选模型"允许保存，由 sync 时校验）。
+        llm_section = data.get("llm") if isinstance(data.get("llm"), dict) else {}
+        active_provider = llm_section.get("_active_provider", "")
+        if isinstance(active_provider, str) and active_provider.strip():
+            provider_cfg = llm_section.get(active_provider.strip())
+            if not isinstance(provider_cfg, dict) or provider_cfg.get("_enabled") is False:
+                return jsonify({
+                    "ok": False,
+                    "error": (f"默认 LLM Provider '{active_provider.strip()}' 已禁用或不存在，"
+                              f"请先在 LLM 页切换默认 Provider 或重新启用它"),
+                }), 400
         # 保存后必须 generate + sync，不能依赖前端再发第二个请求。
         save_env_config_file(path, data)
         _sync_llm_to_all_ides()
