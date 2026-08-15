@@ -25,7 +25,9 @@ const {
   selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
   availableSubagents, availableRules, availableCommands,
   ideImport, ideImportStats, importedIdeMcp, wizardStep, buildMode, mcpFilterText, importing,
+  urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills, urlNameValid,
 } = storeToRefs(pb)
+const { URL_NAME_MAX, URL_DESC_MAX } = pb
 const { mcpTemplate } = storeToRefs(mcp)
 const { skillCategories, filteredLocalSkills, skillFilter } = storeToRefs(skill)
 const { plugins, selectedPluginFile } = storeToRefs(plugin)
@@ -36,6 +38,7 @@ const {
   llmKey, wizardNext, wizardPrev, wizardGoto, newPlugin, loadBuildSources,
   importFromIde, applyImportedMcp, applyImportedSkills, applyImportedLlm,
   loadExistingPlugin, previewPlugin, savePluginFile, installPluginFile,
+  analyzeSource, toggleUrlSkill, buildFromSource,
 } = pb
 const { loadLocalSkills } = skill
 const { refreshPluginList } = plugin
@@ -442,6 +445,15 @@ onMounted(() => {
           @click="buildMode = 'ai'"
         >
           AI 生成
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ on: buildMode === 'url' }"
+          :aria-selected="buildMode === 'url'"
+          @click="buildMode = 'url'"
+        >
+          🔗 一键构建
         </button>
       </div>
       <div class="pb-chips" aria-live="polite">
@@ -1184,6 +1196,170 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- 一键构建（URL 模式） -->
+    <div v-show="buildMode === 'url'" class="pb-url">
+      <div class="pb-url-hero">
+        <div class="pb-ai-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/></svg>
+        </div>
+        <div>
+          <h3>从来源一键构建插件</h3>
+          <p>输入 GitHub 仓库（owner/repo）、文章 URL 或本地目录路径，自动分析并打包为插件 zip。</p>
+        </div>
+      </div>
+
+      <div class="pb-url-form">
+        <label class="pb-ai-label">来源地址</label>
+        <div class="pb-url-input-row">
+          <input
+            v-model="urlSource"
+            type="text"
+            class="pb-url-input"
+            placeholder="QwenLM/Qwen-MM-Plugins  或  https://github.com/owner/repo  或  ./my-plugin/"
+            @keyup.enter="analyzeSource()"
+          />
+          <button
+            type="button"
+            class="pb-btn pb-btn-primary"
+            :disabled="urlAnalyzing"
+            @click="analyzeSource()"
+          >
+            {{ urlAnalyzing ? '分析中...' : '分析' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 分析结果 -->
+      <div v-if="urlMeta" class="pb-url-result">
+        <div class="pb-url-section">
+          <div class="pb-url-label-row">
+            <label class="pb-ai-label">插件名</label>
+            <span
+              class="pb-url-count"
+              :class="{ near: (urlMeta.name || '').length > URL_NAME_MAX * 0.8, over: (urlMeta.name || '').length > URL_NAME_MAX }"
+            >{{ (urlMeta.name || '').length }}/{{ URL_NAME_MAX }}</span>
+          </div>
+          <input
+            v-model="urlMeta.name"
+            type="text"
+            class="pb-url-input"
+            :maxlength="URL_NAME_MAX"
+            placeholder="kebab-case，如 my-plugin"
+          />
+          <small v-if="!urlNameValid" class="pb-url-field-err">
+            名称只允许小写字母、数字和连字符，且以字母或数字开头（如 my-plugin）
+          </small>
+        </div>
+        <div class="pb-url-row2">
+          <div class="pb-url-section">
+            <label class="pb-ai-label">版本</label>
+            <input v-model="urlMeta.version" type="text" class="pb-url-input" placeholder="1.0.0" />
+          </div>
+          <div class="pb-url-section" style="flex:1">
+            <label class="pb-ai-label">作者</label>
+            <input v-model="urlMeta.author" type="text" class="pb-url-input" />
+          </div>
+        </div>
+        <div class="pb-url-section">
+          <div class="pb-url-label-row">
+            <label class="pb-ai-label">描述</label>
+            <span
+              class="pb-url-count"
+              :class="{ near: (urlMeta.description || '').length > URL_DESC_MAX * 0.8, over: (urlMeta.description || '').length > URL_DESC_MAX }"
+            >{{ (urlMeta.description || '').length }}/{{ URL_DESC_MAX }}</span>
+          </div>
+          <textarea
+            v-model="urlMeta.description"
+            class="pb-url-textarea"
+            rows="3"
+            :maxlength="URL_DESC_MAX"
+            placeholder="插件功能描述（展示在市场列表中）"
+          ></textarea>
+        </div>
+
+        <!-- Skills 列表 -->
+        <div v-if="urlMeta.skills?.length" class="pb-url-section">
+          <label class="pb-ai-label">Skills（勾选要打包的技能）</label>
+          <div class="pb-url-skills">
+            <label
+              v-for="s in urlMeta.skills"
+              :key="s.name"
+              class="pb-url-skill-item"
+              :class="{ on: urlSelectedSkills.includes(s.name) }"
+            >
+              <input
+                type="checkbox"
+                :checked="urlSelectedSkills.includes(s.name)"
+                @change="toggleUrlSkill(s.name)"
+              />
+              <span class="pb-url-skill-name">{{ s.name }}</span>
+              <span v-if="s.description" class="pb-url-skill-desc">{{ s.description }}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- MCP Servers -->
+        <div v-if="urlMeta.mcpServers && Object.keys(urlMeta.mcpServers).length" class="pb-url-section">
+          <label class="pb-ai-label">MCP Servers（{{ Object.keys(urlMeta.mcpServers).length }} 个）</label>
+          <div class="pb-url-mcp-list">
+            <div v-for="(cfg, name) in urlMeta.mcpServers" :key="name" class="pb-url-mcp-item">
+              <span class="pb-url-mcp-name">{{ name }}</span>
+              <span class="pb-url-mcp-cmd">{{ cfg.command }} {{ (cfg.args || []).join(' ') }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 环境变量 -->
+        <div v-if="urlMeta.envVars && Object.keys(urlMeta.envVars).length" class="pb-url-section">
+          <label class="pb-ai-label">环境变量（{{ Object.keys(urlMeta.envVars).length }} 个）</label>
+          <div class="pb-url-env-list">
+            <div v-for="(spec, key) in urlMeta.envVars" :key="key" class="pb-url-env-item">
+              <code>{{ key }}</code>
+              <span class="pb-url-env-desc">{{ spec.description }}</span>
+              <span v-if="spec.required" class="pb-url-env-req">必填</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 打包模式 -->
+        <div class="pb-url-section">
+          <label class="pb-ai-label">打包模式</label>
+          <div class="pb-url-modes">
+            <label class="pb-url-mode" :class="{ on: urlPackMode === 'inline' }">
+              <input type="radio" value="inline" v-model="urlPackMode" />
+              <span>内联模式</span>
+              <small>MCP + envVars 内联在 plugin.yaml，一个文件搞定</small>
+            </label>
+            <label class="pb-url-mode" :class="{ on: urlPackMode === 'split' }">
+              <input type="radio" value="split" v-model="urlPackMode" />
+              <span>拆分模式</span>
+              <small>plugin.yaml + mcp.yaml + keys.yaml 独立文件</small>
+            </label>
+          </div>
+        </div>
+
+        <!-- 操作按钮 -->
+        <div class="pb-url-actions">
+          <button
+            type="button"
+            class="pb-btn pb-btn-primary"
+            :disabled="urlBuilding || !urlNameValid"
+            @click="buildFromSource(false)"
+          >
+            {{ urlBuilding ? '构建中...' : '构建 ZIP' }}
+          </button>
+          <button
+            type="button"
+            class="pb-btn pb-btn-success"
+            :disabled="urlBuilding || !urlNameValid"
+            @click="buildFromSource(true)"
+          >
+            {{ urlBuilding ? '构建中...' : '构建并发布' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1686,4 +1862,48 @@ onMounted(() => {
 @media (prefers-reduced-motion: reduce) {
   .pb-item, .pb-complete .bar i { transition: none !important; }
 }
+
+/* ── 一键构建（URL 模式） ── */
+.pb-url { max-width: 820px; display: flex; flex-direction: column; gap: 20px; }
+.pb-url-hero { display: flex; gap: 16px; align-items: flex-start; padding: 20px; border-radius: 12px; background: linear-gradient(135deg, rgba(99,102,241,.06), rgba(99,102,241,.02)); border: 1px solid var(--border-base); }
+.pb-url-hero h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+.pb-url-hero p { margin: 0; font-size: 13px; color: var(--color-ink-500); line-height: 1.5; }
+.pb-url-form { display: flex; flex-direction: column; gap: 8px; }
+.pb-url-input-row { display: flex; gap: 8px; }
+.pb-url-input { flex: 1; padding: 8px 12px; font-size: 14px; border: 1px solid var(--border-base); border-radius: 8px; background: var(--bg-base, #fff); color: var(--color-ink-900); outline: none; }
+.pb-url-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,.12); }
+.pb-url-textarea { width: 100%; padding: 8px 12px; font-size: 13px; border: 1px solid var(--border-base); border-radius: 8px; resize: vertical; font-family: inherit; }
+.pb-url-result { display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 12px; border: 1px solid var(--border-base); }
+.pb-url-section { display: flex; flex-direction: column; gap: 6px; }
+.pb-url-label-row { display: flex; justify-content: space-between; align-items: baseline; }
+.pb-url-count { font-size: 11px; color: var(--color-ink-500); font-variant-numeric: tabular-nums; }
+.pb-url-count.near { color: var(--color-ink-600, #b45309); }
+.pb-url-count.over { color: #ef4444; font-weight: 600; }
+.pb-url-field-err { font-size: 11.5px; color: #ef4444; line-height: 1.4; }
+.pb-url-input.invalid, .pb-url-textarea.invalid { border-color: #ef4444; }
+.pb-url-row2 { display: flex; gap: 12px; }
+.pb-url-skills { display: flex; flex-direction: column; gap: 4px; }
+.pb-url-skill-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-base); cursor: pointer; transition: background .15s; }
+.pb-url-skill-item:hover { background: rgba(99,102,241,.04); }
+.pb-url-skill-item.on { border-color: var(--primary); background: rgba(99,102,241,.06); }
+.pb-url-skill-item input { margin: 0; }
+.pb-url-skill-name { font-weight: 600; font-size: 13px; }
+.pb-url-skill-desc { font-size: 12px; color: var(--color-ink-500); }
+.pb-url-mcp-list { display: flex; flex-direction: column; gap: 6px; }
+.pb-url-mcp-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: var(--color-ink-50, #f7f8fa); font-size: 12px; }
+.pb-url-mcp-name { font-weight: 600; min-width: 140px; }
+.pb-url-mcp-cmd { font-family: 'SF Mono', monospace; color: var(--color-ink-600); word-break: break-all; }
+.pb-url-env-list { display: flex; flex-direction: column; gap: 4px; }
+.pb-url-env-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-base); font-size: 12px; }
+.pb-url-env-item code { font-weight: 700; color: var(--primary); }
+.pb-url-env-desc { flex: 1; color: var(--color-ink-600); }
+.pb-url-env-req { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #ef4444; color: #fff; }
+.pb-url-modes { display: flex; gap: 12px; }
+.pb-url-mode { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 8px; border: 1px solid var(--border-base); cursor: pointer; transition: border-color .15s; }
+.pb-url-mode:hover { border-color: var(--primary); }
+.pb-url-mode.on { border-color: var(--primary); background: rgba(99,102,241,.04); }
+.pb-url-mode input { margin: 0; }
+.pb-url-mode span { font-weight: 600; font-size: 13px; }
+.pb-url-mode small { font-size: 11px; color: var(--color-ink-500); }
+.pb-url-actions { display: flex; gap: 8px; padding-top: 8px; }
 </style>

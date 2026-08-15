@@ -173,6 +173,7 @@ python -m pytest -q
 | 文档 | 内容 |
 |---|---|
 | [docs/project-overview.md](docs/project-overview.md) | 项目定位、项目结构、Skill 目录体系（三源）、插件导入导出 |
+| [docs/plugin-build.md](docs/plugin-build.md) | 插件构建与发布（三场景：CLI / UI 一键构建 / Crawler 定时任务）、打包模式、API 文档 |
 | [docs/build-release.md](docs/build-release.md) | 发布流程（Release）、安装更新（升级覆盖）、Windows 批处理脚本规范 |
 | [docs/agent-governance.md](docs/agent-governance.md) | Agent 架构拓扑、协作流程、治理规则、FAQ/最佳实践、自我迭代、协同进度、Skill 依赖表、通信协议 |
 

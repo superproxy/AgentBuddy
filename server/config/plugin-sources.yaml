@@ -1,0 +1,33 @@
+# 插件抓取源配置 — crawler.py 读取此文件
+#
+# 用法:
+#   python server/crawler.py --list     # 查看所有源
+#   python server/crawler.py             # 执行所有启用的源
+#   python server/crawler.py --source qwen-mm  # 只执行匹配的源
+#   python server/crawler.py --dry-run   # 只分析+构建不发布
+#   python server/crawler.py --add <url> --add-name my-plugin --add-tags ai,mcp
+#
+# crontab 调度（每天凌晨 3 点）:
+#   0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py >> /var/log/agentbuddy-crawler.log 2>&1
+
+sources:
+  - name: qwen-mm-plugins
+    url: https://github.com/QwenLM/Qwen-MM-Plugins
+    skills: [core, api, search]
+    tags: [multimodal, vision, ocr]
+    enabled: true
+    schedule: daily
+
+  - name: awesome-mcp-servers
+    url: https://github.com/punkpeye/awesome-mcp-servers
+    type: directory
+    tags: [mcp, directory]
+    enabled: false
+    schedule: weekly
+
+  # 示例：RSS / 技术博客源（需 AI 分析，当前未启用）
+  # - name: mcp-weekly
+  #   url: https://example.com/feed.xml
+  #   type: rss
+  #   enabled: false
+  #   schedule: weekly

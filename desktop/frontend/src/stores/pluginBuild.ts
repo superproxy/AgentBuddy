@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, reactive } from 'vue'
-import { api } from '../api/client'
+import { ref, reactive, computed } from 'vue'
+import { api, getServerUrl } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { useSyncStore } from './sync'
@@ -55,6 +55,24 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
   const buildMode = ref('local')
   const mcpFilterText = ref('')
   const importing = ref(false)
+
+  // ── 一键构建（URL 模式）──
+  /** 名称/描述字数限制（与后端 plugin_builder.py 对齐） */
+  const URL_NAME_MAX = 64
+  const URL_DESC_MAX = 500
+  const URL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/
+  const urlSource = ref('')
+  const urlAnalyzing = ref(false)
+  const urlMeta = ref<any>(null)
+  const urlBuilding = ref(false)
+  const urlPackMode = ref<'inline' | 'split'>('inline')
+  const urlSelectedSkills = ref<string[]>([])
+
+  /** 名称是否合法（kebab-case + 长度限制） */
+  const urlNameValid = computed(() => {
+    const n = urlMeta.value?.name || ''
+    return n.length > 0 && n.length <= URL_NAME_MAX && URL_NAME_RE.test(n)
+  })
 
   function toggleSkill(name: string) {
     const i = selectedSkills.value.indexOf(name)
@@ -257,6 +275,89 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       { onDone: () => { skill.loadInstalledSkills(); plugin.refreshPluginList() } })
   }
 
+  // ── 一键构建：从来源分析 + 构建 + 发布 ──
+
+  async function analyzeSource() {
+    if (!urlSource.value.trim()) { ui.toast('请输入来源地址', 'warn'); return }
+    urlAnalyzing.value = true
+    urlMeta.value = null
+    try {
+      const r = await api<any>('/api/plugin/analyze', {
+        method: 'POST',
+        body: JSON.stringify({ source: urlSource.value.trim(), ai: false }),
+      })
+      if (!r.ok) { ui.toast('分析失败: ' + (r.error || '未知错误'), 'err'); return }
+      const d = r.data
+      // 名称/描述兜底清洗（后端已清洗，此处防旧后端）
+      d.name = String(d.name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, URL_NAME_MAX)
+      d.description = String(d.description || '').slice(0, URL_DESC_MAX)
+      urlMeta.value = d
+      // 默认全选 skills
+      urlSelectedSkills.value = (d.skills || []).map((s: any) => s.name)
+      ui.toast(`分析完成: ${d.name}，${d.skills?.length || 0} 个 skill`)
+    } catch (e: any) {
+      ui.toast('分析失败: ' + e.message, 'err')
+    } finally {
+      urlAnalyzing.value = false
+    }
+  }
+
+  function toggleUrlSkill(name: string) {
+    const i = urlSelectedSkills.value.indexOf(name)
+    if (i >= 0) urlSelectedSkills.value.splice(i, 1)
+    else urlSelectedSkills.value.push(name)
+  }
+
+  async function buildFromSource(publish = false) {
+    if (!urlMeta.value) { ui.toast('请先分析来源', 'warn'); return }
+    const name = String(urlMeta.value.name || '')
+    if (!name) { ui.toast('插件名称不能为空', 'warn'); return }
+    if (!URL_NAME_RE.test(name)) {
+      ui.toast('名称只允许小写字母、数字和连字符（kebab-case），如 my-plugin', 'warn'); return
+    }
+    if (name.length > URL_NAME_MAX) { ui.toast(`名称不能超过 ${URL_NAME_MAX} 字符`, 'warn'); return }
+    urlBuilding.value = true
+    try {
+      const body: any = {
+        source: urlSource.value.trim(),
+        ai: false,
+        name,
+        version: urlMeta.value.version || '1.0.0',
+        description: String(urlMeta.value.description || '').slice(0, URL_DESC_MAX),
+        mcpServers: urlMeta.value.mcpServers || undefined,
+        envVars: urlMeta.value.envVars || undefined,
+        mode: urlPackMode.value,
+        publish,
+        tags: urlMeta.value.tags || [],
+        scope: 'public',
+        server_url: getServerUrl(),
+      }
+      if (urlSelectedSkills.value.length > 0) {
+        body.skills = urlSelectedSkills.value
+      }
+      const r = await api<any>('/api/plugin/build', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      if (!r.ok) { ui.toast('构建失败: ' + (r.error || '未知错误'), 'err'); return }
+      const zipPath = r.data?.zipPath || ''
+      if (publish && r.data?.published) {
+        ui.toast(`构建并发布成功: ${zipPath}`, 'ok')
+      } else if (r.data?.publishError) {
+        ui.toast(`构建成功但发布失败: ${r.data.publishError}`, 'err')
+      } else if (r.warning) {
+        ui.toast(`构建成功但跳过发布: ${r.warning}`, 'warn')
+      } else {
+        ui.toast(`构建成功: ${zipPath}`, 'ok')
+      }
+      plugin.refreshPluginList()
+    } catch (e: any) {
+      ui.toast('构建失败: ' + e.message, 'err')
+    } finally {
+      urlBuilding.value = false
+    }
+  }
+
   return {
     pluginForm, selectedSkills, selectedMcp, selectedLlm,
     selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
@@ -266,5 +367,8 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     llmKey, wizardNext, wizardPrev, wizardGoto, newPlugin, loadBuildSources,
     importFromIde, importAllIdeMcp, importAllIdeSkills, applyImportedMcp, applyImportedSkills, applyImportedLlm,
     loadExistingPlugin, buildPluginConfig, previewPlugin, savePluginFile, installPluginFile,
+    urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills,
+    analyzeSource, toggleUrlSkill, buildFromSource,
+    URL_NAME_MAX, URL_DESC_MAX, urlNameValid,
   }
 })

@@ -6,7 +6,7 @@
 子命令：
   generate  生成运行态配置（mcp.json + 各 IDE 模板配置）
   sync      同步 rules/mcp/skills 到各 IDE
-  plugin    插件管理（install/list）
+  plugin    插件管理（install/list/uninstall/build/publish/auth）
   skill     技能管理（list-skills/generate-plugin from CSV）
   env       设置环境变量（process/user 作用域）
   shell     导出 shell 环境变量语句
@@ -19,6 +19,10 @@
   python -m agentctl.agentctl sync --ide All --skills tdd,mermaid
   python -m agentctl.agentctl plugin install template/plugins/core.plugin.yaml
   python -m agentctl.agentctl plugin list
+  python -m agentctl.agentctl plugin build QwenLM/Qwen-MM-Plugins --skills core,api,search --mode inline
+  python -m agentctl.agentctl plugin build "https://mp.weixin.qq.com/s/xxx" --ai --publish --tags vision,ocr
+  python -m agentctl.agentctl plugin publish ./my-plugin.zip --scope public --tags ai,mcp
+  python -m agentctl.agentctl plugin auth login --username AgentBuddy --password xxx
   python -m agentctl.agentctl provider openai
   python -m agentctl.agentctl setup
 
@@ -478,6 +482,179 @@ def cmd_plugin_uninstall(args):
     )
 
 
+def cmd_plugin_build(args):
+    """从来源构建插件 zip（analyze → download → generate → package → 可选 publish）。"""
+    from agentctl.lib import plugin_builder as pb
+
+    builder = pb.PluginBuilder(PROJECT_ROOT)
+
+    # 1. 分析来源
+    header(f"Building plugin from: {args.source}")
+    print(f"\n{COLOR_CYAN}==> Step 1/4: Analyzing source{COLOR_RESET}")
+    ai_mode = getattr(args, "ai", False)
+    meta = builder.analyze_source(args.source, ai=ai_mode)
+    print(f"  Name: {meta.name}")
+    print(f"  Description: {meta.description[:80]}")
+    if meta.skills:
+        print(f"  Skills: {', '.join(s.name for s in meta.skills)}")
+    if meta.mcp_servers:
+        print(f"  MCP Servers: {', '.join(meta.mcp_servers.keys())}")
+
+    # 2. 命令行参数覆盖
+    if args.name:
+        meta.name = args.name
+    if args.version:
+        meta.version = args.version
+    if args.description:
+        meta.description = args.description
+    if args.author:
+        meta.author = args.author
+
+    # 解析 --mcp 参数（名称:command:arg1:arg2:...）
+    if args.mcp:
+        for raw in args.mcp:
+            name, config = pb.parse_mcp_arg(raw)
+            meta.mcp_servers[name] = config
+
+    # 解析 --env 参数（KEY:description:default:required）
+    if args.env:
+        for raw in args.env:
+            key, spec = pb.parse_env_arg(raw)
+            meta.env_vars[key] = spec
+
+    # 过滤 skills
+    selected_skills = None
+    if args.skills:
+        selected = [s.strip() for s in args.skills.split(",") if s.strip()]
+        selected_skills = selected
+        meta.skills = [s for s in meta.skills if s.name in selected]
+
+    # 3. 下载 skills
+    print(f"\n{COLOR_CYAN}==> Step 2/4: Downloading skills{COLOR_RESET}")
+    skill_dirs = builder.download_skills(meta, selected=selected_skills)
+
+    # 4. 生成 YAML + 打包
+    print(f"\n{COLOR_CYAN}==> Step 3/4: Generating plugin.yaml & packaging{COLOR_RESET}")
+    mode_label = "inline (MCP+envVars 内联)" if args.mode == "inline" else "split (mcp.yaml + keys.yaml)"
+    print(f"  打包模式: {mode_label}")
+    cfg = builder.generate_yaml(meta)
+    output_dir = Path(args.output) if args.output else PROJECT_ROOT / "config" / "plugins"
+    zip_path = builder.package(cfg, skill_dirs, mode=args.mode, output_dir=output_dir)
+    print(f"\n{COLOR_GREEN}[OK] 插件打包完成: {zip_path}{COLOR_RESET}")
+
+    # 5. 发布（可选）
+    if args.publish:
+        print(f"\n{COLOR_CYAN}==> Step 4/4: Publishing to marketplace{COLOR_RESET}")
+        from agentctl.lib import auth as market_auth
+        token = market_auth.get_token()
+        if not token:
+            error("未登录，请先执行: agentctl plugin auth login")
+            return False
+        server_url = market_auth.get_server_url()
+        tags = args.tags.split(",") if args.tags else meta.tags
+        try:
+            result = builder.publish(
+                zip_path, server_url, token,
+                tags=tags, scope=args.scope, team_id=args.team_id,
+            )
+            info(f"[OK] 发布成功: {result.get('name', meta.name)}")
+        except Exception as e:
+            error(f"发布失败: {e}")
+            return False
+    else:
+        hint(f"\n提示：如需发布，执行: agentctl plugin publish {zip_path}")
+
+    return True
+
+
+def cmd_plugin_publish(args):
+    """发布已有 zip 到市场。"""
+    from agentctl.lib import auth as market_auth
+    from agentctl.lib import plugin_builder as pb
+
+    zip_path = Path(args.zip_file).resolve()
+    if not zip_path.exists():
+        error(f"文件不存在: {zip_path}")
+        return False
+
+    token = market_auth.get_token()
+    if not token:
+        error("未登录，请先执行: agentctl plugin auth login")
+        return False
+
+    server_url = market_auth.get_server_url()
+    tags = args.tags.split(",") if args.tags else []
+
+    builder = pb.PluginBuilder(PROJECT_ROOT)
+    try:
+        result = builder.publish(
+            zip_path, server_url, token,
+            tags=tags, scope=args.scope, team_id=args.team_id,
+        )
+        info(f"[OK] 发布成功: {result.get('name', zip_path.stem)}")
+        return True
+    except Exception as e:
+        error(f"发布失败: {e}")
+        return False
+
+
+def cmd_plugin_auth(args):
+    """市场认证（login/register/whoami/logout）。"""
+    from agentctl.lib import auth as market_auth
+
+    sub = args.sub
+
+    if sub == "login":
+        if not args.username or not args.password:
+            error("请提供 --username 和 --password")
+            return False
+        try:
+            data = market_auth.login(args.username, args.password, args.server)
+            user = data.get("user", {})
+            info(f"[OK] 登录成功: {user.get('username')} (role: {user.get('role')})")
+            hint(f"服务器: {data.get('server_url')}")
+        except Exception as e:
+            error(f"登录失败: {e}")
+            return False
+
+    elif sub == "register":
+        if not args.username or not args.password:
+            error("请提供 --username 和 --password")
+            return False
+        try:
+            data = market_auth.register(
+                args.username, args.password, args.email or "", args.server
+            )
+            user = data.get("user", {})
+            info(f"[OK] 注册成功: {user.get('username')} (role: {user.get('role')})")
+            hint(f"服务器: {data.get('server_url')}")
+        except Exception as e:
+            error(f"注册失败: {e}")
+            return False
+
+    elif sub == "whoami":
+        if not market_auth.is_logged_in():
+            warn("未登录")
+            return False
+        user = market_auth.whoami()
+        if user:
+            info(f"用户: {user.get('username')}")
+            print(f"  ID: {user.get('id')}")
+            print(f"  Email: {user.get('email', '-')}")
+            print(f"  Role: {user.get('role')}")
+        else:
+            error("token 无效或已过期，请重新登录")
+            return False
+
+    elif sub == "logout":
+        if market_auth.logout():
+            info("[OK] 已退出登录")
+        else:
+            warn("未登录，无需退出")
+
+    return True
+
+
 def cmd_skill_list(args):
     """从 skills-index.csv 列出所有技能。"""
     csv_path = PROJECT_ROOT / args.csv
@@ -638,6 +815,62 @@ def build_parser() -> argparse.ArgumentParser:
     p_uns.add_argument("--purge", action="store_true",
                        help="同时删除插件 .plugin.yaml 文件本身")
     p_uns.set_defaults(func=cmd_plugin_uninstall)
+
+    # plugin build — 从来源构建插件 zip
+    p_build = p_plugin_sub.add_parser("build", help="从来源构建插件 zip（GitHub/URL/本地目录）")
+    p_build.add_argument("source", help="来源：GitHub(owner/repo)、文章 URL、本地目录路径")
+    p_build.add_argument("--name", default=None, help="插件名称（覆盖自动分析结果）")
+    p_build.add_argument("--version", default=None, help="插件版本")
+    p_build.add_argument("--description", default=None, help="插件描述")
+    p_build.add_argument("--author", default=None, help="作者")
+    p_build.add_argument("--skills", default=None,
+                         help="指定要打包的 skill（逗号分隔），省略则全部")
+    p_build.add_argument("--mcp", action="append", default=None,
+                         help="MCP server 配置（名称:command:arg1:arg2:...），可多次指定")
+    p_build.add_argument("--env", action="append", default=None,
+                         help="环境变量声明（KEY:description:default:required），可多次指定")
+    p_build.add_argument("--mode", choices=["inline", "split"], default="inline",
+                         help="打包模式：inline（MCP+envVars 内联 plugin.yaml）或 split（拆分 mcp.yaml + keys.yaml）")
+    p_build.add_argument("--ai", action="store_true", help="启用 AI 分析来源内容（从文章 URL 构建时推荐）")
+    p_build.add_argument("--output", default=None, help="输出目录（默认 config/plugins）")
+    p_build.add_argument("--publish", action="store_true", help="构建后自动发布到市场")
+    p_build.add_argument("--scope", default="public", choices=["public", "team"],
+                         help="发布范围（--publish 时生效）")
+    p_build.add_argument("--tags", default=None, help="标签（逗号分隔，--publish 时生效）")
+    p_build.add_argument("--team-id", type=int, default=None,
+                         help="团队 ID（scope=team 时需要）")
+    p_build.set_defaults(func=cmd_plugin_build)
+
+    # plugin publish — 发布已有 zip
+    p_pub = p_plugin_sub.add_parser("publish", help="发布 zip 到市场")
+    p_pub.add_argument("zip_file", help="zip 文件路径")
+    p_pub.add_argument("--scope", default="public", choices=["public", "team"], help="发布范围")
+    p_pub.add_argument("--tags", default=None, help="标签（逗号分隔）")
+    p_pub.add_argument("--team-id", type=int, default=None, help="团队 ID（scope=team 时需要）")
+    p_pub.set_defaults(func=cmd_plugin_publish)
+
+    # plugin auth — 市场认证
+    p_auth = p_plugin_sub.add_parser("auth", help="市场认证（login/register/whoami/logout）")
+    p_auth_sub = p_auth.add_subparsers(dest="sub", required=True)
+
+    p_auth_login = p_auth_sub.add_parser("login", help="登录市场")
+    p_auth_login.add_argument("--username", "-u", required=True, help="用户名")
+    p_auth_login.add_argument("--password", "-p", required=True, help="密码")
+    p_auth_login.add_argument("--server", default=None, help="服务器地址（默认使用已保存的）")
+    p_auth_login.set_defaults(func=cmd_plugin_auth)
+
+    p_auth_reg = p_auth_sub.add_parser("register", help="注册账号")
+    p_auth_reg.add_argument("--username", "-u", required=True, help="用户名")
+    p_auth_reg.add_argument("--password", "-p", required=True, help="密码（至少 8 位）")
+    p_auth_reg.add_argument("--email", default="", help="邮箱")
+    p_auth_reg.add_argument("--server", default=None, help="服务器地址")
+    p_auth_reg.set_defaults(func=cmd_plugin_auth)
+
+    p_auth_who = p_auth_sub.add_parser("whoami", help="查看当前登录用户")
+    p_auth_who.set_defaults(func=cmd_plugin_auth)
+
+    p_auth_out = p_auth_sub.add_parser("logout", help="退出登录")
+    p_auth_out.set_defaults(func=cmd_plugin_auth)
 
     # skill
     p_skill = sub.add_parser("skill", help="技能管理（基于 skills-index.csv）")

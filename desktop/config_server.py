@@ -3288,6 +3288,183 @@ def _add_plugin_extras_to_zip(zf: zipfile.ZipFile, cfg: dict, seen: set[str] | N
             zf.writestr("keys.yaml", keys_yaml_str)
 
 
+# ============================================================
+# 插件构建引擎 — 从来源分析 + 一键构建
+# ============================================================
+
+def _extract_bearer_token(req) -> str | None:
+    """从 Flask request 的 Authorization 头提取 Bearer token。"""
+    auth_header = req.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:].strip()
+    return None
+
+
+@app.route("/api/plugin/analyze", methods=["POST"])
+def plugin_analyze():
+    """从来源（GitHub 仓库/URL/本地目录）分析插件元数据。
+
+    POST body: {"source": "QwenLM/Qwen-MM-Plugins", "ai": false}
+    返回: {"ok": true, "data": {"name", "version", "description", "skills", "mcpServers", "envVars", ...}}
+    """
+    data = request.get_json(silent=True) or {}
+    source = (data.get("source") or "").strip()
+    ai_mode = bool(data.get("ai", False))
+
+    if not source:
+        return jsonify({"ok": False, "error": "来源不能为空"}), 400
+
+    try:
+        from agentctl.lib.plugin_builder import (
+            PluginBuilder, sanitize_name, truncate_description,
+        )
+        builder = PluginBuilder(PROJECT_ROOT)
+        meta = builder.analyze_source(source, ai=ai_mode)
+
+        result = {
+            "name": sanitize_name(meta.name),
+            "version": meta.version,
+            "description": truncate_description(meta.description),
+            "author": meta.author,
+            "license": meta.license,
+            "homepage": meta.homepage,
+            "repository": meta.repository,
+            "source_type": meta.source_type,
+            "source_url": meta.source_url,
+            "tags": meta.tags,
+            "skills": [
+                {
+                    "name": s.name,
+                    "description": s.description,
+                    "source": s.source,
+                    "requires_key": s.requires_key,
+                }
+                for s in meta.skills
+            ],
+            "mcpServers": meta.mcp_servers,
+            "envVars": meta.env_vars,
+        }
+        return jsonify({"ok": True, "data": result})
+    except FileNotFoundError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": f"分析失败: {e}"}), 500
+
+
+@app.route("/api/plugin/build", methods=["POST"])
+def plugin_build():
+    """一键构建插件 zip（analyze → generate → package）。
+
+    POST body:
+    {
+        "source": "QwenLM/Qwen-MM-Plugins",
+        "ai": false,
+        "name": "qwen-mm-plugins",         // 可选，覆盖分析结果
+        "version": "1.0.0",
+        "description": "...",
+        "skills": ["core", "api", "search"],  // 可选，过滤 skills
+        "mcpServers": {...},               // 可选，覆盖 MCP 配置
+        "envVars": {...},                  // 可选，覆盖环境变量
+        "mode": "inline",                  // inline 或 split
+        "publish": false,                  // 构建后是否发布
+        "tags": ["vision", "ocr"],
+        "scope": "public"
+    }
+    返回: {"ok": true, "data": {"zipPath": "...", "published": {...}}}
+    """
+    data = request.get_json(silent=True) or {}
+    source = (data.get("source") or "").strip()
+    ai_mode = bool(data.get("ai", False))
+    mode = data.get("mode", "inline")
+    do_publish = bool(data.get("publish", False))
+
+    if not source:
+        return jsonify({"ok": False, "error": "来源不能为空"}), 400
+    if mode not in ("inline", "split"):
+        return jsonify({"ok": False, "error": f"不支持的打包模式: {mode}"}), 400
+
+    try:
+        from agentctl.lib.plugin_builder import (
+            PluginBuilder, sanitize_name, truncate_description,
+        )
+        builder = PluginBuilder(PROJECT_ROOT)
+
+        # 1. 分析来源
+        meta = builder.analyze_source(source, ai=ai_mode)
+
+        # 2. 参数覆盖（名称/描述统一清洗 + 截断）
+        if data.get("name"):
+            meta.name = data["name"]
+        if data.get("version"):
+            meta.version = data["version"]
+        if data.get("description"):
+            meta.description = data["description"]
+        meta.name = sanitize_name(meta.name)
+        meta.description = truncate_description(meta.description)
+
+        # 覆盖 MCP / envVars
+        mcp_override = data.get("mcpServers")
+        env_override = data.get("envVars")
+
+        # 3. 下载 skills（可过滤）
+        selected = data.get("skills")
+        if selected and isinstance(selected, list):
+            meta.skills = [s for s in meta.skills if s.name in selected]
+        skill_dirs = builder.download_skills(meta, selected=selected)
+
+        # 4. 生成 YAML + 打包
+        cfg = builder.generate_yaml(
+            meta,
+            mcp_servers=mcp_override if mcp_override is not None else None,
+            env_vars=env_override if env_override is not None else None,
+        )
+        output_dir = PROJECT_ROOT / "config" / "plugins"
+        zip_path = builder.package(cfg, skill_dirs, mode=mode, output_dir=output_dir)
+
+        result = {"zipPath": str(zip_path.relative_to(PROJECT_ROOT))}
+
+        # 5. 可选发布
+        if do_publish:
+            # Token 优先级：请求头 Authorization > ~/.agentbuddy/auth.json
+            # 前端 api() 已自动带 Bearer token（localStorage），CLI 场景无请求头则读 auth.json
+            req_token = _extract_bearer_token(request)
+            from agentctl.lib import auth as market_auth
+            token = req_token or market_auth.get_token()
+            if not token:
+                return jsonify({
+                    "ok": True,
+                    "data": result,
+                    "warning": "未登录，跳过发布。请先在设置中登录。",
+                })
+            # server_url 优先用请求体传入（前端知道远程地址），否则读 auth.json
+            server_url = (data.get("server_url") or "").strip() or market_auth.get_server_url()
+            tags = data.get("tags", [])
+            scope = data.get("scope", "public")
+            team_id = data.get("team_id")
+            try:
+                pub_result = builder.publish(
+                    zip_path, server_url, token,
+                    tags=tags, scope=scope, team_id=team_id,
+                )
+                result["published"] = pub_result
+            except Exception as pub_e:
+                result["publishError"] = str(pub_e)
+
+        return jsonify({"ok": True, "data": result})
+    except FileNotFoundError as e:
+        return jsonify({"ok": False, "error": str(e)}), 404
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"ok": False, "error": f"构建失败: {e}"}), 500
+
+
 @app.route("/api/plugins", methods=["GET"])
 def list_plugins():
     from agentctl.lib.plugins import read_installed_plugins, iter_plugin_files
