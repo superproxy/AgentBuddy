@@ -152,6 +152,8 @@ python -m pytest -q
 - [x] 插件打包导出（ZIP 含 skills / YAML 仅配置 / 导出全部）
 - [x] 插件导入（ZIP 解压 / YAML / JSON 向后兼容）
 - [x] 插件安装 / 卸载 / 列表
+- [x] 插件构建引擎（三场景）：CLI `agentctl plugin build/publish/auth` / UI 一键构建（来源分析 + 字数限制 + YAML 预览）/ Crawler 定时任务
+- [x] 一键构建来源分析：GitHub 仓库（.mcp.json + SKILL.md frontmatter 权威名）、URL、本地目录；名称/描述自动清洗（64/500 字符限制）
 
 ### 多 IDE 同步
 - [x] 一键同步到 ZCode / Trae / OpenCode / Claude / Cursor / Codex / OpenClaw / WorkBuddy / Copilot / Cline / DeepSeek
