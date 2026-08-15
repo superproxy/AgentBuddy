@@ -60,7 +60,17 @@ export async function api<T = any>(url: string, opts?: RequestInit): Promise<T> 
   // 合并调用方传入的 headers（如需覆盖）
   if (opts?.headers) Object.assign(headers, opts.headers)
   const r = await fetch(url, { ...opts, headers })
-  return (await r.json()) as T
+  const text = await r.text()
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    // 后端返回非 JSON（如旧后端 404/500 的 HTML 页面）：
+    // 返回可读错误而不是抛浏览器原生报错（Safari: The string did not match the expected pattern）
+    const hint = r.status === 404
+      ? `接口不存在 (HTTP 404)，运行中的后端可能是旧版本，请重启应用`
+      : `后端返回非 JSON 响应 (HTTP ${r.status})`
+    return { ok: false, error: hint, status: r.status, body: text.slice(0, 200) } as any
+  }
 }
 
 /** LLM 配置 API 封装（读取/保存 llm.yaml） */

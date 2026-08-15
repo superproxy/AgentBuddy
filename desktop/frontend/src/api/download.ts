@@ -7,12 +7,13 @@
  *
  * @param url      后端导出接口地址（返回文件内容）
  * @param filename 下载/保存的文件名
+ * @param headers  可选自定义请求头（如 Authorization）
  * @returns 是否成功触发保存/下载
  */
-export async function downloadFile(url: string, filename: string): Promise<boolean> {
+export async function downloadFile(url: string, filename: string, headers?: Record<string, string>): Promise<boolean> {
   const pw = (window as any).pywebview
   try {
-    const resp = await fetch(url)
+    const resp = await fetch(url, headers ? { headers } : undefined)
     if (!resp.ok) return false
     const blob = await resp.blob()
     if (pw?.api?.save_file) {

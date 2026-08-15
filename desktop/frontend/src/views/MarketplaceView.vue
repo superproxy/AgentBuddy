@@ -6,6 +6,7 @@ import { usePluginStore } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
 import { serverApi, api, getAuthToken } from '../api/client'
+import { downloadFile } from '../api/download'
 
 const mkt = useMarketplaceStore()
 const { items, loading, searchQuery, installing, isMock } = storeToRefs(mkt)
@@ -86,27 +87,16 @@ async function toggleFavorite(p: any) {
   } catch { /* ignore */ }
 }
 
-// 下载插件 zip（fetch blob → 触发浏览器下载，兼容 Electron 跨域）
+// 下载插件 zip（pywebview 桌面模式走原生保存对话框，浏览器模式回退 a 标签下载）
 async function downloadPlugin(p: any) {
-  try {
-    const url = serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))
-    if (!url) { ui.toast('请先配置 Server 地址', 'err'); return }
-    const headers: Record<string, string> = {}
-    const token = getAuthToken()
-    if (token) headers['Authorization'] = 'Bearer ' + token
-    const resp = await fetch(url, { headers })
-    if (!resp.ok) { ui.toast('下载失败: HTTP ' + resp.status, 'err'); return }
-    const blob = await resp.blob()
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = (p.name || 'plugin') + '-v' + (p.version || '1.0.0') + '.zip'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(a.href)
-  } catch (e: any) {
-    ui.toast('下载失败: ' + (e.message || ''), 'err')
-  }
+  const url = serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))
+  if (!url) { ui.toast('请先配置 Server 地址', 'err'); return }
+  const headers: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) headers['Authorization'] = 'Bearer ' + token
+  const filename = (p.name || 'plugin') + '-v' + (p.version || '1.0.0') + '.zip'
+  const ok = await downloadFile(url, filename, headers)
+  if (!ok) ui.toast('下载失败', 'err')
 }
 
 // 加载收藏列表

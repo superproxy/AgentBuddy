@@ -4805,12 +4805,14 @@ def install_plugin_sse():
             yield f"data: [ERROR] generate 失败: {e}\n\n"
 
         # 自动 sync（按 target_ide 或所有 IDE；支持逗号分隔多 IDE）
+        # 注意：安装插件只同步 mcp/skill/rules，不含 llm scope —— LLM Provider 配置
+        # 是用户独立设置的，不应在安装插件时强制校验默认 LLM 是否已选/启用
         ide_list = [i.strip() for i in target_ide.split(",") if i.strip()] if target_ide else ["All"]
         for ide_arg in ide_list:
             yield f"data: [STEP] 同步到 IDE: {ide_arg}\n\n"
             try:
                 result = subprocess.run(
-                    _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force"]),
+                    _script_run_cmd("agentctl", ["sync", "--ide", ide_arg, "--force", "--scope", "mcp,skill,rules"]),
                     cwd=str(PROJECT_ROOT),
                     capture_output=True, text=True,
                     encoding="utf-8", errors="ignore",
