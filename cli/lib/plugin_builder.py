@@ -49,7 +49,8 @@ def truncate_description(raw: str, max_len: int = MAX_DESCRIPTION_LENGTH) -> str
     idx = cut.rfind(" ")
     if idx > 0:
         cut = cut[:idx]
-    return cut.strip() + "…"
+    cut = cut.strip()
+    return cut if len(cut) <= max_len else cut[: max_len - 1].rstrip() + "…"
 
 
 # ============================================================
@@ -603,31 +604,34 @@ def _extract_meta_from_tree(
         except Exception:
             pass
 
-    # 提取 skills（从 SKILL.md 文件路径推导）
+    # 提取 skills（SKILL.md frontmatter 的 name 为权威名，路径推导仅兜底）
     seen_skills: set[str] = set()
     for smd in skill_md_paths:
-        parts = smd.split("/")
-        # 路径模式: src/capabilities/core/skill/SKILL.md
-        # skill 名通常是 SKILL.md 的父目录名或 capabilities/ 的子目录名
-        skill_name = ""
-        for i, part in enumerate(parts):
-            if part == "skill" and i + 1 < len(parts):
-                skill_name = parts[i + 1] if parts[i + 1] != "SKILL.md" else ""
-                break
-        if not skill_name:
-            skill_name = parts[-2] if parts[-1] == "SKILL.md" and len(parts) >= 2 else ""
+        # 尝试读取 SKILL.md 内容获取权威 name + description
+        skill_name, desc = "", ""
+        try:
+            raw_url = f"https://raw.githubusercontent.com/{owner_repo}/main/{smd}"
+            resp = requests.get(raw_url, headers=_github_headers(), timeout=15)
+            if resp.ok:
+                skill_name = _parse_skill_name_text(resp.text)
+                desc = _parse_skill_description_text(resp.text)
+        except Exception:
+            pass
 
-        if skill_name and skill_name != "skill" and skill_name not in seen_skills:
+        # 兜底：从路径推导。
+        # 布局一: src/capabilities/api/skill/SKILL.md → 父目录就叫 skill，取祖父（capability 名）
+        # 布局二: skills/<name>/SKILL.md → 取直接父目录
+        if not skill_name:
+            parts = smd.split("/")
+            dirs = parts[:-1] if parts and parts[-1] == "SKILL.md" else parts
+            if dirs and dirs[-1].lower() in ("skill", "skills") and len(dirs) >= 2:
+                skill_name = dirs[-2]
+            elif dirs:
+                skill_name = dirs[-1]
+
+        if skill_name and skill_name.lower() not in ("skill", "skills", "src", "capabilities") \
+                and skill_name not in seen_skills:
             seen_skills.add(skill_name)
-            # 尝试读取 SKILL.md 内容获取 description
-            desc = ""
-            try:
-                raw_url = f"https://raw.githubusercontent.com/{owner_repo}/main/{smd}"
-                resp = requests.get(raw_url, headers=_github_headers(), timeout=15)
-                if resp.ok:
-                    desc = _parse_skill_description_text(resp.text)
-            except Exception:
-                pass
             meta.skills.append(SkillInfo(
                 name=skill_name,
                 description=desc,
@@ -645,18 +649,43 @@ def _parse_skill_description(skill_md_path: Path) -> str:
         return ""
 
 
+def _frontmatter_line(fm_text: str, key: str) -> str:
+    """yaml 解析失败时的兜底：按行取 frontmatter 顶层 `key: value`。"""
+    m = re.search(rf"^{re.escape(key)}:\s*(.+)$", fm_text, re.M)
+    if not m:
+        return ""
+    return m.group(1).strip().strip('"').strip("'")
+
+
+def _parse_skill_name_text(text: str) -> str:
+    """从 SKILL.md 的 YAML frontmatter 提取权威 skill name。"""
+    match = re.search(r"^---\s*\n(.*?)\n---", text, re.S)
+    if match:
+        fm_text = match.group(1)
+        try:
+            fm = yaml.safe_load(fm_text)
+            if isinstance(fm, dict) and fm.get("name"):
+                name = fm["name"]
+                return name.strip().strip('"').strip("'") if isinstance(name, str) else str(name)
+        except Exception:
+            # 未加引号的 plain scalar 含 ": " 等非法字符时 yaml 会失败，降级逐行解析
+            return _frontmatter_line(fm_text, "name")
+    return ""
+
+
 def _parse_skill_description_text(text: str) -> str:
     """从 SKILL.md 文本提取 description。"""
     # YAML frontmatter
     match = re.search(r"^---\s*\n(.*?)\n---", text, re.S)
     if match:
+        fm_text = match.group(1)
         try:
-            fm = yaml.safe_load(match.group(1))
+            fm = yaml.safe_load(fm_text)
             if isinstance(fm, dict) and fm.get("description"):
                 desc = fm["description"]
                 return desc.strip().strip('"').strip("'") if isinstance(desc, str) else str(desc)
         except Exception:
-            pass
+            return _frontmatter_line(fm_text, "description")
     # fallback: 第一行非标题文本
     for line in text.split("\n"):
         line = line.strip()
