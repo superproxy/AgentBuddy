@@ -352,6 +352,35 @@ def _bootstrap_from_bundle() -> None:
 
     if copied:
         print(f"[bootstrap] 已从 bundle 同步资源到数据目录: {', '.join(copied)}")
+
+    # 清理历史版本引导残留（自愈）：
+    # 旧版曾把整个 desktop/（含 config_server.py）复制到数据目录，且旧版 tools/ 布局
+    # 同样复制过后端。launcher 会把 PROJECT_ROOT/desktop 插到 sys.path[0]，数据目录里的
+    # 旧 desktop/config_server.py 会遮蔽 bundle 内的新后端 —— 应用升级后仍运行旧代码，
+    # 新增 API 全部 404（如 /api/plugin/analyze）。这些文件不删，升级永远不会生效。
+    legacy_purge = [
+        "desktop/config_server.py",   # 遮蔽 bundle 后端的元凶
+        "desktop/launcher.py",
+        "desktop/README.md",
+        "desktop/frontend",           # 旧版误复制的前端源码（~85MB）
+        "tools",                      # 更早的目录布局（tools/config_server.py 同样是旧后端）
+        "scripts",                    # 更早的目录布局（scripts/agentctl.py）
+    ]
+    purged = []
+    for name in legacy_purge:
+        target = project / name
+        try:
+            if target.is_dir():
+                shutil.rmtree(target, onerror=_remove_readonly)
+                purged.append(name)
+            elif target.exists():
+                target.unlink()
+                purged.append(name)
+        except Exception as e:
+            print(f"[bootstrap][WARN] 清理残留 {name} 失败: {e}", file=sys.stderr)
+    if purged:
+        print(f"[bootstrap] 已清理旧版引导残留: {', '.join(purged)}")
+
     # 写入标记，便于诊断
     try:
         (project / ".bundle_bootstrapped").write_text("1", encoding="utf-8")
