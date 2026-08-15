@@ -135,13 +135,30 @@ const selectMoreBrand = (brand: string) => {
   showMoreBrands.value = false
 }
 
-// 过滤后的品牌分组（按 activeBrandChip 筛选，Code 和 Work 并列展示）
+// 搜索关键词（匹配品牌名、厂商、IDE 名称）
+const searchKeyword = ref('')
+
+// 过滤后的品牌分组（按 activeBrandChip 筛选 + 搜索过滤）
 const filteredBrandGroups = computed(() => {
-  const groups = brandGroups.value
-    .filter((bg) => activeBrandChip.value === 'all' || bg.brand === activeBrandChip.value)
+  const kw = searchKeyword.value.trim().toLowerCase()
+  // 有搜索词时忽略品牌 chip 筛选（搜索为全局优先）
+  let groups = brandGroups.value
+    .filter((bg) => kw || activeBrandChip.value === 'all' || bg.brand === activeBrandChip.value)
     .filter((g): g is NonNullable<typeof g> => g !== null)
-  // 当显示全部品牌时，按用户自定义顺序排序
-  if (activeBrandChip.value === 'all' && brandOrder.favoriteKeys.length > 0) {
+  // 搜索过滤：匹配品牌名 / 厂商 / IDE label
+  if (kw) {
+    groups = groups.filter((bg) =>
+      bg.brand.toLowerCase().includes(kw) ||
+      (bg.vendor || '').toLowerCase().includes(kw) ||
+      bg.categories.some((cat) =>
+        cat.forms.some((fg) =>
+          fg.items.some((it) => (it.label || '').toLowerCase().includes(kw))
+        )
+      )
+    )
+  }
+  // 排序：搜索时或显示全部品牌时，按用户自定义顺序
+  if ((kw || activeBrandChip.value === 'all') && brandOrder.favoriteKeys.length > 0) {
     return [...groups].sort((a, b) => {
       const ia = brandOrder.favoriteKeys.indexOf(a.brand)
       const ib = brandOrder.favoriteKeys.indexOf(b.brand)
@@ -587,6 +604,31 @@ watch(
     <div v-else>
       <!-- ==================== 品牌分组视图 ==================== -->
       <div class="brand-view">
+        <!-- 搜索栏 -->
+        <div class="ide-search-bar">
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
+              <path d="m11 11 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input
+              v-model="searchKeyword"
+              type="text"
+              class="search-input"
+              placeholder="搜索品牌、IDE 名称或厂商…  例如：Claude、Cursor、腾讯"
+            />
+            <button
+              v-if="searchKeyword"
+              class="search-clear"
+              @click="searchKeyword = ''"
+              type="button"
+              title="清除"
+            >×</button>
+          </div>
+          <span v-if="searchKeyword" class="search-result-count">
+            {{ filteredBrandGroups.length }} 个品牌
+          </span>
+        </div>
         <!-- 品牌 chip（常用区 + 更多收起，类似工具栏菜单） -->
         <div class="brand-chips">
           <!-- 常用品牌（可拖拽排序，顺序持久化到 localStorage） -->
@@ -706,9 +748,9 @@ watch(
           </div>
         </div>
 
-        <!-- 空状态：当前筛选条件下无 IDE -->
+        <!-- 空状态 -->
         <div v-if="filteredBrandGroups.length === 0" class="empty-state">
-          当前筛选条件下无 IDE
+          {{ searchKeyword ? `未找到匹配「${searchKeyword}」的品牌或 IDE` : '当前筛选条件下无 IDE' }}
         </div>
       </div>
     </div>
@@ -1729,6 +1771,71 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* 搜索栏 */
+.ide-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ide-search-bar .search-input-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 560px;
+}
+.ide-search-bar .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.ide-search-bar .search-input {
+  width: 100%;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  padding: 10px 36px 10px 38px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ide-search-bar .search-input::placeholder {
+  color: var(--text-tertiary);
+}
+.ide-search-bar .search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.ide-search-bar .search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-hover);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s, background 0.15s;
+}
+.ide-search-bar .search-clear:hover {
+  color: var(--text-primary);
+  background: var(--border-base);
+}
+.ide-search-bar .search-result-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 /* 品牌 chip（常用区 + 更多收起） */

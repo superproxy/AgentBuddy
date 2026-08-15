@@ -82,8 +82,24 @@ from pathlib import Path
 # 配置数据源：scripts/lib/ide/ide.yaml（install_meta 段）
 # 代码只负责调用执行，新增/修改 IDE 请编辑 ide.yaml
 from ._meta import get_install_meta as _get_install_meta
+# 复用 detect 的兜底 which（GUI 进程 PATH 受限，需补搜 nvm/homebrew 等用户 bin 目录）
+from .detect import _which as _which_with_fallback
 
 IDE_INSTALL_META = _get_install_meta()
+
+
+def _find_npm() -> str | None:
+    """查找 npm 可执行文件绝对路径。
+
+    GUI 进程（pywebview/PyInstaller 打包）不继承 .zshrc/.zprofile，
+    PATH 仅含 /usr/bin:/bin 等，nvm 安装的 npm 检测不到，
+    导致"实际已安装 Node.js 却提示未安装"。先用 shutil.which，
+    失败后补搜 ~/.nvm/versions/node/*/bin、homebrew 等目录。
+    """
+    found = shutil.which("npm")
+    if found:
+        return found
+    return _which_with_fallback("npm")
 
 
 
@@ -258,17 +274,28 @@ exit $LASTEXITCODE
     return ""
 
 
-def _run_cmd(cmd: list[str], timeout: int = 300) -> dict:
+def _run_cmd(cmd: list[str], timeout: int = 300, extra_path: list[str] | None = None) -> dict:
     """运行命令并返回结果。
+
+    Args:
+        cmd: 命令及参数列表
+        timeout: 超时秒数
+        extra_path: 需注入子进程 PATH 的目录（如 nvm 的 node bin 目录），
+            供用绝对路径执行 npm 时让其内部能找到 node。
 
     Returns:
         {ok: bool, returncode: int, stdout: str, stderr: str, cmd: str}
     """
+    env = None
+    if extra_path:
+        env = os.environ.copy()
+        env["PATH"] = os.pathsep.join(extra_path) + os.pathsep + env.get("PATH", "")
     try:
         r = subprocess.run(
             cmd,
             capture_output=True, text=True,
             timeout=timeout,
+            env=env,
         )
         return {
             "ok": r.returncode == 0,
@@ -749,7 +776,8 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         }
 
     if method == "npm":
-        if not shutil.which("npm"):
+        npm_path = _find_npm()
+        if not npm_path:
             # npm 不可用，尝试 script 回退（若配置了 script_url）
             script_url_fallback = install_meta.get("script_url", "")
             script_url_win_fallback = install_meta.get("script_url_win", "")
@@ -760,12 +788,15 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
                         "message": "未安装 npm，请先安装 Node.js",
                         "cmd": "", "stdout": "", "stderr": ""}
         else:
+            # 用绝对路径执行（GUI 进程 PATH 可能找不到 npm），
+            # 并把 npm 所在目录注入子进程 PATH（npm 脚本内部需找到 node）
+            npm_dir = str(Path(npm_path).parent)
             npm_flags = install_meta.get("npm_flags", "")
             if npm_flags:
-                cmd = ["npm", "install", "-g", package] + npm_flags.split()
+                cmd = [npm_path, "install", "-g", package] + npm_flags.split()
             else:
-                cmd = ["npm", "install", "-g", package]
-            r = _run_cmd(cmd, timeout=600)
+                cmd = [npm_path, "install", "-g", package]
+            r = _run_cmd(cmd, timeout=600, extra_path=[npm_dir])
             if r["ok"]:
                 return {
                     "ok": True, "ide": ide_key, "mode": mode, "method": "npm",
@@ -775,7 +806,8 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
             # npm 安装失败，尝试 --ignore-scripts（解决 sharp 等原生模块编译失败）
             r2 = None
             if "--ignore-scripts" not in npm_flags:
-                r2 = _run_cmd(["npm", "install", "-g", package, "--ignore-scripts"], timeout=600)
+                r2 = _run_cmd([npm_path, "install", "-g", package, "--ignore-scripts"],
+                              timeout=600, extra_path=[npm_dir])
             if r2 and r2["ok"]:
                 return {
                     "ok": True, "ide": ide_key, "mode": mode, "method": "npm",
@@ -1095,11 +1127,12 @@ def uninstall_ide(ide_key: str, mode: str = "cli", force: bool = False) -> dict:
             pass
 
         if not force:
-            if not shutil.which("npm"):
+            npm_path = _find_npm()
+            if not npm_path:
                 return {"ok": False, "ide": ide_key, "mode": mode, "method": "npm",
                         "message": "未安装 npm", "cmd": "", "stdout": "", "stderr": ""}
-            cmd = ["npm", "uninstall", "-g", package]
-            r = _run_cmd(cmd, timeout=300)
+            cmd = [npm_path, "uninstall", "-g", package]
+            r = _run_cmd(cmd, timeout=300, extra_path=[str(Path(npm_path).parent)])
             if r["ok"]:
                 # npm uninstall 返回成功，但可能没真正删掉（多 npm 环境如 nvm vs homebrew）
                 # 检查二进制是否还在，在则 fallback uninstall_cmd
