@@ -286,8 +286,16 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
         method: 'POST',
         body: JSON.stringify({ source: urlSource.value.trim(), ai: false }),
       })
-      if (!r.ok) { ui.toast('分析失败: ' + (r.error || '未知错误'), 'err'); return }
+      if (!r.ok) {
+        // 后端返回非 JSON（404 HTML 等）或旧后端
+        const hint = r.status === 404
+          ? '分析接口不存在，请重启应用更新后端'
+          : (r.error || `分析失败 (HTTP ${r.status || '???'})`)
+        ui.toast('分析失败: ' + hint, 'err')
+        return
+      }
       const d = r.data
+      if (!d) { ui.toast('分析返回空数据', 'err'); return }
       // 名称/描述兜底清洗（后端已清洗，此处防旧后端）
       d.name = String(d.name || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, URL_NAME_MAX)
       d.description = String(d.description || '').slice(0, URL_DESC_MAX)
@@ -296,11 +304,36 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       urlSelectedSkills.value = (d.skills || []).map((s: any) => s.name)
       ui.toast(`分析完成: ${d.name}，${d.skills?.length || 0} 个 skill`)
     } catch (e: any) {
-      ui.toast('分析失败: ' + e.message, 'err')
+      // Safari fetch 原生异常 → 返回可读错误
+      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查后端是否运行' : (e.message || String(e))
+      ui.toast('分析失败: ' + msg, 'err')
     } finally {
       urlAnalyzing.value = false
     }
   }
+
+  /** 生成当前 URL 模式编辑结果的 plugin.yaml 预览文本 */
+  const urlYamlPreview = computed(() => {
+    if (!urlMeta.value) return ''
+    const m = urlMeta.value
+    const skills = (m.skills || [])
+      .filter((s: any) => urlSelectedSkills.value.includes(s.name))
+      .map((s: any) => `  - name: ${s.name}\n    description: ${String(s.description || '').slice(0, 80)}`)
+    const mcps = Object.entries(m.mcpServers || {})
+      .map(([k, v]: any) => `  ${k}:\n    command: ${v.command || ''}\n    args: ${JSON.stringify(v.args || [])}`)
+    const envs = Object.entries(m.envVars || {})
+      .map(([k, v]: any) => `  ${k}:\n    description: ${v.description || ''}\n    required: ${v.required ?? false}`)
+    const lines = [
+      `name: ${m.name || ''}`,
+      `version: ${m.version || '1.0.0'}`,
+      `description: ${String(m.description || '').slice(0, 120)}`,
+      `author: ${m.author || 'AgentBuddy'}`,
+    ]
+    if (mcps.length) lines.push('mcpServers:', mcps.join('\n'))
+    if (skills.length) lines.push('skills:', skills.join('\n'))
+    if (envs.length) lines.push('envVars:', envs.join('\n'))
+    return lines.join('\n')
+  })
 
   function toggleUrlSkill(name: string) {
     const i = urlSelectedSkills.value.indexOf(name)
@@ -352,7 +385,8 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       }
       plugin.refreshPluginList()
     } catch (e: any) {
-      ui.toast('构建失败: ' + e.message, 'err')
+      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查后端是否运行' : (e.message || String(e))
+      ui.toast('构建失败: ' + msg, 'err')
     } finally {
       urlBuilding.value = false
     }
@@ -369,6 +403,6 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     loadExistingPlugin, buildPluginConfig, previewPlugin, savePluginFile, installPluginFile,
     urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills,
     analyzeSource, toggleUrlSkill, buildFromSource,
-    URL_NAME_MAX, URL_DESC_MAX, urlNameValid,
+    URL_NAME_MAX, URL_DESC_MAX, urlNameValid, urlYamlPreview,
   }
 })

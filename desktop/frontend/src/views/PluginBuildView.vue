@@ -8,6 +8,7 @@ import { useSkillStore } from '../stores/skill'
 import { usePluginStore } from '../stores/plugin'
 import { useAiGenerateStore } from '../stores/aiGenerate'
 import { useKeysStore } from '../stores/keys'
+import { useUiStore } from '../stores/ui'
 
 type CatKey = 'llm' | 'mcp' | 'skill' | 'key' | 'agent' | 'rule' | 'cmd'
 
@@ -18,6 +19,7 @@ const skill = useSkillStore()
 const plugin = usePluginStore()
 const ai = useAiGenerateStore()
 const keys = useKeysStore()
+const ui = useUiStore()
 const { dialogOpen, prompt, level, generating, output, generatedConfig } = storeToRefs(ai)
 
 const {
@@ -25,7 +27,7 @@ const {
   selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
   availableSubagents, availableRules, availableCommands,
   ideImport, ideImportStats, importedIdeMcp, wizardStep, buildMode, mcpFilterText, importing,
-  urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills, urlNameValid,
+  urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills, urlNameValid, urlYamlPreview,
 } = storeToRefs(pb)
 const { URL_NAME_MAX, URL_DESC_MAX } = pb
 const { mcpTemplate } = storeToRefs(mcp)
@@ -374,6 +376,15 @@ function onLoadPlugin() {
 function onClear() {
   nameTouched.value = false
   newPlugin()
+}
+
+function copyYaml() {
+  if (!urlYamlPreview.value) return
+  navigator.clipboard.writeText(urlYamlPreview.value).then(() => {
+    ui.toast('已复制到剪贴板')
+  }).catch(() => {
+    ui.toast('复制失败', 'err')
+  })
 }
 
 onMounted(() => {
@@ -1339,6 +1350,15 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- plugin.yaml 预览（与 AI 生成模式一致） -->
+        <div v-if="urlMeta" class="pb-url-section">
+          <div class="pb-url-label-row">
+            <label class="pb-ai-label">plugin.yaml 预览</label>
+            <button type="button" class="pb-btn pb-btn-ghost pb-url-copy-btn" @click="copyYaml">复制</button>
+          </div>
+          <pre class="pb-ai-yaml">{{ urlYamlPreview }}</pre>
+        </div>
+
         <!-- 操作按钮 -->
         <div class="pb-url-actions">
           <button
@@ -1876,6 +1896,7 @@ onMounted(() => {
 .pb-url-result { display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: 12px; border: 1px solid var(--border-base); }
 .pb-url-section { display: flex; flex-direction: column; gap: 6px; }
 .pb-url-label-row { display: flex; justify-content: space-between; align-items: baseline; }
+.pb-url-copy-btn { padding: 3px 10px; font-size: 12px; }
 .pb-url-count { font-size: 11px; color: var(--color-ink-500); font-variant-numeric: tabular-nums; }
 .pb-url-count.near { color: var(--color-ink-600, #b45309); }
 .pb-url-count.over { color: #ef4444; font-weight: 600; }
