@@ -1,0 +1,466 @@
+<style>
+  :root { --ink:#17251f; --muted:#6f7e76; --line:#d9e1da; --paper:#f4f7f3; --white:#fff; --teal:#087f71; --lime:#dbee72; --rust:#d45b3c; --soft:#eaf4ec; --amber:#f6edca; --glow:rgba(8,127,113,.22); --bg-a:#f4f7f3; --bg-b:#dfeee5; --bg-c:#f6edca; }
+  .theme-aurora { --ink:#17251f; --muted:#6f7e76; --line:#d9e1da; --paper:#f4f7f3; --white:#fff; --teal:#087f71; --lime:#dbee72; --rust:#d45b3c; --soft:#eaf4ec; --amber:#f6edca; --glow:rgba(8,127,113,.24); --bg-a:#f4f7f3; --bg-b:#dfeee5; --bg-c:#f6edca; }
+  .theme-cyber { --ink:#101726; --muted:#657289; --line:#c8d4e2; --paper:#edf4ff; --white:#fff; --teal:#2563eb; --lime:#8df5ff; --rust:#ff5a7a; --soft:#e6f0ff; --amber:#ffe7a8; --glow:rgba(37,99,235,.24); --bg-a:#eef6ff; --bg-b:#dbeafe; --bg-c:#ffe7f0; }
+  .theme-graphite { --ink:#1f1f1a; --muted:#79756b; --line:#d8d2c3; --paper:#f5f1e8; --white:#fffaf0; --teal:#6b8f71; --lime:#e6ef88; --rust:#b95738; --soft:#ece8da; --amber:#efe0b0; --glow:rgba(185,87,56,.2); --bg-a:#f5f1e8; --bg-b:#e6e0d1; --bg-c:#d7e6d3; }
+  * { box-sizing:border-box; }
+  .page { max-width:1440px; margin:0 auto; color:var(--ink); font-family:"Avenir Next",Avenir,sans-serif; }
+  .page:before { content:""; position:fixed; inset:0; z-index:-1; background:radial-gradient(circle at 15% 12%, var(--bg-c), transparent 30%), radial-gradient(circle at 78% 4%, var(--bg-b), transparent 28%), linear-gradient(135deg, var(--bg-a), #fff 58%, var(--bg-b)); }
+  .intro { display:flex; justify-content:space-between; align-items:end; gap:24px; margin:12px 0 18px; }
+  .eyebrow { color:var(--teal); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; }
+  h1 { margin:6px 0; font-family:Georgia,serif; font-size:32px; letter-spacing:0; }
+  .intro p { max-width:760px; margin:0; color:var(--muted); font-size:12px; line-height:1.55; }
+  .decision { padding:10px 13px; border-left:3px solid var(--rust); color:#53635a; font-size:10px; line-height:1.5; }
+  .frame { height:760px; overflow:hidden; border:1px solid #ccd7cf; border-radius:8px; background:linear-gradient(135deg,var(--paper),#fff 48%,var(--soft)); box-shadow:0 18px 42px rgba(23,37,31,.12), 0 0 0 1px rgba(255,255,255,.5) inset; }
+  .appbar { height:56px; display:flex; align-items:center; gap:22px; padding:0 18px; background:linear-gradient(135deg,var(--ink),#24382f); color:#fff; }
+  .brand { font-size:13px; font-weight:900; white-space:nowrap; }
+  .mark { display:inline-grid; place-items:center; width:26px; height:26px; margin-right:7px; border:1px solid #89a497; color:var(--lime); }
+  .app-link { color:#b8c9c0; font-size:10px; }
+  .app-status { margin-left:auto; color:#aabdb3; font-size:9px; }
+  .app-status b { color:var(--lime); }
+  button { font:inherit; }
+  .primary { border:0; border-radius:4px; padding:9px 12px; background:var(--rust); color:#fff; font-size:10px; font-weight:800; cursor:pointer; }
+  .secondary { border:1px solid var(--line); border-radius:4px; padding:8px 10px; background:#fff; color:var(--ink); font-size:9px; cursor:pointer; }
+  .shell { display:grid; grid-template-columns:206px 1fr; height:704px; }
+  .side { padding:12px 10px; border-right:1px solid var(--line); background:#fff; }
+  .side-label { margin:15px 9px 5px; color:#92a098; font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:.09em; }
+  .side-label:first-child { margin-top:4px; }
+  .nav { display:flex; justify-content:space-between; align-items:center; width:100%; margin:2px 0; padding:10px 9px; border:0; border-radius:4px; background:transparent; color:#53635a; font-size:10px; cursor:pointer; }
+  .nav.active { background:var(--soft); color:var(--teal); font-weight:800; }
+  .nav.primary-nav { border:1px solid var(--teal); background:linear-gradient(135deg,var(--teal),#0a9b86); color:#fff; box-shadow:0 10px 22px var(--glow); font-weight:900; }
+  .nav.primary-nav small { color:#fff; }
+  .nav small { color:#87958d; font-size:8px; }
+  .main { padding:21px; overflow:auto; }
+  .view { display:none; }
+  .view.active { display:block; }
+  .head { display:flex; justify-content:space-between; align-items:start; gap:16px; margin-bottom:16px; }
+  .head-kicker { margin-bottom:5px; color:var(--teal); font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; }
+  h2 { margin:0; font-family:Georgia,serif; font-size:22px; letter-spacing:0; }
+  .sub { margin:4px 0 0; color:var(--muted); font-size:10px; }
+  .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-bottom:10px; }
+  .metric,.panel { border:1px solid var(--line); border-radius:6px; background:rgba(255,255,255,.9); backdrop-filter:blur(10px); }
+  .metric { min-height:98px; padding:13px; }
+  .metric small { color:#86938c; font-size:8px; text-transform:uppercase; }
+  .metric strong { display:block; margin:10px 0 3px; font-family:Georgia,serif; font-size:23px; font-weight:500; }
+  .metric span { color:#64756c; font-size:9px; }
+  .grid { display:grid; grid-template-columns:1.2fr .8fr; gap:10px; }
+  .panel { padding:14px; }
+  .panel-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .panel h3 { margin:0; font-size:11px; }
+  .row { display:grid; grid-template-columns:1fr 1.2fr auto; gap:8px; align-items:center; min-height:49px; border-top:1px solid #edf1ed; font-size:9px; }
+  .row:first-of-type { border-top:0; }
+  .tag { display:inline-flex; border-radius:3px; padding:2px 5px; background:#e1f2df; color:#2d743d; font-size:8px; font-weight:800; }
+  .tag.wait { background:#fae4d4; color:#a65233; }
+  .usage { padding:11px 0; border-top:1px solid #edf1ed; }
+  .usage:first-of-type { border-top:0; }
+  .usage b { display:flex; justify-content:space-between; font-size:9px; }
+  .usage span { color:var(--muted); font-size:8px; }
+  .bar { height:5px; margin:7px 0 4px; overflow:hidden; border-radius:3px; background:#e7ece7; }
+  .bar i { display:block; height:100%; background:var(--teal); }
+  .quiet-support { margin-top:10px; padding:10px; border:1px dashed #cbd5ce; color:#6a786f; font-size:9px; }
+  .priority { display:grid; grid-template-columns:1.3fr .7fr; gap:10px; margin-bottom:10px; }
+  .priority-panel { min-height:154px; padding:15px; border:1px solid #c9d8ce; border-left:4px solid var(--rust); border-radius:6px; background:#fff; }
+  .priority-panel h3 { margin:0; font-size:12px; }
+  .priority-panel p { margin:5px 0 12px; color:var(--muted); font-size:9px; line-height:1.5; }
+  .priority-row { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; padding:9px 0; border-top:1px solid #edf1ed; font-size:9px; }
+  .priority-row span { color:var(--muted); font-size:8px; }
+  .summary-panel { padding:15px; border:1px solid var(--line); border-radius:6px; background:#eef4ed; }
+  .summary-panel h3 { margin:0 0 10px; font-size:11px; }
+  .summary-line { display:flex; justify-content:space-between; padding:7px 0; border-top:1px solid #dce8dd; color:#53635a; font-size:9px; }
+  .summary-line strong { color:var(--ink); font-family:Georgia,serif; font-size:15px; font-weight:500; }
+  .theme-strip { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; margin-bottom:12px; padding:12px; border:1px solid var(--line); border-radius:7px; background:rgba(255,255,255,.72); box-shadow:0 12px 24px rgba(23,37,31,.08); }
+  .theme-strip b { display:block; font-size:10px; }
+  .theme-strip span { color:var(--muted); font-size:8px; }
+  .theme-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .theme-dot { min-width:78px; padding:7px 9px; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-size:8px; cursor:pointer; }
+  .theme-dot.active { border-color:var(--teal); box-shadow:0 0 0 3px var(--glow); font-weight:900; }
+  .tabs { display:flex; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+  .tab { padding:8px 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); font-size:9px; cursor:pointer; }
+  .tab.active { border-bottom-color:var(--teal); color:var(--ink); font-weight:800; }
+  .market-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+  .market-card { min-height:178px; padding:14px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .market-card .market-meta { display:flex; justify-content:space-between; color:var(--muted); font-size:8px; }
+  .market-card h3 { margin:20px 0 5px; font-size:12px; }
+  .market-card p { min-height:38px; color:var(--muted); font-size:9px; line-height:1.5; }
+  .market-card footer { display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
+  .market-card footer span { color:var(--muted); font-size:8px; }
+  .asset-list { display:grid; gap:7px; }
+  .asset-row { display:grid; grid-template-columns:38px 1fr 110px auto; align-items:center; gap:10px; padding:11px; border:1px solid var(--line); border-radius:5px; background:#fff; }
+  .asset-row b { font-size:10px; }
+  .asset-row span { display:block; margin-top:3px; color:var(--muted); font-size:8px; }
+  .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+  .card { min-height:150px; padding:14px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  .card:hover { border-color:var(--teal); }
+  .card b { display:block; margin-bottom:5px; font-size:11px; }
+  .card p { color:var(--muted); font-size:9px; line-height:1.5; }
+  .card strong { display:block; margin-top:22px; font-family:Georgia,serif; font-size:21px; font-weight:500; }
+  .atom-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; }
+  .atom { min-height:126px; padding:13px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; }
+  .atom:hover { border-color:var(--teal); }
+  .atom-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .atom-icon { display:grid; place-items:center; width:30px; height:30px; border:1px solid #c8d4cb; background:var(--soft); color:var(--teal); font-size:9px; font-weight:900; }
+  .atom-count { color:var(--muted); font-family:Georgia,serif; font-size:17px; }
+  .atom b { display:block; margin-top:12px; font-size:10px; }
+  .atom p { margin:4px 0 0; color:var(--muted); font-size:8px; line-height:1.45; }
+  .atom-foot { display:flex; justify-content:space-between; align-items:center; margin-top:10px; color:#64756c; font-size:8px; }
+  .team-list { display:grid; gap:8px; }
+  .team { display:grid; grid-template-columns:40px 1fr auto; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:5px; background:#fff; }
+  .avatar { display:grid; place-items:center; width:38px; height:38px; background:var(--soft); color:var(--teal); font-weight:900; }
+  .team b { font-size:10px; }
+  .team span { display:block; margin-top:3px; color:var(--muted); font-size:8px; }
+  .rules { display:grid; gap:8px; }
+  .rule { display:grid; grid-template-columns:32px 1fr 130px 42px; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:5px; background:#fff; }
+  .rule-icon { display:grid; place-items:center; width:30px; height:30px; background:var(--soft); color:var(--teal); font-weight:900; }
+  .rule b { font-size:10px; }
+  .rule span { display:block; margin-top:2px; color:var(--muted); font-size:8px; }
+  .target { color:#58685f; font-size:9px; }
+  .toggle { width:34px; height:19px; padding:2px; border-radius:10px; background:#cbd5ce; cursor:pointer; }
+  .toggle:after { content:""; display:block; width:15px; height:15px; border-radius:50%; background:#fff; }
+  .toggle.on { background:var(--teal); }
+  .toggle.on:after { margin-left:15px; }
+  /* SVG icon system */
+  .ico { width:1em; height:1em; display:inline-block; vertical-align:-0.125em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .ico-fill { fill:currentColor; stroke:none; }
+  .nav-ico { width:16px; height:16px; flex-shrink:0; opacity:.7; }
+  .nav.active .nav-ico, .nav.primary-nav .nav-ico { opacity:1; }
+  .metric-ico { width:18px; height:18px; color:var(--teal); opacity:.8; }
+  .ide-brand-ico { width:22px; height:22px; }
+  .atom-ico { width:20px; height:20px; color:var(--teal); }
+  .ide-list { display:grid; gap:8px; }
+  .ide-row { display:grid; grid-template-columns:42px 1.1fr .9fr .8fr auto; align-items:center; gap:11px; padding:12px; border:1px solid var(--line); border-radius:5px; background:#fff; }
+  .ide-mark { display:grid; place-items:center; width:40px; height:40px; border:1px solid #c8d4cb; background:var(--soft); color:var(--teal); font-size:10px; font-weight:900; }
+  .ide-row b { display:block; font-size:10px; }
+  .ide-row span { display:block; margin-top:3px; color:var(--muted); font-size:8px; }
+  .ide-usage strong { display:block; font-family:Georgia,serif; font-size:16px; font-weight:500; }
+  .ide-actions { display:flex; gap:6px; }
+  .ide-command { display:grid; grid-template-columns:1.05fr .95fr; gap:10px; margin-bottom:10px; }
+  .ide-hero { padding:16px; border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:7px; background:#fff; box-shadow:0 12px 24px rgba(23,37,31,.08); }
+  .ide-hero h3 { margin:0 0 5px; font-size:13px; }
+  .ide-hero p { margin:0 0 12px; color:var(--muted); font-size:9px; line-height:1.5; }
+  .ide-toolbar { display:flex; flex-wrap:wrap; gap:6px; }
+  .brand-filter { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .brand-filter button { border:1px solid var(--line); border-radius:999px; padding:7px 10px; background:#fff; color:var(--muted); font-size:8px; cursor:pointer; }
+  .brand-filter button.active { border-color:var(--teal); background:var(--soft); color:var(--teal); font-weight:900; }
+  .ide-dock-preview { display:grid; gap:7px; padding:14px; border:1px solid var(--line); border-radius:7px; background:#fff; }
+  .dock-chip { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:9px; border:1px solid #edf1ed; border-radius:5px; font-size:9px; }
+  .dock-chip span { color:var(--muted); font-size:8px; }
+  .usage-summary { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  .usage-chart { display:flex; align-items:end; gap:7px; height:120px; padding-top:12px; }
+  .usage-chart i { flex:1; min-width:12px; border-radius:2px 2px 0 0; background:#80b8a4; }
+  .share-option { display:grid; grid-template-columns:1fr auto; align-items:center; gap:12px; padding:12px 0; border-top:1px solid #edf1ed; }
+  .share-option:first-of-type { border-top:0; }
+  .share-option b { display:block; font-size:10px; }
+  .share-option span { color:var(--muted); font-size:8px; }
+  .account-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  .security-row { display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; padding:11px 0; border-top:1px solid #edf1ed; font-size:9px; }
+  .security-row:first-of-type { border-top:0; }
+  .security-row span { display:block; color:var(--muted); font-size:8px; margin-top:2px; }
+  .guide { display:grid; grid-template-columns:190px 1fr; min-height:430px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#fff; }
+  .steps { padding:17px; background:#eef2ec; }
+  .step { display:grid; grid-template-columns:24px 1fr; gap:8px; min-height:64px; color:#718078; font-size:9px; }
+  .step i { display:grid; place-items:center; align-self:start; width:23px; height:23px; border:1px solid #aab9af; border-radius:50%; background:#fff; font-style:normal; }
+  .step.active { color:var(--ink); font-weight:800; }
+  .step.active i { border:4px solid #bce4d7; background:var(--teal); color:#fff; }
+  .guide-body { padding:22px; }
+  .guide-body h3 { margin:0 0 5px; font-family:Georgia,serif; font-size:20px; }
+  .guide-body p { color:var(--muted); font-size:9px; line-height:1.5; }
+  .checks { margin:16px 0; }
+  .check { padding:11px 0; border-top:1px solid #edf1ed; font-size:9px; }
+  .demo-switch { display:flex; align-items:center; gap:5px; margin-bottom:12px; padding:8px; border:1px solid var(--line); border-radius:6px; background:#eef2ec; }
+  .demo-switch b { margin-right:auto; font-size:9px; }
+  .demo-mode { padding:7px 9px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--muted); font-size:8px; cursor:pointer; }
+  .demo-mode.active { border-color:#b9ccc0; background:#fff; color:var(--ink); font-weight:800; }
+  .market-card.interactive { cursor:pointer; }
+  .market-card.interactive:hover { border-color:var(--teal); box-shadow:0 7px 18px rgba(23,37,31,.08); }
+  .overlay { position:fixed; inset:0; z-index:20; display:none; background:rgba(15,28,22,.42); }
+  .overlay.open { display:block; }
+  .dialog { position:absolute; background:#fff; box-shadow:0 20px 60px rgba(14,29,22,.25); }
+  .dialog.drawer { top:0; right:0; width:min(480px,92vw); height:100%; padding:24px; overflow:auto; }
+  .dialog.page-detail { inset:4vh 5vw; padding:24px; overflow:auto; border-radius:7px; }
+  .dialog.wizard { top:50%; left:50%; width:min(760px,92vw); min-height:500px; padding:0; overflow:hidden; border-radius:7px; transform:translate(-50%,-50%); }
+  .dialog-top { display:flex; justify-content:space-between; align-items:start; gap:16px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+  .dialog-top h2 { font-size:21px; }
+  .icon-button { display:grid; place-items:center; width:32px; height:32px; border:1px solid var(--line); border-radius:4px; background:#fff; cursor:pointer; }
+  .detail-layout { display:grid; grid-template-columns:1.2fr .8fr; gap:18px; margin-top:18px; }
+  .detail-section { padding:14px 0; border-top:1px solid #edf1ed; }
+  .detail-section h3 { margin:0 0 7px; font-size:10px; }
+  .detail-section p,.detail-section li { color:var(--muted); font-size:9px; line-height:1.55; }
+  .detail-section ul { margin:0; padding-left:16px; }
+  .sticky-actions { position:sticky; bottom:-24px; display:flex; justify-content:flex-end; gap:7px; margin:20px -24px -24px; padding:14px 24px; border-top:1px solid var(--line); background:#fff; }
+  .wizard-shell { display:grid; grid-template-columns:190px 1fr; min-height:500px; }
+  .wizard-side { padding:22px; background:#eef2ec; }
+  .wizard-main { display:flex; flex-direction:column; padding:24px; }
+  .wizard-content { flex:1; }
+  .wizard-actions { display:flex; justify-content:space-between; align-items:center; padding-top:16px; border-top:1px solid var(--line); }
+  .choice { display:grid; grid-template-columns:20px 1fr auto; align-items:center; gap:9px; margin-top:8px; padding:12px; border:1px solid var(--line); border-radius:5px; cursor:pointer; }
+  .choice.selected { border-color:var(--teal); background:var(--soft); }
+  .choice span { color:var(--muted); font-size:8px; }
+  .result-mark { display:grid; place-items:center; width:54px; height:54px; margin:34px 0 16px; border-radius:50%; background:var(--teal); color:#fff; font-size:22px; }
+  .toast { position:fixed; right:22px; bottom:22px; z-index:30; display:none; padding:12px 15px; border-radius:5px; background:var(--ink); color:#fff; font-size:9px; box-shadow:0 10px 30px rgba(0,0,0,.2); }
+  .toast.show { display:block; }
+  @media (max-width:800px) {
+    .intro { align-items:start; flex-direction:column; }
+    .frame { height:850px; }
+    .shell { grid-template-columns:62px 1fr; height:794px; }
+    .side { padding:8px 6px; }
+    .side-label,.nav span { display:none; }
+    .nav { justify-content:center; }
+    .main { padding:13px; }
+    .metrics,.cards,.atom-grid,.market-grid { grid-template-columns:1fr 1fr; }
+    .grid,.priority,.ide-command,.account-grid,.theme-strip { grid-template-columns:1fr; }
+    .rule { grid-template-columns:30px 1fr 34px; }
+    .rule .target { display:none; }
+    .ide-row { grid-template-columns:38px 1fr auto; }
+    .ide-row > .ide-meta,.ide-row > .ide-usage { display:none; }
+    .ide-actions { flex-direction:column; }
+    .asset-row { grid-template-columns:34px 1fr auto; }
+    .asset-row > :nth-child(3) { display:none; }
+    .usage-summary { grid-template-columns:1fr; }
+    .guide { grid-template-columns:62px 1fr; }
+    .detail-layout,.wizard-shell { grid-template-columns:1fr; }
+    .wizard-side { display:none; }
+    .demo-switch { align-items:stretch; flex-direction:column; }
+    .steps { padding:12px 8px; }
+    .step div { display:none; }
+    .app-link { display:none; }
+  }
+</style>
+
+<section class="page">
+  <header class="intro">
+    <div><div class="eyebrow">Direction A · IDE delivery first</div><h1>同步到 IDE 是主干，市场退到资源发现层</h1><p>工作台优先解决“配置是否正确交付到各 IDE”。IDE 管理承载安装、会话、Remote、ACP 和 Token 用量；我的区域补足账号安全与额度；市场只作为 MCP、Skill、插件和模型 Token 的发现入口。</p></div>
+    <div class="decision"><b>商业原则</b><br>不区隔核心能力版本，只对推荐次数、发布数量、团队成员/空间和自动推送规则数量设置额度；支持捐赠，不制造功能焦虑。</div>
+  </header>
+
+  <div class="frame">
+    <header class="appbar"><div class="brand"><span class="mark">A</span>AGENTBUDDY</div><span class="app-link">同步工作台</span><span class="app-link">IDE 会话</span><span class="app-status"><b>12</b> IDE 在线 · 1 项待同步</span><button class="primary" onclick="showView('sync')">立即同步</button></header>
+    <div class="shell">
+      <aside class="side">
+        <div class="side-label">本地管理</div>
+        <button class="nav primary-nav" data-view="sync" onclick="showView('sync',this)"><span>同步到 IDE</span><small>核心</small></button>
+        <button class="nav active" data-view="overview" onclick="showView('overview',this)"><span>环境总览</span><small>⌂</small></button>
+        <button class="nav" data-view="ides" onclick="showView('ides',this)"><span>IDE 管理</span><small>12</small></button>
+        <button class="nav" data-view="agents" onclick="showView('agents',this)"><span>Agent 管理</span><small>8</small></button>
+        <button class="nav" data-view="plugins" onclick="showView('plugins',this)"><span>插件管理</span><small>18</small></button>
+        <div class="side-label">协作</div>
+        <button class="nav" data-view="mine" onclick="showView('mine',this)"><span>我的</span><small>●</small></button>
+        <button class="nav" data-view="team" onclick="showView('team',this)"><span>团队空间</span><small>2</small></button>
+        <button class="nav" data-view="push" onclick="showView('push',this)"><span>自动推送</span><small>3</small></button>
+        <div class="side-label">资源市场</div>
+        <button class="nav" data-view="mcp-market" onclick="showView('mcp-market',this)"><span>MCP 市场</span><small>24</small></button>
+        <button class="nav" data-view="skill-market" onclick="showView('skill-market',this)"><span>Skill 市场</span><small>68</small></button>
+        <button class="nav" data-view="plugin-market" onclick="showView('plugin-market',this)"><span>插件市场</span><small>126</small></button>
+        <button class="nav" data-view="llm-market" onclick="showView('llm-market',this)"><span>模型 Token 市场</span><small>8</small></button>
+      </aside>
+
+      <main class="main">
+        <section class="view active" id="view-overview">
+          <div class="head"><div><h2>环境与交付总览</h2><p class="sub">先发现配置差异，再直接修复或同步。</p></div><button class="secondary">刷新状态</button></div>
+          <div class="theme-strip"><div><b>主题与背景规范</b><span>主题可作为团队配置：色板、背景、密度、卡片风格和状态色都可定制，并随团队空间同步。</span></div><div class="theme-actions"><button class="theme-dot active" onclick="setTheme('aurora',this)">Aurora</button><button class="theme-dot" onclick="setTheme('cyber',this)">Cyber</button><button class="theme-dot" onclick="setTheme('graphite',this)">Graphite</button></div></div>
+          <div class="metrics"><div class="metric"><small>已连接 IDE</small><strong>12</strong><span>9 桌面端 · 3 CLI</span></div><div class="metric"><small>安全 Token</small><strong>8</strong><span>全部保存在本机</span></div><div class="metric"><small>本地插件</small><strong>18</strong><span>3 个有新版本</span></div><div class="metric"><small>同步成功率</small><strong>98.7%</strong><span>近 30 天 462 次</span></div></div>
+          <div class="grid"><section class="panel"><div class="panel-head"><h3>目标 IDE 健康度</h3><button class="secondary" onclick="showView('sync')">同步选中项</button></div><div class="row"><b>Codex</b><span>LLM · MCP · Plugin</span><i class="tag">已同步</i></div><div class="row"><b>Claude Code</b><span>LLM · Skills · Rules</span><i class="tag">已同步</i></div><div class="row"><b>Cursor</b><span>Plugin v1.3 → v1.4</span><i class="tag wait">待更新</i></div><div class="row"><b>JetBrains ACP</b><span>2 agent servers</span><i class="tag">已注册</i></div></section><aside class="panel"><div class="panel-head"><h3>本月用量</h3><button class="secondary" onclick="showView('mine')">查看我的</button></div><div class="usage"><b>Token 推荐 <span>6 / 10 次</span></b><div class="bar"><i style="width:60%"></i></div></div><div class="usage"><b>市场发布 <span>2 / 5 个</span></b><div class="bar"><i style="width:40%"></i></div></div><div class="usage"><b>自动推送 <span>3 / 3 条规则</span></b><div class="bar"><i style="width:100%;background:#d45b3c"></i></div></div><div class="quiet-support">达到额度时可单项扩容，也可通过捐赠支持项目持续维护。</div></aside></div>
+        </section>
+
+        <section class="view" id="view-ides">
+          <div class="head"><div><h2>IDE 管理</h2><p class="sub">品牌筛选、安装状态、打开/同步/会话/配置、ACP、Remote Web 和 Token 用量一站式管理。</p></div><button class="primary">刷新检测</button></div>
+          <div class="ide-command"><section class="ide-hero"><div class="head-kicker">Selected IDE · Codex CLI</div><h3>当前选中：Codex</h3><p>路径 <code>/opt/homebrew/bin/codex</code> · 支持 CLI 会话恢复 · 已启用 Responses API · 最近同步 2 分钟前。</p><div class="ide-toolbar"><button class="primary">打开</button><button class="secondary">同步</button><button class="secondary">会话 18</button><button class="secondary">配置</button><button class="secondary">重装</button><button class="secondary">卸载</button></div></section><aside class="ide-dock-preview"><div class="dock-chip"><div><b>同步 Dock</b><span>打开、同步、配置、安装、卸载按选中 IDE 动态变化</span></div><i class="tag">核心</i></div><div class="dock-chip"><div><b>Remote Web</b><span>启动服务、查看密码、复制链接、重置密码</span></div><i class="tag">安全</i></div><div class="dock-chip"><div><b>ACP / JetBrains</b><span>启动 ACP、同步到 JetBrains、打开 IDEA</span></div><i class="tag wait">专属</i></div></aside></div>
+          <div class="brand-filter"><button class="active">全部 AIDE</button><button>Claude</button><button>Codex</button><button>Cursor</button><button>JetBrains</button><button>OpenCode</button><button>更多 11</button></div>
+          <div class="ide-list">
+            <article class="ide-row"><div class="ide-mark">CX</div><div><b>Codex CLI</b><span>已安装 · CLI · 18 个会话</span></div><div class="ide-meta"><b>GPT-5 Codex</b><span>Responses API · config.toml</span></div><div class="ide-usage"><strong>1.28M</strong><span>本月 Token · 64%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Codex','1.28M','64%')">用量</button><button class="secondary" onclick="openShare('Codex')">会话</button><button class="secondary">同步</button></div></article>
+            <article class="ide-row"><div class="ide-mark">CL</div><div><b>Claude Code</b><span>已安装 · CLI · 12 个会话</span></div><div class="ide-meta"><b>Claude Sonnet</b><span>Anthropic API · settings.json</span></div><div class="ide-usage"><strong>864K</strong><span>本月 Token · 43%</span></div><div class="ide-actions"><button class="secondary" onclick="openUsage('Claude Code','864K','43%')">用量</button><button class="secondary" onclick="openShare('Claude Code')">会话</button><button class="secondary">配置</button></div></article>
+            <article class="ide-row"><div class="ide-mark">JB</div><div><b>JetBrains ACP</b><span>已注册 · ACP · 2 agent servers</span></div><div class="ide-meta"><b>Copilot / Cline</b><span>~/.jetbrains/acp.json</span></div><div class="ide-usage"><strong>312K</strong><span>本月 Token · 15%</span></div><div class="ide-actions"><button class="secondary">启动 ACP</button><button class="secondary">同步到 JB</button></div></article>
+            <article class="ide-row"><div class="ide-mark">RW</div><div><b>OpenCode Remote Web</b><span>本地服务 · 密码保护</span></div><div class="ide-meta"><b>DeepSeek V3</b><span>复制免登录链接 · 可重置</span></div><div class="ide-usage"><strong>206K</strong><span>本月 Token · 10%</span></div><div class="ide-actions"><button class="secondary">启动</button><button class="secondary">复制链接</button><button class="secondary">重置</button></div></article>
+          </div>
+          <div class="quiet-support">Token 数据优先从 IDE 或 Provider 的可用接口读取；不支持查询的 IDE 显示本地估算，并明确标注数据来源。</div>
+        </section>
+
+        <section class="view" id="view-tokens">
+          <div class="head"><div><h2>Token 市场</h2><p class="sub">发现、比较并购买可用于 Agent 的模型额度；购买后在“我的 Token”中管理。</p></div><button class="secondary">智能推荐 · 6 / 10</button></div>
+          <div class="tabs"><button class="tab active">Token 市场</button><button class="tab">我的 Token</button><button class="tab">密钥</button><button class="tab">用量</button></div>
+          <div class="market-grid">
+            <article class="market-card"><div class="market-meta"><span>OpenAI · 官方渠道</span><i class="tag">低延迟</i></div><h3>Codex 开发额度包</h3><p>适合持续代码生成与工具调用，支持 Responses API。</p><footer><span>¥ 99 / 10M Token</span><button class="primary">查看方案</button></footer></article>
+            <article class="market-card"><div class="market-meta"><span>Anthropic · 合作渠道</span><i class="tag">长上下文</i></div><h3>Claude 团队额度包</h3><p>适合需求分析、代码审查与长文档任务，可分配给团队成员。</p><footer><span>¥ 129 / 月</span><button class="primary">查看方案</button></footer></article>
+            <article class="market-card"><div class="market-meta"><span>聚合路由 · 多模型</span><i class="tag wait">省 27%</i></div><h3>智能混合额度</h3><p>按任务在多个 Provider 间选择价格与质量平衡的模型。</p><footer><span>按量计费</span><button class="primary">比较成本</button></footer></article>
+          </div>
+          <div class="quiet-support"><b>与 LLM 管理的边界：</b>这里管理可购买服务、账户额度、密钥和实际消耗；模型协议、Provider 参数、路由策略与网关配置仍在 Agent → LLM 配置中维护。</div>
+        </section>
+
+        <section class="view" id="view-market">
+          <div class="head"><div><div class="head-kicker">Market Explorer</div><h2>市场总览</h2><p class="sub">从能力、工具、组合包和模型服务中发现可安装资源，再回到本地管理。</p></div><button class="secondary">搜索全部市场</button></div>
+          <div class="market-grid">
+            <article class="market-card" onclick="showView('mcp-market')"><div class="market-meta"><span>MCP</span><i class="tag">24 个服务</i></div><h3>MCP 市场</h3><p>发现工具服务、数据连接器与可复用的启动配置。</p><footer><span>工具与外部服务</span><button class="primary">进入 Explorer</button></footer></article>
+            <article class="market-card" onclick="showView('skill-market')"><div class="market-meta"><span>Skills</span><i class="tag">68 个技能</i></div><h3>Skill 市场</h3><p>搜索、安装和升级面向具体任务的专业技能。</p><footer><span>任务能力</span><button class="primary">进入 Explorer</button></footer></article>
+            <article class="market-card" onclick="showView('plugin-market')"><div class="market-meta"><span>Plugins</span><i class="tag">126 个插件</i></div><h3>插件市场</h3><p>发现经过兼容性与安全检查的能力组合。</p><footer><span>组合与分发</span><button class="primary">进入 Explorer</button></footer></article>
+            <article class="market-card" onclick="showView('llm-market')"><div class="market-meta"><span>LLM / Token</span><i class="tag wait">8 个方案</i></div><h3>LLM / Token 市场</h3><p>比较 Provider 服务、模型额度和可用的 Token 方案。</p><footer><span>模型与用量</span><button class="primary">进入 Explorer</button></footer></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-mcp-market">
+          <div class="head"><div><div class="head-kicker">Resource Market / MCP</div><h2>MCP 市场</h2><p class="sub">发现工具服务和数据连接器，安装后回到 MCP 管理维护本地配置。</p></div><button class="secondary" onclick="showView('agents')">回到 Agent 管理</button></div>
+          <div class="tabs"><button class="tab active">推荐</button><button class="tab">开发工具</button><button class="tab">数据服务</button><button class="tab">团队热门</button></div>
+          <div class="market-grid"><article class="market-card"><div class="market-meta"><span>官方连接器</span><i class="tag">已验证</i></div><h3>GitHub MCP</h3><p>仓库、Issue、PR 和代码搜索工具，支持最小权限配置。</p><footer><span>4.9 · 8.4K 安装</span><button class="primary">安装</button></footer></article><article class="market-card"><div class="market-meta"><span>数据服务</span><i class="tag">团队热门</i></div><h3>Postgres MCP</h3><p>安全访问开发数据库，支持只读模式和环境隔离。</p><footer><span>4.8 · 3.1K 安装</span><button class="primary">查看详情</button></footer></article></div>
+        </section>
+
+        <section class="view" id="view-skill-market">
+          <div class="head"><div><div class="head-kicker">Resource Market / Skills</div><h2>Skill 市场</h2><p class="sub">按任务发现可复用技能，安装后在 Skills 管理中启用和升级。</p></div><button class="secondary" onclick="showView('agents')">回到 Agent 管理</button></div>
+          <div class="tabs"><button class="tab active">推荐</button><button class="tab">研发</button><button class="tab">产品</button><button class="tab">设计</button></div>
+          <div class="market-grid"><article class="market-card"><div class="market-meta"><span>研发效率</span><i class="tag">官方推荐</i></div><h3>Systematic Debugging</h3><p>将症状、证据、假设和验证步骤组织成可执行的排查流程。</p><footer><span>4.9 · 12K 安装</span><button class="primary">安装</button></footer></article><article class="market-card"><div class="market-meta"><span>产品协作</span><i class="tag">团队热门</i></div><h3>PRD Facilitator</h3><p>从业务目标整理用户故事、验收标准、优先级与风险。</p><footer><span>4.8 · 6.2K 安装</span><button class="primary">查看详情</button></footer></article></div>
+        </section>
+
+        <section class="view" id="view-plugin-market">
+          <div class="head"><div><div class="head-kicker">Resource Market / Plugins</div><h2>插件市场</h2><p class="sub">发现经过兼容性与安全检查的能力组合，安装后进入插件管理。</p></div><button class="secondary" onclick="showView('plugins')">回到插件管理</button></div>
+          <div class="demo-switch"><b>交互方案演示</b><button class="demo-mode active" data-mode="drawer" onclick="setDemoMode('drawer',this)">A · 快速抽屉</button><button class="demo-mode" data-mode="page" onclick="setDemoMode('page',this)">B · 完整详情</button><button class="demo-mode" data-mode="wizard" onclick="setDemoMode('wizard',this)">C · 安装向导</button></div>
+          <div class="tabs"><button class="tab active">推荐</button><button class="tab">开发</button><button class="tab">设计</button><button class="tab">团队协作</button></div>
+          <div class="market-grid">
+            <article class="market-card interactive" onclick="openPluginDemo('Standard Dev Harness')"><div class="market-meta"><span>AgentBuddy 官方</span><i class="tag">已验证</i></div><h3>Standard Dev Harness</h3><p>架构、执行、审查与交付工作流，支持 Codex、Claude Code 和 Cursor。</p><footer><span>4.9 · 2.3K 安装</span><button class="primary">查看交互</button></footer></article>
+            <article class="market-card interactive" onclick="openPluginDemo('Product Discovery Kit')"><div class="market-meta"><span>FlowLab 团队</span><i class="tag">团队热门</i></div><h3>Product Discovery Kit</h3><p>产品发现、PRD、用户故事和验收标准的一体化能力组合。</p><footer><span>4.8 · 986 安装</span><button class="primary">查看交互</button></footer></article>
+            <article class="market-card interactive" onclick="openPluginDemo('Secure Review Suite')"><div class="market-meta"><span>SecOps CN</span><i class="tag wait">需 2 个 MCP</i></div><h3>Secure Review Suite</h3><p>依赖审计、代码安全审查与敏感信息扫描，安装前检查依赖。</p><footer><span>4.7 · 641 安装</span><button class="primary">查看交互</button></footer></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-llm-market">
+          <div class="head"><div><div class="head-kicker">Resource Market / Model Token</div><h2>模型 Token 市场</h2><p class="sub">发现和比较模型服务与额度方案；Provider、协议、路由和网关配置仍在 Agent 管理。</p></div><button class="secondary" onclick="showView('tokens')">查看我的额度</button></div>
+          <div class="tabs"><button class="tab active">模型服务</button><button class="tab">Token 方案</button><button class="tab">推荐</button><button class="tab">已拥有</button></div>
+          <div class="market-grid"><article class="market-card"><div class="market-meta"><span>OpenAI · 官方渠道</span><i class="tag">低延迟</i></div><h3>Codex 开发额度包</h3><p>适合持续代码生成与工具调用，支持 Responses API。</p><footer><span>¥ 99 / 10M Token</span><button class="primary">查看方案</button></footer></article><article class="market-card"><div class="market-meta"><span>Anthropic · 合作渠道</span><i class="tag">长上下文</i></div><h3>Claude 团队额度包</h3><p>适合需求分析、代码审查与长文档任务，可分配给团队成员。</p><footer><span>¥ 129 / 月</span><button class="primary">查看方案</button></footer></article></div>
+        </section>
+
+        <section class="view" id="view-plugins">
+          <div class="head"><div><h2>插件管理</h2><p class="sub">管理我创建、已安装和已发布的插件，以及版本、更新和同步状态。</p></div><button class="primary" onclick="showView('build')">构建插件</button></div>
+          <div class="tabs"><button class="tab active">全部插件 · 18</button><button class="tab">我创建的 · 6</button><button class="tab">已安装 · 12</button><button class="tab">发布记录 · 2</button></div>
+          <div class="asset-list">
+            <article class="asset-row"><div class="ide-mark">SD</div><div><b>standard-dev</b><span>我创建的 · v1.4 · 已发布</span></div><div><i class="tag">已同步 3 IDE</i></div><button class="secondary">管理</button></article>
+            <article class="asset-row"><div class="ide-mark">PR</div><div><b>product-research-kit</b><span>我创建的 · v0.8 · 草稿</span></div><div><i class="tag wait">缺少 1 个 MCP</i></div><button class="secondary">继续构建</button></article>
+            <article class="asset-row"><div class="ide-mark">CR</div><div><b>code-review-suite</b><span>市场安装 · v2.1 → v2.2</span></div><div><i class="tag wait">有新版本</i></div><button class="secondary">更新</button></article>
+            <article class="asset-row"><div class="ide-mark">UX</div><div><b>ux-flow-studio</b><span>团队空间安装 · v1.3</span></div><div><i class="tag">状态正常</i></div><button class="secondary">管理</button></article>
+          </div>
+          <div class="quiet-support">插件管理负责安装、启停、升级、版本、发布和同步状态；“构建插件”是创建或编辑插件内容的工作流，不再冒充整个插件管理。</div>
+        </section>
+
+        <section class="view" id="view-agents">
+          <div class="head"><div><h2>Agent 原子能力</h2><p class="sub">每类能力独立创建、编辑、启停与同步；构建插件时只引用，不吞并其管理入口。</p></div><button class="primary">创建能力</button></div>
+          <div class="atom-grid">
+            <article class="atom"><div class="atom-head"><span class="atom-icon">LLM</span><span class="atom-count">6</span></div><b>LLM 配置</b><p>Provider、协议、模型、路由与网关。</p><div class="atom-foot"><span>5 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">MCP</span><span class="atom-count">14</span></div><b>MCP 配置</b><p>工具服务、启动参数与环境变量。</p><div class="atom-foot"><span>11 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">SK</span><span class="atom-count">32</span></div><b>Skills 管理</b><p>搜索、安装、升级与启用技能。</p><div class="atom-foot"><span>28 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">/</span><span class="atom-count">9</span></div><b>Commands</b><p>可复用的斜杠命令与参数模板。</p><div class="atom-foot"><span>9 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">SA</span><span class="atom-count">7</span></div><b>Subagents</b><p>专业角色、系统提示与工具权限。</p><div class="atom-foot"><span>6 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">RU</span><span class="atom-count">18</span></div><b>Rules</b><p>项目约束、适用范围与执行规范。</p><div class="atom-foot"><span>16 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">HK</span><span class="atom-count">12</span></div><b>Hooks</b><p>会话与工具事件触发的自动动作。</p><div class="atom-foot"><span>8 个已启用</span><span>管理 →</span></div></article>
+            <article class="atom"><div class="atom-head"><span class="atom-icon">ME</span><span class="atom-count">2</span></div><b>Memory</b><p>用户记忆与技能记忆的持久上下文。</p><div class="atom-foot"><span>2 条已启用</span><span>管理 →</span></div></article>
+          </div>
+          <div class="quiet-support"><b>密钥独立管理：</b>Keys 为 LLM、MCP 等能力提供安全引用，不作为 Agent 能力打包内容默认外泄。每个能力页都保留“同步到 IDE”，全局同步则批量选择多个能力域。</div>
+        </section>
+
+        <section class="view" id="view-usage">
+          <div class="head"><div><h2><span id="usage-ide">Codex</span> · Token 用量</h2><p class="sub">按时间、模型与会话追踪消耗，数据来源与刷新时间始终可见。</p></div><button class="secondary" onclick="showView('ides')">返回 IDE</button></div>
+          <div class="usage-summary"><section class="panel"><div class="panel-head"><h3>本月用量</h3><span class="tag">Provider 实时数据</span></div><div class="metric" style="border:0;padding:4px 0"><strong id="usage-value">1.28M</strong><span>占当前额度 <b id="usage-percent">64%</b> · 预计月底 1.74M</span></div><div class="usage-chart"><i style="height:34%"></i><i style="height:48%"></i><i style="height:42%"></i><i style="height:61%"></i><i style="height:57%"></i><i style="height:79%"></i><i style="height:66%"></i><i style="height:84%"></i><i style="height:72%"></i><i style="height:91%;background:#087f71"></i></div></section><section class="panel"><div class="panel-head"><h3>消耗构成</h3><button class="secondary">导出记录</button></div><div class="usage"><b>代码生成 <span>52%</span></b><div class="bar"><i style="width:52%"></i></div></div><div class="usage"><b>会话问答 <span>31%</span></b><div class="bar"><i style="width:31%"></i></div></div><div class="usage"><b>工具调用 <span>17%</span></b><div class="bar"><i style="width:17%"></i></div></div></section></div>
+          <section class="panel"><div class="panel-head"><h3>高消耗会话</h3><button class="secondary">查看全部</button></div><div class="row"><b>重构同步模块</b><span>GPT-5 Codex · 184K Token</span><span>今天</span></div><div class="row"><b>插件兼容性排查</b><span>GPT-5 Codex · 126K Token</span><span>昨天</span></div><div class="row"><b>配置生成测试</b><span>GPT-5 Codex · 98K Token</span><span>8 月 13 日</span></div></section>
+        </section>
+
+        <section class="view" id="view-share">
+          <div class="head"><div><h2>共享 <span id="share-ide">Codex</span> 会话</h2><p class="sub">共享会话上下文，不共享本地 Token、密钥或未选择的工作区文件。</p></div><button class="secondary" onclick="showView('ides')">取消</button></div>
+          <div class="guide"><aside class="steps"><div class="step active"><i>1</i><div>选择会话</div></div><div class="step"><i>2</i><div>权限与有效期</div></div><div class="step"><i>3</i><div>确认共享</div></div></aside><div class="guide-body"><h3>选择要共享的会话</h3><p>会话将生成只读快照；如允许协作，对方会从快照创建独立分支，不修改你的原始记录。</p><div class="share-option"><div><b>重构同步模块</b><span>今天 14:32 · 184K Token · 12 个文件引用</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="share-option"><div><b>插件兼容性排查</b><span>昨天 18:06 · 126K Token · 5 个文件引用</span></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div><div class="share-option"><div><b>新建空白协作会话</b><span>只共享当前 IDE 配置，不包含历史消息</span></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div><button class="primary" onclick="this.textContent='继续：设置权限与有效期'">继续：设置权限</button></div></div>
+          <div class="quiet-support">默认权限为仅查看、7 天有效。团队空间内可指定成员；外部共享需生成可撤销链接并进行敏感信息检查。</div>
+        </section>
+
+        <section class="view" id="view-mine">
+          <div class="head"><div><h2>我的账号</h2><p class="sub">账号安全、密码、登录设备、个人资产、发布记录和当前额度集中管理。</p></div><button class="secondary">支持 AgentBuddy</button></div>
+          <div class="account-grid"><section class="panel"><div class="panel-head"><h3>登录与安全</h3><button class="primary">修改密码</button></div><div class="security-row"><div><b>邮箱登录</b><span>yang@example.com · 已验证</span></div><i class="tag">正常</i></div><div class="security-row"><div><b>密码</b><span>上次修改 42 天前，建议定期更新</span></div><button class="secondary">更改</button></div><div class="security-row"><div><b>登录设备</b><span>MacBook Pro · VS Code · 今天 15:22</span></div><button class="secondary">管理</button></div><div class="security-row"><div><b>访问令牌</b><span>3 个本地密钥引用，不展示明文</span></div><button class="secondary">查看</button></div></section><section class="panel"><div class="panel-head"><h3>主题规范</h3><button class="secondary">保存为团队主题</button></div><div class="security-row"><div><b>当前主题</b><span>背景、状态色、密度、组件圆角可配置</span></div><i class="tag">Aurora</i></div><div class="security-row"><div><b>背景策略</b><span>纯色 / 柔和渐变 / 工作台纹理 / 团队品牌背景</span></div><button class="secondary">配置</button></div><div class="security-row"><div><b>同步范围</b><span>个人主题只影响本机；团队主题需管理员确认</span></div><button class="secondary">同步</button></div></section></div>
+          <div class="cards"><article class="card"><b>我的插件</b><p>本地创建、收藏与安装的插件。</p><strong>18</strong><span class="sub">3 个待更新</span></article><article class="card"><b>我的发布</b><p>已提交到市场的版本和审核状态。</p><strong>2 / 5</strong><span class="sub">可扩展发布数量</span></article><article class="card"><b>推荐次数</b><p>Token 套餐比较与智能推荐。</p><strong>6 / 10</strong><span class="sub">用完后按次补充</span></article></div>
+          <div class="panel" style="margin-top:10px"><div class="panel-head"><h3>最近活动</h3><button class="secondary">全部记录</button></div><div class="row"><b>standard-dev</b><span>发布 v1.4</span><span>今天 10:24</span></div><div class="row"><b>code-review-suite</b><span>同步到 3 个 IDE</span><span>昨天 18:06</span></div><div class="row"><b>Token 推荐</b><span>比较 4 个套餐</span><span>8 月 12 日</span></div></div>
+        </section>
+
+        <section class="view" id="view-team">
+          <div class="head"><div><h2>团队空间</h2><p class="sub">共享插件、配置基线和交付目标，成员按角色协作。</p></div><button class="primary">创建空间</button></div>
+          <div class="team-list"><article class="team"><div class="avatar">研</div><div><b>Agent 研发组</b><span>8 位成员 · 12 个共享插件 · 3 条自动推送规则</span></div><button class="secondary" onclick="showView('push')">进入空间</button></article><article class="team"><div class="avatar">产</div><div><b>产品设计组</b><span>4 位成员 · 6 个共享插件 · 1 条自动推送规则</span></div><button class="secondary" onclick="showView('push')">进入空间</button></article></div>
+          <div class="panel" style="margin-top:10px"><div class="panel-head"><h3>空间额度</h3><button class="secondary">管理额度</button></div><div class="usage"><b>团队空间 <span>2 / 2 个</span></b><div class="bar"><i style="width:100%"></i></div><span>需要更多空间时单独扩容，不影响现有团队。</span></div><div class="usage"><b>团队成员 <span>12 / 20 人</span></b><div class="bar"><i style="width:60%"></i></div><span>按成员数量扩容。</span></div></div>
+        </section>
+
+        <section class="view" id="view-push">
+          <div class="head"><div><h2>自动推送</h2><p class="sub">当共享配置或插件发布新版本时，按规则生成并推送到指定 IDE。</p></div><button class="primary">新建规则</button></div>
+          <div class="rules"><article class="rule"><div class="rule-icon">↗</div><div><b>研发基线更新</b><span>共享配置变更并通过预检查后推送</span></div><div class="target">Codex · Claude · Cursor</div><div class="toggle on" onclick="this.classList.toggle('on')"></div></article><article class="rule"><div class="rule-icon">↗</div><div><b>插件稳定版发布</b><span>standard-dev 标记 stable 时推送</span></div><div class="target">团队全部 IDE</div><div class="toggle on" onclick="this.classList.toggle('on')"></div></article><article class="rule"><div class="rule-icon">↗</div><div><b>Token 路由切换</b><span>主路由不可用时推送备用配置</span></div><div class="target">Codex · OpenCode</div><div class="toggle" onclick="this.classList.toggle('on')"></div></article></div>
+          <div class="quiet-support">当前已使用 3 / 3 条自动推送规则。新建时提示增加规则额度；手动同步始终可用。</div>
+        </section>
+
+        <section class="view" id="view-sync">
+          <div class="head"><div><div class="head-kicker">Core Workflow</div><h2>同步到 IDE</h2><p class="sub">这是 AgentBuddy 的核心功能：生成配置、预检查占位符和密钥引用，再交付到 Codex、Claude、Cursor、JetBrains ACP 等目标。</p></div><button class="primary">一键同步上次目标</button></div>
+          <div class="priority"><section class="priority-panel"><h3>今日待同步</h3><p>Cursor 插件版本、JetBrains ACP agent_servers、OpenCode 网关路由存在差异。可直接同步，或进入向导查看每个配置域。</p><div class="priority-row"><div><b>Codex / Claude</b><span>LLM、MCP、Skill、Rules 全部一致</span></div><i class="tag">可跳过</i></div><div class="priority-row"><div><b>Cursor</b><span>standard-dev v1.3 → v1.4</span></div><i class="tag wait">待同步</i></div><div class="priority-row"><div><b>JetBrains ACP</b><span>Copilot / Cline agent_servers 待注册</span></div><i class="tag wait">待生成</i></div></section><aside class="summary-panel"><h3>同步范围</h3><div class="summary-line"><span>目标 IDE</span><strong>6</strong></div><div class="summary-line"><span>配置域</span><strong>5</strong></div><div class="summary-line"><span>预检查</span><strong>0 错误</strong></div><div class="summary-line"><span>预计耗时</span><strong>18s</strong></div></aside></div>
+          <div class="guide"><aside class="steps"><div class="step active"><i>1</i><div>选择目标 IDE</div></div><div class="step"><i>2</i><div>选择同步范围</div></div><div class="step"><i>3</i><div>预检查</div></div><div class="step"><i>4</i><div>生成并同步</div></div></aside><div class="guide-body"><h3>本次同步到哪些 IDE？</h3><p>只显示本机已检测到并支持同步的目标。简单任务可一键使用上次配置，复杂任务进入预检查。</p><div class="checks"><div class="check">✓ Codex · Responses API · LLM / MCP / Skill / Rules</div><div class="check">✓ Claude Code · Anthropic · settings.json</div><div class="check">✓ Cursor · 插件与 Rules</div><div class="check">✓ JetBrains ACP · agent_servers</div><div class="check">⚠ OpenCode · Hooks 部分兼容，自动跳过不支持项</div></div><button class="secondary">只生成不写入</button> <button class="primary">继续检查范围</button></div></div>
+        </section>
+
+        <section class="view" id="view-build">
+          <div class="head"><div><h2>插件构建向导</h2><p class="sub">构建是复杂任务，按能力、依赖、兼容性和发布四步完成。</p></div><button class="secondary" onclick="showView('plugins')">返回插件管理</button></div>
+          <div class="guide"><aside class="steps"><div class="step active"><i>1</i><div>选择能力</div></div><div class="step"><i>2</i><div>检查依赖</div></div><div class="step"><i>3</i><div>IDE 兼容性</div></div><div class="step"><i>4</i><div>打包或发布</div></div></aside><div class="guide-body"><h3>从已有原子能力中组合插件</h3><p>引用 Agent 管理中维护的 LLM、MCP、Skills、Commands、Subagents、Rules、Hooks 与 Memory；向导只做组合、依赖检查和分发，不在这里替代能力管理。</p><div class="checks"><div class="check">□ LLM · MCP · Skills</div><div class="check">□ Commands · Subagents</div><div class="check">□ Rules · Hooks · Memory</div><div class="check">□ 安全引用 Keys</div></div><button class="primary">继续选择能力</button></div></div>
+        </section>
+      </main>
+    </div>
+  </div>
+</section>
+
+<div class="overlay" id="plugin-overlay" onclick="if(event.target===this) closePluginDemo()"><div class="dialog drawer" id="plugin-dialog"></div></div>
+<div class="toast" id="toast">操作已完成</div>
+
+<script>
+  let demoMode = 'drawer';
+  let wizardStep = 1;
+  let currentPlugin = 'Standard Dev Harness';
+  document.querySelector('.page')?.classList.add('theme-aurora');
+  function setTheme(theme, button) {
+    const page = document.querySelector('.page');
+    page.classList.remove('theme-aurora','theme-cyber','theme-graphite');
+    page.classList.add('theme-' + theme);
+    document.querySelectorAll('.theme-dot').forEach(item => item.classList.toggle('active', item === button));
+  }
+  function showView(name, button) {
+    document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === 'view-' + name));
+    document.querySelectorAll('.nav').forEach(nav => nav.classList.toggle('active', nav.dataset.view === name));
+    if (button) button.classList.add('active');
+  }
+  function openUsage(ide, value, percent) {
+    showView('usage');
+    document.getElementById('usage-ide').textContent = ide;
+    document.getElementById('usage-value').textContent = value;
+    document.getElementById('usage-percent').textContent = percent;
+  }
+  function openShare(ide) {
+    showView('share');
+    document.getElementById('share-ide').textContent = ide;
+  }
+  function setDemoMode(mode, button) {
+    demoMode = mode;
+    document.querySelectorAll('.demo-mode').forEach(item => item.classList.toggle('active', item === button));
+  }
+  function openPluginDemo(name) {
+    currentPlugin = name;
+    wizardStep = 1;
+    const overlay = document.getElementById('plugin-overlay');
+    const dialog = document.getElementById('plugin-dialog');
+    dialog.className = 'dialog ' + (demoMode === 'drawer' ? 'drawer' : demoMode === 'page' ? 'page-detail' : 'wizard');
+    dialog.innerHTML = demoMode === 'wizard' ? renderWizard() : renderDetail(demoMode === 'page');
+    overlay.classList.add('open');
+  }
+  function closePluginDemo() { document.getElementById('plugin-overlay').classList.remove('open'); }
+  function renderDetail(fullPage) {
+    return `<div class="dialog-top"><div><div class="head-kicker">${fullPage ? '完整资源详情' : '快速详情'}</div><h2>${currentPlugin}</h2><p class="sub">AgentBuddy 官方 · v1.4 · 更新于 2 天前</p></div><button class="icon-button" aria-label="关闭" onclick="closePluginDemo()">×</button></div>
+      <div class="detail-layout"><div><div class="detail-section"><h3>能力说明</h3><p>覆盖架构设计、任务执行、代码审查和交付检查，安装后作为一个可独立升级的本地插件管理。</p></div><div class="detail-section"><h3>包含能力</h3><ul><li>6 个 Subagents 与 4 条协作工作流</li><li>12 个 Skills、8 条 Rules、3 个 Commands</li><li>不包含明文 Token 或 Keys</li></ul></div>${fullPage ? '<div class="detail-section"><h3>版本变更</h3><p>v1.4 增加同步预检查，修复 Cursor 规则映射，并收紧 MCP 环境变量权限。</p></div>' : ''}</div><aside><div class="detail-section"><h3>兼容性</h3><p>✓ Codex<br>✓ Claude Code<br>✓ Cursor<br>△ OpenCode 部分能力</p></div><div class="detail-section"><h3>安装前检查</h3><p>需要 GitHub MCP；需要选择一个 LLM 配置引用；预计修改 4 个本地配置域。</p></div></aside></div>
+      <div class="sticky-actions"><button class="secondary" onclick="closePluginDemo()">继续浏览</button><button class="primary" onclick="startInstall()">检查依赖并安装</button></div>`;
+  }
+  function startInstall() {
+    demoMode = 'wizard'; wizardStep = 1;
+    const dialog = document.getElementById('plugin-dialog');
+    dialog.className = 'dialog wizard'; dialog.innerHTML = renderWizard();
+  }
+  function renderWizard() {
+    const titles = ['检查依赖','选择安装范围','预览变更','安装完成'];
+    let body = '';
+    if (wizardStep === 1) body = `<h2>检查依赖</h2><p class="sub">在写入本地配置前确认兼容性和安全引用。</p><div class="checks"><div class="check">✓ AgentBuddy 版本兼容</div><div class="check">✓ GitHub MCP 已安装</div><div class="check">✓ LLM 配置引用：GPT-5 Codex</div><div class="check">⚠ OpenCode 仅支持部分 Hooks</div></div>`;
+    if (wizardStep === 2) body = `<h2>选择安装范围</h2><p class="sub">安装到本地资产库后，可选择立即交付到 IDE。</p><div class="choice selected" onclick="selectChoice(this)"><b>●</b><div><strong>本机 + 指定 IDE</strong><span>安装到本地，并同步到选中的目标</span></div><i class="tag">推荐</i></div><div class="choice" onclick="selectChoice(this)"><b>○</b><div><strong>仅安装到本机</strong><span>稍后从插件管理手动同步</span></div></div><div class="choice" onclick="selectChoice(this)"><b>○</b><div><strong>团队空间</strong><span>共享给 Agent 研发组，需管理员确认</span></div></div>`;
+    if (wizardStep === 3) body = `<h2>预览变更</h2><p class="sub">确认将写入的本地资源和同步目标，不会包含明文密钥。</p><div class="checks"><div class="check">+ 本地插件：${currentPlugin} v1.4</div><div class="check">+ 12 Skills · 8 Rules · 6 Subagents</div><div class="check">→ Codex · Claude Code · Cursor</div><div class="check">🔒 仅保存 Key 引用：OPENAI_API_KEY</div></div><div class="quiet-support">检测到 OpenCode Hooks 兼容性差异，本次不会同步不支持的配置项。</div>`;
+    if (wizardStep === 4) body = `<div class="result-mark">✓</div><h2>安装并同步完成</h2><p class="sub">${currentPlugin} v1.4 已加入本地插件库，并成功同步到 3 个 IDE。</p><div class="checks"><div class="check">✓ 本地插件安装成功</div><div class="check">✓ Codex · Claude Code · Cursor 已同步</div><div class="check">✓ 生成记录中无模板占位符残留</div></div>`;
+    return `<div class="wizard-shell"><aside class="wizard-side"><div class="head-kicker">方案 C · 可控交付</div>${titles.map((title,index)=>`<div class="step ${wizardStep===index+1?'active':''}"><i>${index+1}</i><div>${title}</div></div>`).join('')}</aside><div class="wizard-main"><div class="wizard-content">${body}</div><div class="wizard-actions"><button class="secondary" onclick="${wizardStep===1?'closePluginDemo()':'previousWizardStep()'}">${wizardStep===1?'取消':'上一步'}</button>${wizardStep<4?`<button class="primary" onclick="nextWizardStep()">${wizardStep===3?'确认安装并同步':'继续'}</button>`:`<div><button class="secondary" onclick="closePluginDemo();showView('plugin-market')">继续浏览</button> <button class="primary" onclick="closePluginDemo();showView('plugins');showToast('已打开插件管理')">打开插件管理</button></div>`}</div></div></div>`;
+  }
+  function nextWizardStep() { wizardStep += 1; document.getElementById('plugin-dialog').innerHTML = renderWizard(); }
+  function previousWizardStep() { wizardStep -= 1; document.getElementById('plugin-dialog').innerHTML = renderWizard(); }
+  function selectChoice(choice) { document.querySelectorAll('.choice').forEach(item => item.classList.toggle('selected', item === choice)); }
+  function showToast(message) { const toast = document.getElementById('toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 1800); }
+</script>

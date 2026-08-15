@@ -638,49 +638,71 @@ def build_cli_sdk(version: str = "1.0.0") -> None:
     tmp_out = DIST_DIR / "_cli_sdk_build"
     tmp_out.mkdir(parents=True, exist_ok=True)
 
-    # 用 pip wheel 构建 wheel（避免 python -m build 被项目根目录 build.py 拦截）
-    cmd = [sys.executable, "-m", "pip", "wheel", "--no-deps",
-           "--wheel-dir", str(tmp_out), str(cli_dir)]
-    rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
-    if rc != 0:
-        fail(f"pip wheel 构建失败 (exit={rc})")
+    # 临时把 pyproject.toml 版本号改为传入版本，避免 wheel 文件名固定为 3.8.5
+    # 导致多次发版的 whl 同名、CI Release 上传冲突（update-a-release-asset 404）
+    pyproject = cli_dir / "pyproject.toml"
+    pyproject_text = pyproject.read_text(encoding="utf-8")
+    import re as _re
+    original_version = _re.search(r'version\s*=\s*"([^"]+)"', pyproject_text)
+    if original_version and original_version.group(1) != version:
+        pyproject.write_text(
+            _re.sub(r'version\s*=\s*"[^"]+"', f'version = "{version}"', pyproject_text),
+            encoding="utf-8",
+        )
+        info(f"agentctl 版本号临时改为 {version}（构建后恢复）")
+        _restore_pyproject = True
+    else:
+        _restore_pyproject = False
 
-    # 构建 sdist（源码包）
-    cmd = [sys.executable, "-m", "pip", "install", "--no-deps", "--quiet", "build"]
-    subprocess.call(cmd)
-    # 用 python -c 调用 build 模块，避免被项目根目录 build.py 拦截
-    # cwd 设为临时目录（跨平台：Windows 无 /tmp）
-    import tempfile
-    sdist_cwd = tempfile.gettempdir()
-    sdist_cmd = [sys.executable, "-c",
-                 "import sys, os; sys.argv = ['build', '--sdist', '--outdir', "
-                 f"'{tmp_out}', '{cli_dir}']; "
-                 "from build.__main__ import main; main()"]
-    rc = subprocess.call(sdist_cmd, cwd=sdist_cwd)
-    if rc != 0:
-        info(f"sdist 构建跳过 (exit={rc})")
+    try:
+        # 用 pip wheel 构建 wheel（避免 python -m build 被项目根目录 build.py 拦截）
+        cmd = [sys.executable, "-m", "pip", "wheel", "--no-deps",
+               "--wheel-dir", str(tmp_out), str(cli_dir)]
+        rc = subprocess.call(cmd, cwd=str(PROJECT_ROOT))
+        if rc != 0:
+            fail(f"pip wheel 构建失败 (exit={rc})")
 
-    # 移动产物到 installer 目录
-    wheels = list(tmp_out.glob("agentctl-*.whl"))
-    sdists = list(tmp_out.glob("agentctl-*.tar.gz"))
-    if not wheels:
-        fail("未生成 wheel 文件")
+        # 构建 sdist（源码包）
+        cmd = [sys.executable, "-m", "pip", "install", "--no-deps", "--quiet", "build"]
+        subprocess.call(cmd)
+        # 用 python -c 调用 build 模块，避免被项目根目录 build.py 拦截
+        # cwd 设为临时目录（跨平台：Windows 无 /tmp）
+        import tempfile
+        sdist_cwd = tempfile.gettempdir()
+        sdist_cmd = [sys.executable, "-c",
+                     "import sys, os; sys.argv = ['build', '--sdist', '--outdir', "
+                     f"'{tmp_out}', '{cli_dir}']; "
+                     "from build.__main__ import main; main()"]
+        rc = subprocess.call(sdist_cmd, cwd=sdist_cwd)
+        if rc != 0:
+            info(f"sdist 构建跳过 (exit={rc})")
 
-    for w in wheels:
-        dst = INSTALLER_OUT_DIR / w.name
-        if dst.exists():
-            dst.unlink()
-        shutil.move(str(w), str(dst))
-        info(f"SDK wheel: {dst.relative_to(PROJECT_ROOT)}")
-    for s in sdists:
-        dst = INSTALLER_OUT_DIR / s.name
-        if dst.exists():
-            dst.unlink()
-        shutil.move(str(s), str(dst))
-        info(f"SDK sdist: {dst.relative_to(PROJECT_ROOT)}")
+        # 移动产物到 installer 目录
+        wheels = list(tmp_out.glob("agentctl-*.whl"))
+        sdists = list(tmp_out.glob("agentctl-*.tar.gz"))
+        if not wheels:
+            fail("未生成 wheel 文件")
 
-    # 清理临时目录
-    shutil.rmtree(tmp_out, ignore_errors=True)
+        for w in wheels:
+            dst = INSTALLER_OUT_DIR / w.name
+            if dst.exists():
+                dst.unlink()
+            shutil.move(str(w), str(dst))
+            info(f"SDK wheel: {dst.relative_to(PROJECT_ROOT)}")
+        for s in sdists:
+            dst = INSTALLER_OUT_DIR / s.name
+            if dst.exists():
+                dst.unlink()
+            shutil.move(str(s), str(dst))
+            info(f"SDK sdist: {dst.relative_to(PROJECT_ROOT)}")
+
+        # 清理临时目录
+        shutil.rmtree(tmp_out, ignore_errors=True)
+    finally:
+        # 恢复 pyproject.toml 原始版本号
+        if _restore_pyproject:
+            pyproject.write_text(pyproject_text, encoding="utf-8")
+            info("agentctl pyproject.toml 版本号已恢复")
 
 
 def _step_timer(step_name: str):

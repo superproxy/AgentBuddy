@@ -1,0 +1,233 @@
+<style>
+  :root { --ink:#17251f; --muted:#718078; --line:#d9e1da; --paper:#f5f7f3; --white:#fff; --teal:#087f71; --lime:#dbee72; --rust:#d45b3c; --gold:#d4aa3f; }
+  .ix-page { max-width: 1500px; margin: 0 auto; padding: 6px 0 50px; color: var(--ink); font-family: ui-sans-serif, system-ui, sans-serif; }
+  .ix-page * { box-sizing: border-box; }
+  .ix-intro { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin: 10px 0 18px; }
+  .eyebrow { color:var(--teal); font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.12em; }
+  .ix-intro h1 { font-family:Georgia,serif; font-size:32px; line-height:1.05; letter-spacing:0; margin:7px 0; }
+  .ix-intro p { max-width:700px; margin:0; color:var(--muted); font-size:12px; line-height:1.55; }
+  .decision-note { max-width:320px; padding-left:14px; border-left:3px solid var(--rust); color:#53635a; font-size:11px; line-height:1.5; }
+  .scheme-picker { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
+  .scheme-tab { appearance:none; text-align:left; border:1px solid var(--line); background:var(--white); border-radius:6px; padding:13px 14px; cursor:pointer; color:var(--ink); }
+  .scheme-tab:hover { border-color:#9db3a7; }
+  .scheme-tab.active { border-color:var(--teal); box-shadow:inset 0 -3px var(--teal); background:#f3faf7; }
+  .scheme-tab b { display:block; font-size:12px; margin-bottom:3px; }
+  .scheme-tab span { color:var(--muted); font-size:9px; }
+  .scheme { display:none; }
+  .scheme.active { display:block; }
+  .frame { height:690px; border:1px solid #cfd9d1; border-radius:9px; overflow:hidden; background:var(--paper); box-shadow:0 18px 40px rgba(23,37,31,.11); }
+  .appbar { height:54px; display:flex; align-items:center; gap:20px; padding:0 18px; background:var(--ink); color:#fff; }
+  .brand { font-weight:900; font-size:13px; white-space:nowrap; }
+  .brand-mark { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:7px; border:1px solid #89a497; color:var(--lime); }
+  .appbar-link { font-size:10px; color:#b9c9c0; }
+  .appbar-status { margin-left:auto; color:#aabdb3; font-size:9px; }
+  .appbar-status b { color:var(--lime); }
+  .primary { border:0; border-radius:4px; padding:9px 12px; background:var(--rust); color:#fff; font-size:10px; font-weight:700; cursor:pointer; }
+  .secondary { border:1px solid var(--line); border-radius:4px; padding:8px 10px; background:#fff; color:var(--ink); font-size:9px; cursor:pointer; }
+  .tag { display:inline-flex; align-items:center; border-radius:3px; padding:2px 5px; background:#edf2ed; color:#58685f; font-size:8px; font-weight:700; }
+  .tag.pro { background:#f7e8a9; color:#6d571c; }
+  .tag.ok { background:#e1f2df; color:#2d743d; }
+  .tag.warn { background:#fae4d4; color:#a65233; }
+  .section-title { margin:0; font-family:Georgia,serif; font-size:21px; letter-spacing:0; }
+  .section-sub { margin:4px 0 0; color:var(--muted); font-size:10px; }
+
+  /* A: Control tower */
+  .tower-layout { display:grid; grid-template-columns:190px 1fr; height:636px; }
+  .tower-side { padding:14px 11px; background:#fff; border-right:1px solid var(--line); }
+  .side-label { margin:10px 9px 5px; color:#95a198; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; }
+  .side-item { display:flex; align-items:center; justify-content:space-between; width:100%; margin:2px 0; padding:10px 9px; border:0; border-radius:4px; background:transparent; color:#54645b; font-size:10px; text-align:left; cursor:pointer; }
+  .side-item.active { background:#eaf4ec; color:var(--teal); font-weight:800; }
+  .tower-main { padding:22px; overflow:auto; }
+  .page-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:15px; }
+  .metric-row { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-bottom:11px; }
+  .metric { min-height:100px; padding:13px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .metric small { display:block; color:#86938c; font-size:8px; text-transform:uppercase; }
+  .metric strong { display:block; margin:11px 0 4px; font-family:Georgia,serif; font-size:23px; font-weight:500; }
+  .metric span { color:#64756c; font-size:9px; }
+  .tower-grid { display:grid; grid-template-columns:1.15fr .85fr; gap:10px; }
+  .panel { padding:14px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .panel-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .panel h3 { margin:0; font-size:11px; }
+  .health-row { display:grid; grid-template-columns:1fr 1fr .7fr; gap:8px; align-items:center; min-height:49px; border-top:1px solid #edf1ed; font-size:9px; }
+  .health-row:first-of-type { border-top:0; }
+  .health-row b { font-size:10px; }
+  .pro-item { padding:11px 0; border-top:1px solid #efe7ca; }
+  .pro-item:first-of-type { border-top:0; }
+  .pro-item b { display:block; font-size:10px; }
+  .pro-item span { color:#84785b; font-size:9px; }
+  .drawer { position:absolute; inset:54px 0 0 auto; z-index:4; width:min(430px,92%); padding:18px; border-left:1px solid #bac8be; background:#fff; box-shadow:-20px 0 50px rgba(23,37,31,.18); transform:translateX(105%); transition:transform .25s ease; }
+  .drawer.open { transform:translateX(0); }
+  .drawer-head { display:flex; justify-content:space-between; align-items:start; margin-bottom:15px; }
+  .drawer-close { border:0; background:none; font-size:18px; cursor:pointer; }
+  .sync-scope { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:10px 0 16px; }
+  .scope { padding:9px; border:1px solid var(--line); border-radius:4px; font-size:9px; text-align:center; cursor:pointer; }
+  .scope.on { color:var(--teal); border-color:var(--teal); background:#eff8f4; }
+  .target { display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-top:1px solid #edf1ed; font-size:10px; }
+  .toggle { width:29px; height:17px; padding:2px; border-radius:10px; background:#cbd5ce; cursor:pointer; }
+  .toggle:after { content:''; display:block; width:13px; height:13px; border-radius:50%; background:#fff; }
+  .toggle.on { background:var(--teal); }
+  .toggle.on:after { margin-left:12px; }
+  .drawer-footer { position:absolute; left:18px; right:18px; bottom:18px; display:flex; gap:8px; }
+  .drawer-footer .primary { flex:1; }
+
+  /* B: Guided flow */
+  .flow-shell { height:636px; display:grid; grid-template-columns:260px 1fr; }
+  .flow-rail { padding:22px 18px; background:#eef2ec; border-right:1px solid var(--line); }
+  .flow-rail h2 { margin:0 0 5px; font-family:Georgia,serif; font-size:20px; }
+  .flow-rail > p { margin:0 0 22px; color:var(--muted); font-size:9px; line-height:1.45; }
+  .step { position:relative; display:grid; grid-template-columns:26px 1fr; gap:9px; min-height:80px; cursor:pointer; }
+  .step:after { content:''; position:absolute; top:29px; bottom:4px; left:12px; width:1px; background:#c7d2c9; }
+  .step:last-child:after { display:none; }
+  .step-index { display:grid; place-items:center; align-self:start; width:25px; height:25px; border:1px solid #aab9af; border-radius:50%; background:#fff; color:#728078; font-size:9px; }
+  .step.done .step-index { border-color:var(--teal); background:var(--teal); color:#fff; }
+  .step.active .step-index { border:5px solid #bce4d7; background:var(--teal); color:#fff; }
+  .step b { display:block; margin:2px 0 3px; font-size:10px; }
+  .step span { color:#7e8c84; font-size:8px; line-height:1.4; }
+  .flow-work { padding:24px 28px; overflow:auto; background:#fff; }
+  .flow-stage { display:none; }
+  .flow-stage.active { display:block; }
+  .stage-head { display:flex; justify-content:space-between; align-items:start; margin-bottom:22px; }
+  .choice-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
+  .choice-card { min-height:150px; padding:15px; border:1px solid var(--line); border-radius:6px; background:#fafbf8; cursor:pointer; }
+  .choice-card:hover,.choice-card.on { border-color:var(--teal); background:#f1faf6; }
+  .choice-card .symbol { display:grid; place-items:center; width:34px; height:34px; margin-bottom:19px; border:1px solid #bfcbc2; border-radius:4px; font-weight:800; }
+  .choice-card b { display:block; font-size:11px; }
+  .choice-card p { color:var(--muted); font-size:9px; line-height:1.45; }
+  .flow-summary { margin-top:13px; padding:13px; background:#f1f4ef; border-radius:5px; font-size:9px; color:#59685f; }
+  .flow-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+  .plugin-list { display:grid; gap:7px; }
+  .plugin-line { display:grid; grid-template-columns:35px 1fr auto; align-items:center; gap:10px; padding:11px; border:1px solid var(--line); border-radius:5px; }
+  .plugin-avatar { display:grid; place-items:center; width:34px; height:34px; background:#e6eee7; font-size:10px; font-weight:800; }
+  .plugin-line b { font-size:10px; }
+  .plugin-line span { display:block; color:var(--muted); font-size:8px; margin-top:2px; }
+  .receipt { max-width:540px; margin:25px auto; padding:24px; border:1px solid var(--line); background:#f9fbf7; text-align:center; }
+  .receipt-mark { display:grid; place-items:center; width:48px; height:48px; margin:0 auto 13px; border-radius:50%; background:var(--teal); color:#fff; font-size:20px; }
+  .receipt h3 { font-family:Georgia,serif; font-size:23px; margin:0 0 7px; }
+  .receipt p { color:var(--muted); font-size:10px; line-height:1.5; }
+
+  /* C: Matrix */
+  .matrix-shell { height:636px; display:flex; flex-direction:column; background:#fff; }
+  .matrix-tools { display:flex; align-items:center; gap:8px; padding:13px 17px; border-bottom:1px solid var(--line); }
+  .search { flex:1; max-width:420px; padding:9px 11px; border:1px solid var(--line); border-radius:4px; color:#829087; font-size:9px; }
+  .segmented { display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .segment { padding:8px 10px; border:0; border-left:1px solid var(--line); background:#fff; font-size:9px; cursor:pointer; }
+  .segment:first-child { border-left:0; }
+  .segment.on { background:var(--ink); color:#fff; }
+  .matrix-body { display:grid; grid-template-columns:160px 1fr; flex:1; min-height:0; }
+  .matrix-filters { padding:14px; border-right:1px solid var(--line); background:#f5f7f3; }
+  .filter-title { margin:8px 0 6px; color:#849088; font-size:8px; text-transform:uppercase; }
+  .filter { display:flex; justify-content:space-between; padding:7px 5px; color:#5d6c63; font-size:9px; }
+  .matrix-wrap { overflow:auto; padding:0 16px 16px; }
+  table { width:100%; border-collapse:collapse; font-size:9px; }
+  th { position:sticky; top:0; z-index:1; height:44px; padding:0 8px; background:#fff; border-bottom:1px solid var(--line); color:#7a8980; font-size:8px; text-align:left; }
+  td { height:55px; padding:0 8px; border-bottom:1px solid #edf1ed; color:#5c6c63; }
+  td:first-child { color:var(--ink); font-weight:700; }
+  .cell-dot { display:inline-block; width:7px; height:7px; margin-right:5px; border-radius:50%; background:#4ea65c; }
+  .cell-dot.wait { background:#d28b40; }
+  .quickbar { display:flex; align-items:center; gap:9px; height:50px; padding:0 17px; border-top:1px solid var(--line); background:#f5f7f3; font-size:9px; }
+  .quickbar b { margin-right:auto; }
+  .palette { position:absolute; z-index:5; top:105px; left:50%; width:min(620px,90%); transform:translateX(-50%) scale(.98); padding:10px; border:1px solid #aabbb0; border-radius:7px; background:#fff; box-shadow:0 25px 60px rgba(23,37,31,.24); opacity:0; pointer-events:none; transition:.15s ease; }
+  .palette.open { opacity:1; pointer-events:auto; transform:translateX(-50%) scale(1); }
+  .palette-input { width:100%; padding:13px; border:0; border-bottom:1px solid var(--line); font-size:11px; outline:none; }
+  .command { display:grid; grid-template-columns:28px 1fr auto; gap:10px; align-items:center; padding:11px; border-radius:4px; cursor:pointer; }
+  .command:hover { background:#eef5ef; }
+  .command-icon { display:grid; place-items:center; width:27px; height:27px; background:#e9efe9; }
+  .command b { display:block; font-size:10px; }
+  .command span { color:var(--muted); font-size:8px; }
+  .command kbd { padding:2px 5px; border:1px solid var(--line); border-radius:3px; color:#75827b; font-size:8px; }
+  .compare { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:13px; }
+  .compare > div { padding:11px; border-radius:5px; background:#eef2ed; color:#59685f; font-size:10px; line-height:1.45; }
+  .compare b { display:block; color:var(--ink); margin-bottom:3px; }
+  .frame-wrap { position:relative; }
+  @media (max-width:800px) {
+    .ix-intro { align-items:flex-start; flex-direction:column; }
+    .scheme-picker { grid-template-columns:1fr; }
+    .frame { height:760px; }
+    .tower-layout { grid-template-columns:58px 1fr; height:706px; }
+    .tower-side { padding:10px 7px; }
+    .side-label,.side-item span:first-child { display:none; }
+    .side-item { justify-content:center; }
+    .tower-main { padding:14px; }
+    .metric-row,.choice-grid { grid-template-columns:1fr 1fr; }
+    .tower-grid { grid-template-columns:1fr; }
+    .flow-shell { height:706px; grid-template-columns:78px 1fr; }
+    .flow-rail { padding:14px 10px; }
+    .flow-rail h2,.flow-rail > p,.step div:last-child { display:none; }
+    .flow-work { padding:16px; }
+    .matrix-shell { height:706px; }
+    .matrix-body { grid-template-columns:54px 1fr; }
+    .matrix-filters .filter-title,.matrix-filters .filter span:first-child { display:none; }
+    .matrix-filters { padding:8px; }
+    .matrix-filters .filter { justify-content:center; }
+    .compare { grid-template-columns:1fr; }
+    .appbar-link { display:none; }
+  }
+</style>
+
+<section class="ix-page">
+  <header class="ix-intro">
+    <div><div class="eyebrow">Interaction architecture · 3 directions</div><h1>同一产品定位，三种操作方式</h1><p>点击方案标签切换。每套方案都覆盖 IDE、Token、插件和同步四个核心能力，以及不阻塞主流程的 Pro 服务入口。</p></div>
+    <div class="decision-note"><b>选择标准</b><br>不是哪套“看起来更酷”，而是哪套最符合高频任务：查看环境状态、修复配置问题、把变更同步到多个 IDE。</div>
+  </header>
+
+  <div class="scheme-picker">
+    <button class="scheme-tab active" data-choice="control-tower" onclick="toggleSelect(this);showScheme('a',this)"><b>A · 环境控制台</b><span>状态优先 · 全局同步 · 适合日常运营</span></button>
+    <button class="scheme-tab" data-choice="guided-flow" onclick="toggleSelect(this);showScheme('b',this)"><b>B · 引导式交付流</b><span>步骤优先 · 低学习成本 · 适合新用户</span></button>
+    <button class="scheme-tab" data-choice="resource-matrix" onclick="toggleSelect(this);showScheme('c',this)"><b>C · 资源矩阵</b><span>对象优先 · 批量操作 · 适合专业用户</span></button>
+  </div>
+
+  <section class="scheme active" id="scheme-a">
+    <div class="frame-wrap">
+      <div class="frame">
+        <header class="appbar"><div class="brand"><span class="brand-mark">A</span>AGENTBUDDY</div><span class="appbar-link">环境总览</span><span class="appbar-link">同步历史</span><span class="appbar-status"><b>12</b> IDE 在线 · 1 项待处理</span><button class="primary" onclick="toggleDrawer(true)">同步到 IDE</button></header>
+        <div class="tower-layout">
+          <aside class="tower-side"><div class="side-label">核心</div><button class="side-item active" onclick="activateSide(this)"><span>环境总览</span><span>⌂</span></button><button class="side-item" onclick="activateSide(this)"><span>IDE 管理</span><span>12</span></button><button class="side-item" onclick="activateSide(this)"><span>Token 管理</span><span>8</span></button><button class="side-item" onclick="activateSide(this)"><span>插件管理</span><span>18</span></button><button class="side-item" onclick="toggleDrawer(true)"><span>同步到 IDE</span><span>↗</span></button><div class="side-label">AgentBuddy Pro</div><button class="side-item"><span>Token 推荐</span><span class="tag pro">PRO</span></button><button class="side-item"><span>市场分发</span><span class="tag pro">PRO</span></button><button class="side-item"><span>团队空间</span><span class="tag pro">PRO</span></button></aside>
+          <main class="tower-main"><div class="page-head"><div><h2 class="section-title">环境与交付总览</h2><p class="section-sub">先发现问题，再从任意位置打开统一同步抽屉。</p></div><button class="secondary" onclick="document.querySelectorAll('.metric').forEach(x=>x.style.borderColor='#087f71')">刷新状态</button></div>
+            <div class="metric-row"><div class="metric"><small>已连接 IDE</small><strong>12</strong><span>9 个桌面端 · 3 个 CLI</span></div><div class="metric"><small>安全 Token</small><strong>8</strong><span>全部保存在本机</span></div><div class="metric"><small>本地插件</small><strong>18</strong><span>3 个有新版本</span></div><div class="metric"><small>同步成功率</small><strong>98.7%</strong><span>近 30 天 462 次</span></div></div>
+            <div class="tower-grid"><section class="panel"><div class="panel-head"><h3>目标 IDE 健康度</h3><button class="secondary" onclick="toggleDrawer(true)">同步选中项</button></div><div class="health-row"><b>Codex</b><span>LLM · MCP · Plugin</span><span class="tag ok">已同步</span></div><div class="health-row"><b>Claude Code</b><span>LLM · Skills · Rules</span><span class="tag ok">已同步</span></div><div class="health-row"><b>Cursor</b><span>Plugin v1.3 → v1.4</span><span class="tag warn">待更新</span></div><div class="health-row"><b>JetBrains ACP</b><span>2 agent servers</span><span class="tag ok">已注册</span></div></section><aside class="panel" style="background:#fffaf0;border-color:#eadca9"><div class="panel-head"><h3>AgentBuddy Pro</h3><span class="tag pro">增值服务</span></div><div class="pro-item"><b>Token 智能推荐</b><span>降低模型与套餐选择成本</span></div><div class="pro-item"><b>插件市场分发</b><span>发布、推广和版本触达</span></div><div class="pro-item"><b>团队空间管理</b><span>共享、权限和团队交付</span></div></aside></div>
+          </main>
+        </div>
+        <aside class="drawer" id="sync-drawer"><div class="drawer-head"><div><h2 class="section-title">同步到 IDE</h2><p class="section-sub">本次变更生成后同步，不覆盖未选择范围。</p></div><button class="drawer-close" onclick="toggleDrawer(false)" aria-label="关闭">×</button></div><div class="side-label">同步范围</div><div class="sync-scope"><div class="scope on" onclick="this.classList.toggle('on')">LLM</div><div class="scope on" onclick="this.classList.toggle('on')">MCP</div><div class="scope" onclick="this.classList.toggle('on')">Skills</div><div class="scope on" onclick="this.classList.toggle('on')">Plugin</div><div class="scope" onclick="this.classList.toggle('on')">Rules</div><div class="scope" onclick="this.classList.toggle('on')">Memory</div></div><div class="side-label">目标 IDE</div><div class="target"><b>Codex</b><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="target"><b>Claude Code</b><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="target"><b>Cursor</b><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="target"><b>OpenCode</b><div class="toggle" onclick="this.classList.toggle('on')"></div></div><div class="drawer-footer"><button class="secondary" onclick="toggleDrawer(false)">取消</button><button class="primary" onclick="completeDrawer(this)">生成并同步 · 3 IDE</button></div></aside>
+      </div>
+    </div>
+    <div class="compare"><div><b>核心优势</b>任何页面都能打开同一个同步抽屉，适合高频巡检和快速修复。</div><div><b>适合用户</b>已经持续使用多个 IDE，需要稳定管理环境的个人和管理员。</div><div><b>主要代价</b>首页信息密度较高，新用户仍需理解各资源之间的关系。</div></div>
+  </section>
+
+  <section class="scheme" id="scheme-b">
+    <div class="frame"><header class="appbar"><div class="brand"><span class="brand-mark">A</span>AGENTBUDDY</div><span class="appbar-link">我的环境</span><span class="appbar-link">交付记录</span><span class="appbar-status">当前任务 · <b>同步开发环境</b></span></header><div class="flow-shell"><aside class="flow-rail"><h2>同步开发环境</h2><p>把环境交付拆成一个可恢复的四步任务，所有状态都围绕本次同步。</p><div class="step done" onclick="goStage(1)"><div class="step-index">✓</div><div><b>选择 IDE</b><span>Codex、Claude Code、Cursor</span></div></div><div class="step active" onclick="goStage(2)"><div class="step-index">2</div><div><b>选择 Token</b><span>选择本地凭据与 Provider</span></div></div><div class="step" onclick="goStage(3)"><div class="step-index">3</div><div><b>选择插件</b><span>组合需要同步的能力包</span></div></div><div class="step" onclick="goStage(4)"><div class="step-index">4</div><div><b>确认并同步</b><span>检查变更后开始交付</span></div></div></aside><main class="flow-work">
+      <section class="flow-stage active" data-stage="1"><div class="stage-head"><div><div class="eyebrow">Step 1 of 4</div><h2 class="section-title">这次同步到哪些 IDE？</h2><p class="section-sub">只显示本机已检测到并支持同步的目标。</p></div><span class="tag ok">已选 3 个</span></div><div class="choice-grid"><div class="choice-card on" onclick="this.classList.toggle('on')"><div class="symbol">CX</div><b>Codex</b><p>Responses API · MCP · Skills · Rules</p></div><div class="choice-card on" onclick="this.classList.toggle('on')"><div class="symbol">CL</div><b>Claude Code</b><p>LLM · MCP · Commands · Hooks</p></div><div class="choice-card on" onclick="this.classList.toggle('on')"><div class="symbol">CU</div><b>Cursor</b><p>LLM · MCP · Rules · Plugin</p></div></div><div class="flow-actions"><button class="primary" onclick="goStage(2)">继续：选择 Token</button></div></section>
+      <section class="flow-stage" data-stage="2"><div class="stage-head"><div><div class="eyebrow">Step 2 of 4</div><h2 class="section-title">为目标 IDE 选择 Token</h2><p class="section-sub">Token 仍保存在本机，仅把引用写入目标配置。</p></div><span class="tag">本地密钥库</span></div><div class="choice-grid"><div class="choice-card on" onclick="this.classList.toggle('on')"><div class="symbol">OA</div><b>OPENAI_API_KEY</b><p>用于 Codex · 上次验证 2 分钟前</p></div><div class="choice-card on" onclick="this.classList.toggle('on')"><div class="symbol">AN</div><b>ANTHROPIC_AUTH_TOKEN</b><p>用于 Claude · 网关协议</p></div><div class="choice-card" onclick="this.classList.toggle('on')"><div class="symbol">+</div><b>添加新 Token</b><p>安全写入本地 keys.yaml</p></div></div><div class="flow-summary">需要选择更合适的套餐？<b> Token 智能推荐</b> 是独立 Pro 服务，不影响手动配置现有 Token。</div><div class="flow-actions"><button class="secondary" onclick="goStage(1)">返回</button><button class="primary" onclick="goStage(3)">继续：选择插件</button></div></section>
+      <section class="flow-stage" data-stage="3"><div class="stage-head"><div><div class="eyebrow">Step 3 of 4</div><h2 class="section-title">选择要交付的插件</h2><p class="section-sub">插件内部的 Skills、Rules、Commands 和 Hooks 会一并校验。</p></div></div><div class="plugin-list"><div class="plugin-line"><div class="plugin-avatar">DEV</div><div><b>standard-dev</b><span>6 skills · 4 rules · 3 commands</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="plugin-line"><div class="plugin-avatar">REV</div><div><b>code-review-suite</b><span>3 skills · 2 subagents · 1 hook</span></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div><div class="plugin-line"><div class="plugin-avatar">UX</div><div><b>product-design</b><span>4 skills · 2 commands</span></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div></div><div class="flow-actions"><button class="secondary" onclick="goStage(2)">返回</button><button class="primary" onclick="goStage(4)">检查并同步</button></div></section>
+      <section class="flow-stage" data-stage="4"><div class="receipt"><div class="receipt-mark">✓</div><h3>准备同步 3 个 IDE</h3><p>2 个 Token 引用 · 2 个插件 · 17 个配置对象<br>预检查通过，没有残留占位符或不兼容项。</p><button class="primary" onclick="finishFlow(this)">开始同步</button></div></section>
+    </main></div></div>
+    <div class="compare"><div><b>核心优势</b>用明确步骤降低配置复杂度，错误发生在哪一步非常清楚。</div><div><b>适合用户</b>首次配置、多 IDE 初次迁移，以及不熟悉配置对象的新用户。</div><div><b>主要代价</b>老用户完成一次小同步也要经过步骤，效率低于控制台和矩阵。</div></div>
+  </section>
+
+  <section class="scheme" id="scheme-c">
+    <div class="frame-wrap"><div class="frame"><header class="appbar"><div class="brand"><span class="brand-mark">A</span>AGENTBUDDY</div><span class="appbar-link">资源矩阵</span><span class="appbar-link">同步队列</span><span class="appbar-link">审计记录</span><span class="appbar-status"><b>38</b> 个资源 · <b>12</b> 个目标</span><button class="primary" onclick="togglePalette(true)">快速操作</button></header><div class="matrix-shell"><div class="matrix-tools"><div class="search">搜索 IDE、Token、插件或状态…</div><div class="segmented"><button class="segment on" onclick="setSegment(this)">全部</button><button class="segment" onclick="setSegment(this)">有变更</button><button class="segment" onclick="setSegment(this)">异常</button></div><button class="secondary" onclick="togglePalette(true)">⌘ K</button></div><div class="matrix-body"><aside class="matrix-filters"><div class="filter-title">资源类型</div><div class="filter"><span>IDE</span><b>12</b></div><div class="filter"><span>Token</span><b>8</b></div><div class="filter"><span>插件</span><b>18</b></div><div class="filter-title">同步状态</div><div class="filter"><span>已同步</span><b>31</b></div><div class="filter"><span>待更新</span><b>5</b></div><div class="filter"><span>异常</span><b>2</b></div><div class="filter-title">商业服务</div><div class="filter"><span>推荐</span><span class="tag pro">PRO</span></div><div class="filter"><span>分发</span><span class="tag pro">PRO</span></div><div class="filter"><span>团队</span><span class="tag pro">PRO</span></div></aside><main class="matrix-wrap"><table><thead><tr><th>资源</th><th>类型</th><th>关联目标</th><th>版本 / 协议</th><th>状态</th><th>最近变更</th></tr></thead><tbody><tr><td><span class="cell-dot"></span>Codex</td><td>IDE / CLI</td><td>4 个配置域</td><td>Responses</td><td><span class="tag ok">已同步</span></td><td>2 分钟前</td></tr><tr><td><span class="cell-dot"></span>Claude Code</td><td>IDE / CLI</td><td>6 个配置域</td><td>Anthropic</td><td><span class="tag ok">已同步</span></td><td>2 分钟前</td></tr><tr><td><span class="cell-dot wait"></span>Cursor</td><td>IDE</td><td>3 个配置域</td><td>Plugin v1.3</td><td><span class="tag warn">待更新</span></td><td>12 分钟前</td></tr><tr><td><span class="cell-dot"></span>OPENAI_API_KEY</td><td>Token</td><td>Codex + 3</td><td>环境变量</td><td><span class="tag ok">可用</span></td><td>今天</td></tr><tr><td><span class="cell-dot"></span>standard-dev</td><td>插件</td><td>5 个 IDE</td><td>v2.6.1</td><td><span class="tag ok">已同步</span></td><td>昨天</td></tr><tr><td><span class="cell-dot wait"></span>code-review-suite</td><td>插件</td><td>3 个 IDE</td><td>v1.4.0</td><td><span class="tag warn">待发布</span></td><td>昨天</td></tr></tbody></table></main></div><footer class="quickbar"><b>已选 0 项</b><span>批量同步</span><span>验证 Token</span><span>导出插件</span><span>查看差异</span></footer></div></div><aside class="palette" id="palette"><input class="palette-input" value="同步" aria-label="快速操作搜索"><div class="command" onclick="runCommand(this)"><div class="command-icon">↗</div><div><b>同步有变更的资源</b><span>5 项变更 → Codex、Claude Code、Cursor</span></div><kbd>Enter</kbd></div><div class="command" onclick="runCommand(this)"><div class="command-icon">✓</div><div><b>验证全部 Token</b><span>检查 8 个本地凭据的连通性</span></div><kbd>V</kbd></div><div class="command" onclick="runCommand(this)"><div class="command-icon">▣</div><div><b>发布选中的插件</b><span>进入 Pro 市场分发流程</span></div><kbd>P</kbd></div><div style="text-align:right;padding:6px"><button class="secondary" onclick="togglePalette(false)">关闭</button></div></aside></div>
+    <div class="compare"><div><b>核心优势</b>所有资源和状态集中在一个可筛选矩阵，批量操作效率最高。</div><div><b>适合用户</b>管理大量 IDE、插件和团队资源的专业用户与平台管理员。</div><div><b>主要代价</b>学习门槛最高，移动端体验弱，不适合作为唯一的新手入口。</div></div>
+  </section>
+</section>
+
+<script>
+  function showScheme(key, button) {
+    document.querySelectorAll('.scheme').forEach(item => item.classList.remove('active'));
+    document.querySelectorAll('.scheme-tab').forEach(item => item.classList.remove('active'));
+    document.getElementById('scheme-' + key).classList.add('active');
+    button.classList.add('active');
+  }
+  function activateSide(button) {
+    button.closest('.tower-side').querySelectorAll('.side-item').forEach(item => item.classList.remove('active'));
+    button.classList.add('active');
+  }
+  function toggleDrawer(open) { document.getElementById('sync-drawer').classList.toggle('open', open); }
+  function completeDrawer(button) { button.textContent = '同步完成 · 3 IDE'; button.style.background = '#087f71'; setTimeout(() => toggleDrawer(false), 850); }
+  function goStage(stage) {
+    document.querySelectorAll('.flow-stage').forEach(item => item.classList.toggle('active', item.dataset.stage == stage));
+    document.querySelectorAll('.step').forEach((item, index) => { item.classList.toggle('active', index + 1 === stage); item.classList.toggle('done', index + 1 < stage); });
+  }
+  function finishFlow(button) { button.textContent = '同步完成'; button.style.background = '#087f71'; }
+  function setSegment(button) { button.parentElement.querySelectorAll('.segment').forEach(item => item.classList.remove('on')); button.classList.add('on'); }
+  function togglePalette(open) { document.getElementById('palette').classList.toggle('open', open); }
+  function runCommand(item) { item.querySelector('b').textContent = '命令已加入同步队列'; setTimeout(() => togglePalette(false), 700); }
+</script>
