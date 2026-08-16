@@ -15,7 +15,10 @@ sys.path.insert(0, str(ROOT))
 try:
     import bcrypt  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["bcrypt"] = types.SimpleNamespace()
+    sys.modules["bcrypt"] = types.SimpleNamespace(
+        hashpw=lambda password, salt: b"test-hash",
+        gensalt=lambda: b"test-salt",
+    )
 
 from auth import models  # noqa: E402
 from plugin_build import publish_local  # noqa: E402

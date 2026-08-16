@@ -17,8 +17,12 @@
 #   2. crontab（备用）:
 #      0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py --daily >> /var/log/agentbuddy-crawler.log 2>&1
 #
-# 注：skill 名必须是来源仓库 SKILL.md frontmatter 里的权威全名（如
-#     qwen-mm-plugins-core，不是 core），否则过滤会落空导致打包 0 个 skill。
+# 注：crawler 会把一个来源聚合成一个可安装插件，插件内包含多个 skills。
+#     GitHub 来源会自动扫描仓库内所有 SKILL.md。
+#     文章/公众号 URL 如果抓不到正文，可配置 repos/github_repos/repositories 作为仓库种子，
+#     crawler 会扫描这些仓库并聚合发现的 skills。
+#     skills 为可选白名单；配置时必须使用 SKILL.md frontmatter 里的权威全名
+#     （如 qwen-mm-plugins-core，不是 core），否则过滤会落空。
 # 发布：crawler 必须与 app.py 同机部署，自动走"服务端直连"（免登录直写库和
 #     packages/，首跑自动创建 crawler 服务账号）。
 

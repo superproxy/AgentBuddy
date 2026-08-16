@@ -244,9 +244,9 @@ def require_server_direct_mode() -> None:
 # 核心：抓取 + 构建 + 发布
 # ============================================================
 
-def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
-    """处理单个源：服务端分析 → 构建 → 发布。"""
-    from plugin_build import SkillInfo, analyze_source, build_plugin
+def crawl_and_publish(source: dict, dry_run: bool = False, remaining_quota: int | None = None) -> dict:
+    """处理单个源：动态发现 skills → 聚合成一个可安装插件 → 发布。"""
+    from plugin_build import analyze_source
 
     name = source.get("name", "")
     url = source.get("url", "")
@@ -254,83 +254,178 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
 
     if not url:
         warn(f"  [SKIP] 源无 URL: {name}")
-        return {"status": "skip", "reason": "no url"}
+        return {"status": "skip", "reason": "no url", "published": 0, "skipped": 1, "error": 0, "items": []}
+
+    if remaining_quota is not None and remaining_quota <= 0:
+        return {"status": "skip", "reason": "quota reached", "published": 0, "skipped": 0, "error": 0, "items": [], "stopped_reason": "quota_reached"}
 
     header(f"Crawling: {name} {'[server-direct]' if server_mode() else '[http]'}")
     info(f"  URL: {url}")
 
-    # 1. 分析来源
     try:
-        meta = analyze_source(SERVER_DIR, url, ai=bool(source.get("ai", False)))
+        source_meta = analyze_source(SERVER_DIR, url, ai=bool(source.get("ai", False)))
     except Exception as e:
         error(f"  分析失败: {e}")
-        return {"status": "error", "reason": str(e)}
+        return {"status": "error", "reason": str(e), "published": 0, "skipped": 0, "error": 1, "items": []}
 
-    info(f"  Name: {meta.name}")
-    info(f"  Skills: {len(meta.skills)}")
-    info(f"  MCP Servers: {len(meta.mcp_servers)}")
-    info(f"  Description: {meta.description[:80]}")
+    skills = _skills_for_source(source, source_meta)
+    if not skills:
+        warn("  [SKIP] 未发现 SKILL.md 或有效 skill 配置")
+        return {"status": "skip", "reason": "no skills", "published": 0, "skipped": 1, "error": 0, "items": []}
 
-    # 2. 质量评分
-    score = evaluate_quality(meta)
-    print(f"  {COLOR_DARKGRAY}质量评分: {score}/100{COLOR_RESET}")
-    if score < MIN_QUALITY_SCORE:
-        warn(f"  [SKIP] 质量分低于阈值 ({score} < {MIN_QUALITY_SCORE})")
-        return {"status": "skip", "reason": f"low quality score: {score}"}
+    plugin_meta = _aggregate_meta_for_source(source, source_meta, skills, tags)
+    info(f"  Plugin: {plugin_meta.name}")
+    info(f"  Aggregated Skills: {len(plugin_meta.skills)}")
+    info(f"  MCP Servers: {len(plugin_meta.mcp_servers)}")
+    info(f"  Description: {plugin_meta.description[:80]}")
 
-    # 3. 去重检查（服务端直连模式免登录直接查库）
     if not dry_run:
         try:
             require_server_direct_mode()
         except Exception as e:
             error(f"  发布模式错误: {e}")
-            return {"status": "error", "reason": str(e)}
-        if already_published(meta.name, meta.version):
-            info(f"  [SKIP] 已发布同版本: {meta.name} v{meta.version}")
-            return {"status": "skip", "reason": "already published"}
+            return {"status": "error", "reason": str(e), "published": 0, "skipped": 0, "error": 1, "items": []}
 
-    # 4. 服务端自包含构建 zip
+    item = _process_aggregate_plugin(plugin_meta, dry_run=dry_run, tags=tags or source_meta.tags)
+    result = {"status": item["status"], "published": 0, "skipped": 0, "error": 0, "items": [item]}
+    if item["status"] == "published":
+        result["published"] = 1
+    elif item["status"] == "dry_run":
+        result["status"] = "dry_run"
+    elif item["status"] == "error":
+        result["error"] = 1
+    else:
+        result["skipped"] = 1
+    return result
+
+
+def _skills_for_source(source: dict, source_meta) -> list:
+    from plugin_build import SkillInfo, analyze_github
+
+    discovered = list(source_meta.skills)
+    repos = source.get("repos") or source.get("github_repos") or source.get("repositories") or []
+    if isinstance(repos, str):
+        repos = [repos]
+    for repo in repos if isinstance(repos, list) else []:
+        try:
+            repo_meta = analyze_github(str(repo))
+        except Exception as e:
+            warn(f"  仓库扫描失败: {repo}: {e}")
+            continue
+        discovered.extend(repo_meta.skills)
+
     selected = source.get("skills")
     if selected and isinstance(selected, list):
-        known = {s.name: s for s in meta.skills}
-        meta.skills = [known.get(str(name)) or SkillInfo(name=str(name)) for name in selected if name]
-    if tags:
-        meta.tags = tags
-    try:
-        cfg = {
-            "name": meta.name,
-            "version": meta.version,
-            "description": meta.description,
-            "author": meta.author,
-            "license": meta.license,
-            "homepage": meta.homepage,
-            "repository": {"type": "git", "url": meta.repository} if meta.repository else "",
-            "keywords": meta.tags,
-            "skills": [
-                {"name": s.name, "description": s.description, **({"source": s.source} if s.source else {})}
-                for s in meta.skills
-            ],
-            "mcpServers": meta.mcp_servers,
-            "envVars": meta.env_vars,
-        }
-        zip_path, _ = build_plugin(SERVER_DIR, {"config_yaml": yaml.dump(cfg, allow_unicode=True, sort_keys=False), "mode": "inline"})
-        info(f"  [OK] 构建完成: {zip_path}")
-    except Exception as e:
-        error(f"  构建失败: {e}")
-        return {"status": "error", "reason": str(e)}
+        known = {s.name: s for s in discovered}
+        return [known.get(str(name)) or SkillInfo(name=str(name), source=f"{source_meta.repository or source_meta.source_url}@{name}") for name in selected if name]
 
-    # 5. 发布（服务端直连模式免登录直写库和包目录）
+    seen = set()
+    deduped = []
+    for skill in discovered:
+        if skill.name in seen:
+            continue
+        seen.add(skill.name)
+        deduped.append(skill)
+    return deduped
+
+
+def _aggregate_meta_for_source(source: dict, source_meta, skills: list, tags: list | None = None):
+    from plugin_build import PluginMeta, sanitize_name
+
+    plugin_name = sanitize_name(str(source.get("plugin_name") or source.get("pluginName") or source.get("name") or source_meta.name))
+    if not plugin_name.endswith("-skills") and len(skills) > 1:
+        plugin_name = sanitize_name(f"{plugin_name}-skills")
+    description = source_meta.description if _is_useful_source_description(source_meta.description) else ""
+    if not description:
+        origin = source_meta.repository or source_meta.source_url or source.get("url") or plugin_name
+        description = f"Aggregated skills from {origin}"
+    return PluginMeta(
+        name=plugin_name,
+        version=str(source.get("version") or source_meta.version or "1.0.0"),
+        description=description,
+        author=source_meta.author,
+        license=source_meta.license,
+        homepage=source_meta.homepage,
+        repository=source_meta.repository,
+        skills=skills,
+        mcp_servers=source_meta.mcp_servers,
+        env_vars=source_meta.env_vars,
+        tags=tags or source_meta.tags,
+        source_type=source_meta.source_type,
+        source_url=source_meta.source_url,
+    )
+
+
+def _is_useful_source_description(description: str) -> bool:
+    text = str(description or "").strip()
+    if not text:
+        return False
+    blocked_markers = (
+        "环境异常",
+        "完成验证后即可继续访问",
+        "微信扫一扫可打开此内容",
+        "Scan with Weixin",
+        "WeChat verification page",
+    )
+    return not any(marker in text for marker in blocked_markers)
+
+
+def _process_aggregate_plugin(meta, dry_run: bool, tags: list | None = None) -> dict:
+    from plugin_build import build_plugin
+
+    score = evaluate_quality(meta)
+    print(f"  {COLOR_DARKGRAY}{meta.name}: 质量评分 {score}/100{COLOR_RESET}")
+    if score < MIN_QUALITY_SCORE:
+        warn(f"  [SKIP] {meta.name} 质量分低于阈值 ({score} < {MIN_QUALITY_SCORE})")
+        return {"status": "skip", "name": meta.name, "reason": f"low quality score: {score}"}
+
+    if not dry_run and already_published(meta.name, meta.version):
+        info(f"  [SKIP] 已发布同版本: {meta.name} v{meta.version}")
+        return {"status": "skip", "name": meta.name, "reason": "already published"}
+
+    try:
+        cfg = _plugin_config_for_meta(meta)
+        zip_path, _ = build_plugin(SERVER_DIR, {"config_yaml": yaml.dump(cfg, allow_unicode=True, sort_keys=False), "mode": "inline"})
+        info(f"  [OK] 构建完成: {meta.name} -> {zip_path}")
+    except Exception as e:
+        error(f"  构建失败: {meta.name}: {e}")
+        return {"status": "error", "name": meta.name, "reason": str(e)}
+
     if dry_run:
-        info("  [DRY-RUN] 跳过发布")
-        return {"status": "dry_run", "zip_path": str(zip_path)}
+        info(f"  [DRY-RUN] 跳过发布: {meta.name}")
+        return {"status": "dry_run", "name": meta.name, "zip_path": str(zip_path), "skills": [s.name for s in meta.skills]}
 
     try:
         result = publish_local(zip_path, tags=tags or meta.tags, scope="public")
         info(f"  [OK] 直连发布成功: {result.get('name', meta.name)}")
-        return {"status": "published", "data": result}
+        return {"status": "published", "name": meta.name, "data": result, "skills": [s.name for s in meta.skills]}
     except Exception as e:
-        error(f"  发布失败: {e}")
-        return {"status": "error", "reason": str(e)}
+        error(f"  发布失败: {meta.name}: {e}")
+        return {"status": "error", "name": meta.name, "reason": str(e)}
+
+
+def _plugin_config_for_meta(meta) -> dict:
+    return {
+        "name": meta.name,
+        "version": meta.version,
+        "description": meta.description,
+        "author": meta.author,
+        "license": meta.license,
+        "homepage": meta.homepage,
+        "repository": {"type": "git", "url": meta.repository} if meta.repository else "",
+        "keywords": meta.tags,
+        "skills": [
+            {
+                "name": s.name,
+                "description": s.description,
+                "version": s.version,
+                **({"source": s.source} if s.source else {}),
+            }
+            for s in meta.skills
+        ],
+        "mcpServers": meta.mcp_servers,
+        "envVars": meta.env_vars,
+    }
 
 
 # ============================================================
@@ -410,19 +505,18 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
         return results
 
     for source in sources:
-        if int(state.get("published", 0)) >= quota:
+        current = int(state.get("published", 0))
+        if current >= quota:
             results["stopped_reason"] = "quota_reached"
             break
         try:
-            r = crawl_and_publish(source, dry_run=False)
-            status = r.get("status", "error")
-            if status == "published":
-                state["published"] = int(state.get("published", 0)) + 1
-                results["published"] += 1
-            elif status == "skip":
-                results["skipped"] += 1
-            else:
-                results["error"] += 1
+            r = crawl_and_publish(source, dry_run=False, remaining_quota=quota - current)
+            _accumulate_crawl_result(results, r)
+            published_delta = int(r.get("published", 0)) if "published" in r else (1 if r.get("status") == "published" else 0)
+            state["published"] = int(state.get("published", 0)) + published_delta
+            if r.get("stopped_reason") == "quota_reached" or int(state.get("published", 0)) >= quota:
+                results["stopped_reason"] = "quota_reached"
+                break
         except Exception as e:
             error(f"处理异常: {source.get('name')}: {e}")
             results["error"] += 1
@@ -438,6 +532,26 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
 # ============================================================
 # CLI
 # ============================================================
+
+def _accumulate_crawl_result(results: dict, result: dict) -> None:
+    has_counts = any(k in result for k in ("published", "skipped", "error", "items"))
+    if has_counts:
+        results["published"] = int(results.get("published", 0)) + int(result.get("published", 0))
+        results["skipped"] = int(results.get("skipped", 0)) + int(result.get("skipped", 0))
+        results["error"] = int(results.get("error", 0)) + int(result.get("error", 0))
+    else:
+        status = result.get("status")
+        if status == "published":
+            results["published"] = int(results.get("published", 0)) + 1
+        elif status == "skip":
+            results["skipped"] = int(results.get("skipped", 0)) + 1
+        elif status == "error":
+            results["error"] = int(results.get("error", 0)) + 1
+
+    if result.get("status") == "dry_run":
+        dry_run_items = [i for i in result.get("items", []) if i.get("status") == "dry_run"]
+        results["dry_run"] = int(results.get("dry_run", 0)) + (len(dry_run_items) or 1)
+
 
 def cmd_list():
     sources = load_sources()
@@ -504,15 +618,7 @@ def cmd_run(source_name: str | None = None, dry_run: bool = False):
             continue
         try:
             r = crawl_and_publish(source, dry_run=dry_run)
-            status = r.get("status", "error")
-            if status == "published":
-                results["published"] += 1
-            elif status == "skip":
-                results["skipped"] += 1
-            elif status == "dry_run":
-                results["dry_run"] += 1
-            else:
-                results["error"] += 1
+            _accumulate_crawl_result(results, r)
         except Exception as e:
             error(f"处理异常: {source.get('name')}: {e}")
             results["error"] += 1

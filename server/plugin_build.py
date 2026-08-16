@@ -24,6 +24,7 @@ class SkillInfo:
     name: str
     description: str = ""
     source: str = ""
+    version: str = "1.0.0"
     requires_key: bool = False
 
 
@@ -83,6 +84,7 @@ def meta_to_response(meta: PluginMeta) -> dict[str, Any]:
                 "name": s.name,
                 "description": s.description,
                 "source": s.source,
+                "version": s.version,
                 "requires_key": s.requires_key,
             }
             for s in meta.skills
@@ -130,6 +132,7 @@ def meta_from_config(data: dict, source_type: str = "", source_url: str = "") ->
                 name=str(name),
                 description=str(item.get("description") or ""),
                 source=str(item.get("source") or item.get("url") or ""),
+                version=str(item.get("version") or "1.0.0"),
                 requires_key=bool(item.get("requires_key") or item.get("requiresKey")),
             ))
         elif isinstance(item, str) and item.strip():
@@ -163,32 +166,77 @@ def analyze_github(source: str) -> PluginMeta:
         source_type="github",
         source_url=repo_url,
     )
-    try:
-        import requests
-        resp = requests.get(f"https://api.github.com/repos/{owner_repo}", timeout=15)
-        if resp.ok:
-            data = resp.json()
-            meta.description = str(data.get("description") or "")
-            meta.license = str((data.get("license") or {}).get("spdx_id") or "")
-            meta.homepage = str(data.get("homepage") or "") or repo_url
-    except Exception:
-        pass
+    default_branch = "main"
+    data = _http_get_json(f"https://api.github.com/repos/{owner_repo}", timeout=15)
+    if isinstance(data, dict):
+        meta.description = str(data.get("description") or "")
+        meta.license = str((data.get("license") or {}).get("spdx_id") or "")
+        meta.homepage = str(data.get("homepage") or "") or repo_url
+        default_branch = str(data.get("default_branch") or default_branch)
+    meta.skills = discover_github_skills(owner_repo, default_branch=default_branch, repo_description=meta.description)
     return meta
+
+
+def discover_github_skills(owner_repo: str, default_branch: str = "main", repo_description: str = "") -> list[SkillInfo]:
+    """扫描 GitHub 仓库内所有 SKILL.md，返回权威 skill 元数据。"""
+    skills: list[SkillInfo] = []
+    seen: set[str] = set()
+    tree = _github_tree(owner_repo, default_branch)
+    if not tree and default_branch != "master":
+        tree = _github_tree(owner_repo, "master")
+    for item in tree:
+        path = str(item.get("path") or "")
+        if not path or path.split("/")[-1].lower() != "skill.md":
+            continue
+        text = ""
+        branch = default_branch or "main"
+        raw_url = f"https://raw.githubusercontent.com/{owner_repo}/{branch}/{path}"
+        text = _http_get_text(raw_url, timeout=15)
+        if not text and branch != "master":
+            raw_url = f"https://raw.githubusercontent.com/{owner_repo}/master/{path}"
+            text = _http_get_text(raw_url, timeout=15)
+        frontmatter = _parse_skill_frontmatter(text)
+        name = str(frontmatter.get("name") or "").strip() or _infer_skill_name_from_path(path)
+        name = sanitize_name(name)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        description = str(frontmatter.get("description") or "").strip() or repo_description
+        version = str(frontmatter.get("version") or "1.0.0").strip() or "1.0.0"
+        skills.append(SkillInfo(
+            name=name,
+            version=version,
+            description=truncate_description(description, 180),
+            source=f"{owner_repo}@{name}",
+        ))
+    return skills
+
+
+def _github_tree(owner_repo: str, branch: str) -> list[dict]:
+    data = _http_get_json(f"https://api.github.com/repos/{owner_repo}/git/trees/{branch}?recursive=1", timeout=20)
+    if not isinstance(data, dict):
+        return []
+    tree = data.get("tree", [])
+    return tree if isinstance(tree, list) else []
 
 
 def analyze_url_simple(url: str) -> PluginMeta:
     meta = PluginMeta(source_type="url", source_url=url, homepage=url)
-    try:
-        import requests
-        resp = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0 (AgentBuddy Server)"})
-        if resp.ok:
-            text = resp.text
+    text = _http_get_text(url, timeout=20)
+    if text:
+        title = _extract_meta_content(text, "og:title") or _extract_meta_content(text, "twitter:title")
+        if not title:
             title_match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
-            if title_match:
-                meta.name = _slugify(_strip_html(title_match.group(1))[:60])
-            meta.description = truncate_description(_strip_html(text))
-    except Exception:
-        pass
+            title = _strip_html(title_match.group(1)) if title_match else ""
+        if title:
+            meta.name = _slugify(title[:60])
+
+        description = _extract_meta_content(text, "og:description") or _extract_meta_content(text, "description") or _strip_html(text)
+        meta.description = truncate_description(description)
+        repos = _extract_github_repos(text)
+        if repos:
+            meta.repository = f"https://github.com/{repos[0]}"
+            meta.skills = _discover_skills_from_repos(repos, meta.description)
     if not meta.name:
         host = urlparse(url).netloc.split(":", 1)[0]
         meta.name = _slugify(host or "url-plugin")
@@ -308,7 +356,12 @@ def generate_config(meta: PluginMeta) -> dict[str, Any]:
         cfg["mcpServers"] = meta.mcp_servers
     if meta.skills:
         cfg["skills"] = [
-            {"name": s.name, "description": s.description, **({"source": s.source} if s.source else {})}
+            {
+                "name": s.name,
+                "description": s.description,
+                "version": s.version,
+                **({"source": s.source} if s.source else {}),
+            }
             for s in meta.skills if s.name
         ]
     if meta.env_vars:
@@ -468,6 +521,111 @@ def _strip_html(text: str) -> str:
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def _extract_meta_content(html: str, name: str) -> str:
+    escaped_name = re.escape(name)
+    quote = r"[\"']"
+    patterns = [
+        rf"<meta[^>]+property={quote}{escaped_name}{quote}[^>]+content={quote}([^\"']*){quote}",
+        rf"<meta[^>]+name={quote}{escaped_name}{quote}[^>]+content={quote}([^\"']*){quote}",
+        rf"<meta[^>]+content={quote}([^\"']*){quote}[^>]+property={quote}{escaped_name}{quote}",
+        rf"<meta[^>]+content={quote}([^\"']*){quote}[^>]+name={quote}{escaped_name}{quote}",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html, re.I | re.S)
+        if match:
+            return _strip_html(match.group(1))
+    return ""
+
+
+def _github_headers() -> dict[str, str]:
+    headers = {"User-Agent": "AgentBuddy Server"}
+    return headers
+
+
+def _http_get_text(url: str, timeout: int = 20) -> str:
+    try:
+        import requests
+        resp = requests.get(url, timeout=timeout, headers=_github_headers())
+        return resp.text if resp.ok else ""
+    except Exception:
+        pass
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(url, headers=_github_headers())
+        with urlopen(req, timeout=timeout) as resp:
+            charset = resp.headers.get_content_charset() or "utf-8"
+            return resp.read().decode(charset, errors="replace")
+    except Exception:
+        return ""
+
+
+def _http_get_json(url: str, timeout: int = 20) -> Any:
+    text = _http_get_text(url, timeout=timeout)
+    if not text:
+        return None
+    try:
+        import json
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+def _extract_github_repos(text: str) -> list[str]:
+    repos: list[str] = []
+    seen: set[str] = set()
+    for owner, repo in re.findall(r"github\.com[/:]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)", text):
+        repo = repo.removesuffix(".git")
+        key = f"{owner}/{repo}".strip("/")
+        if key not in seen:
+            seen.add(key)
+            repos.append(key)
+    return repos[:20]
+
+
+def _discover_skills_from_repos(repos: list[str], repo_description: str = "") -> list[SkillInfo]:
+    skills: list[SkillInfo] = []
+    seen: set[str] = set()
+    for repo in repos:
+        repo_meta = analyze_github(repo)
+        for skill in repo_meta.skills:
+            if skill.name in seen:
+                continue
+            seen.add(skill.name)
+            if not skill.description:
+                skill.description = repo_meta.description or repo_description
+            skills.append(skill)
+    return skills
+
+
+def _parse_skill_frontmatter(text: str) -> dict[str, Any]:
+    if not text.startswith("---"):
+        return {}
+    match = re.match(r"^---\s*\n([\s\S]*?)\n---", text)
+    if not match:
+        return {}
+    try:
+        data = yaml.safe_load(match.group(1)) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        result: dict[str, str] = {}
+        for line in match.group(1).splitlines():
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.+?)\s*$", line)
+            if m:
+                result[m.group(1)] = m.group(2).strip().strip('"\'')
+        return result
+
+
+def _infer_skill_name_from_path(path: str) -> str:
+    parts = [p for p in path.split("/") if p]
+    if len(parts) >= 2:
+        parent = parts[-2]
+        if parent.lower() not in {"skill", "skills", "src", "capabilities"}:
+            return parent
+    if len(parts) >= 3:
+        return parts[-3]
+    return Path(path).stem or "skill"
 
 
 def _slugify(s: str) -> str:
