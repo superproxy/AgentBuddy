@@ -18,8 +18,8 @@
   1. 去重检查（已发布的同名同版本跳过）
   2. analyze_source → 提取 skills / MCP / envVars
   3. 质量评分（star 数、文档完整度、skill 数量）
-  4. download_skills + package（inline 模式）
-  5. publish 到市场（用服务账号 token）
+  4. 服务端自包含打包（inline 模式）
+  5. 服务端直连发布到市场
 """
 from __future__ import annotations
 
@@ -34,12 +34,10 @@ from pathlib import Path
 # ── 路径设置 ──
 SERVER_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SERVER_DIR.parent
-CLI_DIR = PROJECT_ROOT / "cli"
 SOURCES_FILE = SERVER_DIR / "config" / "plugin-sources.yaml"
 
-# server 目录用于导入 auth；项目根用于把 cli/ 解析为 agentctl 包。
+# server 目录用于导入 auth / plugin_build 等服务端模块。
 sys.path.insert(0, str(SERVER_DIR))
-sys.path.insert(0, str(PROJECT_ROOT))
 
 import yaml
 
@@ -138,56 +136,17 @@ def already_published_local(name: str, version: str) -> bool:
 
 
 def publish_local(zip_path: Path, tags: list | None = None, scope: str = "public") -> dict:
-    """直连发布：包文件写入 packages/ + plugin_save 入库（对齐 publish 路由逻辑）。"""
-    import zipfile as _zip
-    m = _init_db_access()
-    packages = MARKET_DIR / "packages"
-    plugin_name, version, description, author = zip_path.stem, "1.0.0", "", "crawler"
-
-    with _zip.ZipFile(zip_path) as zf:
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
-            n = info.filename
-            if n.endswith((".plugin.yaml", ".plugin.yml")):
-                try:
-                    data = yaml.safe_load(zf.read(n).decode("utf-8"))
-                    if isinstance(data, dict):
-                        plugin_name = data.get("name", Path(n).stem)
-                        version = str(data.get("version", "1.0.0")).strip() or "1.0.0"
-                        description = str(data.get("description") or "").strip()
-                        yaml_author = str(data.get("author") or "").strip()
-                        if yaml_author:
-                            author = yaml_author
-                except Exception:
-                    pass
-                break
-
-    safe = "".join(c for c in str(plugin_name) if c.isalnum() or c in ("-", "_"))
-    pkg_name = f"{safe or 'plugin'}-{version}.zip"
-    packages.mkdir(parents=True, exist_ok=True)
-    (packages / pkg_name).write_bytes(zip_path.read_bytes())
-
-    entry = {
-        "id": f"{plugin_name}-{version}",
-        "name": plugin_name,
-        "version": version,
-        "description": description[:500],
-        "author": author,
-        "author_id": ensure_crawler_user(),
-        "file": f"packages/{pkg_name}",
-        "size": (packages / pkg_name).stat().st_size,
-        "published_at": m.now_iso(),
-        "tags": tags if isinstance(tags, list) else [],
-        "downloads": 0,
-        "likes": 0,
-        "scope": scope,
-        "team_id": None,
-    }
-    m.plugin_save(entry)
-    return entry
-CRAWLER_USERNAME = os.environ.get("AGENTBUDDY_CRAWLER_USER", "crawler")
-CRAWLER_PASSWORD = os.environ.get("AGENTBUDDY_CRAWLER_PASS", "")
+    """直连发布：复用服务端核心发布能力。"""
+    _init_db_access()
+    from plugin_build import publish_local as _publish_local
+    return _publish_local(
+        zip_path,
+        MARKET_DIR,
+        tags=tags,
+        scope=scope,
+        user={"id": ensure_crawler_user(), "username": "crawler"},
+        service_username="crawler",
+    )
 MIN_QUALITY_SCORE = 30  # 最低质量分（满分 100）
 
 
@@ -271,27 +230,14 @@ def evaluate_quality(meta) -> int:
 
 
 # ============================================================
-# 认证
+# 发布模式
 # ============================================================
 
-def get_crawler_token() -> str:
-    """用服务账号登录获取 token。"""
-    from agentctl.lib import auth as market_auth
-    token = market_auth.get_token()
-    if token:
-        return token
-
-    if not CRAWLER_PASSWORD:
-        error("未设置 CRAWLER_PASSWORD 环境变量，且本地无 token")
-        error("请先执行: agentctl plugin auth login -u crawler -p <password>")
-        sys.exit(1)
-
-    try:
-        data = market_auth.login(CRAWLER_USERNAME, CRAWLER_PASSWORD, SERVER_URL)
-        return data["token"]
-    except Exception as e:
-        error(f"crawler 账号登录失败: {e}")
-        sys.exit(1)
+def require_server_direct_mode() -> None:
+    """后台捞取只允许服务端直连模式运行。"""
+    if server_mode():
+        return
+    raise RuntimeError("crawler 需要在服务端数据目录运行；未找到市场数据库，不能发布")
 
 
 # ============================================================
@@ -299,9 +245,8 @@ def get_crawler_token() -> str:
 # ============================================================
 
 def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
-    """处理单个源：分析 → 评分 → 下载 → 构建 → 发布。"""
-    from agentctl.lib.plugin_builder import PluginBuilder
-    from agentctl.lib import auth as market_auth
+    """处理单个源：服务端分析 → 构建 → 发布。"""
+    from plugin_build import SkillInfo, analyze_source, build_plugin
 
     name = source.get("name", "")
     url = source.get("url", "")
@@ -316,8 +261,7 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
 
     # 1. 分析来源
     try:
-        builder = PluginBuilder(PROJECT_ROOT)
-        meta = builder.analyze_source(url)
+        meta = analyze_source(SERVER_DIR, url, ai=bool(source.get("ai", False)))
     except Exception as e:
         error(f"  分析失败: {e}")
         return {"status": "error", "reason": str(e)}
@@ -336,47 +280,53 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
 
     # 3. 去重检查（服务端直连模式免登录直接查库）
     if not dry_run:
-        token = "" if server_mode() else get_crawler_token()
-        if already_published(meta.name, meta.version, token):
+        try:
+            require_server_direct_mode()
+        except Exception as e:
+            error(f"  发布模式错误: {e}")
+            return {"status": "error", "reason": str(e)}
+        if already_published(meta.name, meta.version):
             info(f"  [SKIP] 已发布同版本: {meta.name} v{meta.version}")
             return {"status": "skip", "reason": "already published"}
 
-    # 4. 下载 skills
+    # 4. 服务端自包含构建 zip
+    selected = source.get("skills")
+    if selected and isinstance(selected, list):
+        known = {s.name: s for s in meta.skills}
+        meta.skills = [known.get(str(name)) or SkillInfo(name=str(name)) for name in selected if name]
+    if tags:
+        meta.tags = tags
     try:
-        selected = source.get("skills")
-        skill_dirs = builder.download_skills(meta, selected=selected)
-    except Exception as e:
-        warn(f"  skill 下载失败（继续构建）: {e}")
-        skill_dirs = []
-
-    # 5. 构建 zip
-    if source.get("tags"):
-        meta.tags = source["tags"]
-    try:
-        cfg = builder.generate_yaml(meta)
-        output_dir = SERVER_DIR / "data" / "crawler-output"
-        zip_path = builder.package(cfg, skill_dirs, mode="inline", output_dir=output_dir)
+        cfg = {
+            "name": meta.name,
+            "version": meta.version,
+            "description": meta.description,
+            "author": meta.author,
+            "license": meta.license,
+            "homepage": meta.homepage,
+            "repository": {"type": "git", "url": meta.repository} if meta.repository else "",
+            "keywords": meta.tags,
+            "skills": [
+                {"name": s.name, "description": s.description, **({"source": s.source} if s.source else {})}
+                for s in meta.skills
+            ],
+            "mcpServers": meta.mcp_servers,
+            "envVars": meta.env_vars,
+        }
+        zip_path, _ = build_plugin(SERVER_DIR, {"config_yaml": yaml.dump(cfg, allow_unicode=True, sort_keys=False), "mode": "inline"})
         info(f"  [OK] 构建完成: {zip_path}")
     except Exception as e:
         error(f"  构建失败: {e}")
         return {"status": "error", "reason": str(e)}
 
-    # 6. 发布（服务端直连模式免登录直写库和包目录；远程模式走 HTTP）
+    # 5. 发布（服务端直连模式免登录直写库和包目录）
     if dry_run:
-        info(f"  [DRY-RUN] 跳过发布")
+        info("  [DRY-RUN] 跳过发布")
         return {"status": "dry_run", "zip_path": str(zip_path)}
 
     try:
-        if server_mode():
-            result = publish_local(zip_path, tags=tags or meta.tags, scope="public")
-            info(f"  [OK] 直连发布成功: {result.get('name', meta.name)}")
-        else:
-            token = get_crawler_token()
-            result = builder.publish(
-                zip_path, SERVER_URL, token,
-                tags=tags or meta.tags, scope="public",
-            )
-            info(f"  [OK] 发布成功: {result.get('name', meta.name)}")
+        result = publish_local(zip_path, tags=tags or meta.tags, scope="public")
+        info(f"  [OK] 直连发布成功: {result.get('name', meta.name)}")
         return {"status": "published", "data": result}
     except Exception as e:
         error(f"  发布失败: {e}")

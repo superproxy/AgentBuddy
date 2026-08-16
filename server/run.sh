@@ -99,20 +99,6 @@ setup_deps() {
     else
         info "依赖已就绪"
     fi
-
-    # 三层分离：agentctl 包（cli/ 共享业务库）以 editable install 方式注册
-    if ! $PYTHON -c "import agentctl" 2>/dev/null; then
-        local REPO_ROOT
-        REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-        if [ -d "$REPO_ROOT/cli" ]; then
-            info "安装 agentctl 包（cli/ 共享业务库）..."
-            $PIP install -e "$REPO_ROOT/cli/" $PIP_FLAGS $PIP_MIRROR 2>&1 || {
-                warn "agentctl 安装失败，AI 生成功能可能不可用"
-            }
-        else
-            warn "未找到 $REPO_ROOT/cli/，跳过 agentctl 安装"
-        fi
-    fi
 }
 
 # === 启动 ===

@@ -47,6 +47,17 @@ export function getAuthToken(): string | null {
 }
 
 export async function api<T = any>(url: string, opts?: RequestInit): Promise<T> {
+  return requestJson<T>(url, opts)
+}
+
+/** 调用远程服务端 API（智能生成/市场/发布能力）。 */
+export async function serverJsonApi<T = any>(path: string, opts?: RequestInit): Promise<T> {
+  const url = serverApi(path)
+  if (!url) return { ok: false, error: '请先配置 Server 地址' } as any
+  return requestJson<T>(url, opts)
+}
+
+async function requestJson<T = any>(url: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {}
   // FormData 时让浏览器自动设置 Content-Type（含 boundary），不手动覆盖
   if (!(opts?.body instanceof FormData)) {

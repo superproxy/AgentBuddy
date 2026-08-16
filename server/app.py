@@ -18,7 +18,7 @@ import os
 import sys
 from pathlib import Path
 
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 # server 目录加入 sys.path，使 marketplace / ai_generator 可 import
@@ -35,7 +35,7 @@ LLM_CONFIG_PATH = Path(os.environ.get(
     SERVER_DIR / "config" / "llm" / "llm.yaml",
 ))
 
-# 项目根目录（用于 ai_generator 读取 skills/rules 等）
+# 服务端运行目录（AI 配置、服务端构建输出与资源读取）。
 PROJECT_ROOT = SERVER_DIR
 
 
@@ -69,12 +69,68 @@ def create_app() -> Flask:
     ai_bp = create_ai_bp(project_root=PROJECT_ROOT, llm_config_path=LLM_CONFIG_PATH)
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
 
+    # === 服务端插件构建 API ===
+    # 核心能力放服务端：智能分析/生成/构建/发布；桌面端只组装本地素材并调用这些 API。
+    from auth.middleware import require_auth, get_current_user
+
+    @app.route("/api/plugin/analyze", methods=["POST"])
+    def plugin_analyze():
+        body = request.get_json(silent=True) or {}
+        source = (body.get("source") or "").strip()
+        if not source:
+            return jsonify({"ok": False, "error": "来源不能为空"}), 400
+        try:
+            from plugin_build import analyze_source, meta_to_response
+            meta = analyze_source(PROJECT_ROOT, source, ai=bool(body.get("ai", False)))
+            return jsonify({"ok": True, "data": meta_to_response(meta)})
+        except FileNotFoundError as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"分析失败: {e}"}), 500
+
+    @app.route("/api/plugin/build", methods=["POST"])
+    def plugin_build_route():
+        body = request.get_json(silent=True) or {}
+        mode = body.get("mode", "inline")
+        if mode not in ("inline", "split"):
+            return jsonify({"ok": False, "error": f"不支持的打包模式: {mode}"}), 400
+        try:
+            from plugin_build import build_plugin, publish_local
+            zip_path, cfg = build_plugin(PROJECT_ROOT, body)
+            result = {
+                "zipPath": str(zip_path.relative_to(SERVER_DIR)),
+                "config": cfg,
+            }
+            if bool(body.get("publish", False)):
+                user = get_current_user()
+                if not user:
+                    return jsonify({"ok": False, "error": "发布需要先登录"}), 401
+                tags = body.get("tags", [])
+                scope = body.get("scope", "public")
+                team_id = body.get("team_id")
+                result["published"] = publish_local(
+                    zip_path,
+                    MARKETPLACE_DIR,
+                    tags=tags,
+                    scope=scope,
+                    team_id=int(team_id) if team_id else None,
+                    user=user,
+                )
+            return jsonify({"ok": True, "data": result})
+        except FileNotFoundError as e:
+            return jsonify({"ok": False, "error": str(e)}), 404
+        except ValueError as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"构建失败: {e}"}), 500
+
     # === 定时捞取（Crawler）管理 API + 内置每日调度 ===
     # 环境变量：
     #   AGENTBUDDY_CRAWL_ENABLED=0       关闭内置调度（默认开）
     #   AGENTBUDDY_CRAWL_HOUR=3          每日执行时刻（0-23，默认 3 点）
     #   AGENTBUDDY_CRAWL_QUOTA=10        每日发布配额（默认 10）
-    from auth.middleware import require_auth, get_current_user
     from flask import g as _g
 
     @app.route("/api/crawler/status", methods=["GET"])

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
-import { api, getServerUrl } from '../api/client'
+import { api, serverJsonApi } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { useSyncStore } from './sync'
@@ -282,14 +282,14 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
     urlAnalyzing.value = true
     urlMeta.value = null
     try {
-      const r = await api<any>('/api/plugin/analyze', {
+      const r = await serverJsonApi<any>('/api/plugin/analyze', {
         method: 'POST',
-        body: JSON.stringify({ source: urlSource.value.trim(), ai: false }),
+        body: JSON.stringify({ source: urlSource.value.trim(), ai: true }),
       })
       if (!r.ok) {
         // 后端返回非 JSON（404 HTML 等）或旧后端
         const hint = r.status === 404
-          ? '分析接口不存在，请重启应用更新后端'
+          ? '服务端分析接口不存在，请确认 Server 已更新'
           : (r.error || `分析失败 (HTTP ${r.status || '???'})`)
         ui.toast('分析失败: ' + hint, 'err')
         return
@@ -305,7 +305,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       ui.toast(`分析完成: ${d.name}，${d.skills?.length || 0} 个 skill`)
     } catch (e: any) {
       // Safari fetch 原生异常 → 返回可读错误
-      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查后端是否运行' : (e.message || String(e))
+      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查 Server 地址与网络' : (e.message || String(e))
       ui.toast('分析失败: ' + msg, 'err')
     } finally {
       urlAnalyzing.value = false
@@ -363,12 +363,11 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
         publish,
         tags: urlMeta.value.tags || [],
         scope: 'public',
-        server_url: getServerUrl(),
       }
       if (urlSelectedSkills.value.length > 0) {
         body.skills = urlSelectedSkills.value
       }
-      const r = await api<any>('/api/plugin/build', {
+      const r = await serverJsonApi<any>('/api/plugin/build', {
         method: 'POST',
         body: JSON.stringify(body),
       })
@@ -385,7 +384,7 @@ export const usePluginBuildStore = defineStore('pluginBuild', () => {
       }
       plugin.refreshPluginList()
     } catch (e: any) {
-      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查后端是否运行' : (e.message || String(e))
+      const msg = e?.name === 'TypeError' ? '网络请求失败，请检查 Server 地址与网络' : (e.message || String(e))
       ui.toast('构建失败: ' + msg, 'err')
     } finally {
       urlBuilding.value = false

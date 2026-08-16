@@ -48,16 +48,6 @@ if %errorlevel% neq 0 (
     echo [INFO] 依赖已就绪
 )
 
-REM 三层分离：agentctl 包（cli/ 共享业务库）以 editable install 方式注册
-python -c "import agentctl" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [INFO] 安装 agentctl 包（cli/ 共享业务库^）...
-    pip install -e ..\cli\ -q
-    if %errorlevel% neq 0 (
-        echo [WARN] agentctl 安装失败，AI 生成功能可能不可用
-    )
-)
-
 REM === 主逻辑 ===
 if "%~1"=="" goto start
 if "%~1"=="-d" goto start_daemon

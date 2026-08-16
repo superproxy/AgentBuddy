@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, serverApi, getServerUrl, getAuthToken } from '../api/client'
+import { serverApi, serverJsonApi, getServerUrl, getAuthToken } from '../api/client'
 import { useUiStore } from './ui'
 import { usePluginStore } from './plugin'
 
@@ -163,10 +163,10 @@ export const useBuildChatStore = defineStore('buildChat', () => {
     persist()
   }
 
-  /** 分析来源（本地引擎，带缓存），生成注入对话的紧凑上下文 */
+  /** 分析来源（服务端能力），生成注入对话的紧凑上下文 */
   async function analyzeSource(source: string): Promise<{ meta: any; context: string } | null> {
     try {
-      const r = await api<any>('/api/plugin/analyze', {
+      const r = await serverJsonApi<any>('/api/plugin/analyze', {
         method: 'POST',
         body: JSON.stringify({ source, ai: false }),
       })
@@ -176,7 +176,7 @@ export const useBuildChatStore = defineStore('buildChat', () => {
       const mcps = Object.keys(d.mcpServers || {}).slice(0, 30)
       const envs = Object.keys(d.envVars || {})
       const context = [
-        '[来源分析结果 — 本地引擎分析，真实数据非猜测]',
+        '[来源分析结果 — 服务端分析，真实数据非猜测]',
         `name: ${d.name || ''}`,
         `version: ${d.version || '1.0.0'}`,
         `description: ${String(d.description || '').slice(0, 200)}`,
@@ -285,32 +285,21 @@ export const useBuildChatStore = defineStore('buildChat', () => {
       // 保真 AI 多轮打磨的修改（后端 pyyaml 解析并套用，skills 仍从源仓库下载）
       const nameM = s.yaml.match(/^name:\s*(.+)$/m)
       const name = (nameM ? nameM[1] : '').trim().replace(/^['"]|['"]$/g, '')
-      if (s.source && name) {
-        const r = await api<any>('/api/plugin/build', {
-          method: 'POST',
-          body: JSON.stringify({
-            source: s.source, ai: false, name,
-            config_yaml: s.yaml,
-            publish,
-            server_url: getServerUrl() || undefined,
-          }),
-        })
-        if (r.ok) {
-          ui.toast(publish ? '已构建并发布' : `构建成功: ${r.data?.zipPath || ''}`)
-          plugin.refreshPluginList()
-        } else {
-          ui.toast('构建失败: ' + (r.error || r.publishError || ''), 'err')
-        }
+      const r = await serverJsonApi<any>('/api/plugin/build', {
+        method: 'POST',
+        body: JSON.stringify({
+          source: s.source || undefined,
+          ai: false,
+          name: name || undefined,
+          config_yaml: s.yaml,
+          publish,
+        }),
+      })
+      if (r.ok) {
+        ui.toast(publish ? '已在服务端构建并发布' : `服务端构建成功: ${r.data?.zipPath || ''}`)
+        plugin.refreshPluginList()
       } else {
-        const r = await api<any>('/api/plugin/save-ai', {
-          method: 'POST', body: JSON.stringify({ content: s.yaml }),
-        })
-        if (r.ok) {
-          ui.toast(`已保存到插件管理: ${r.name}（可在本地仓库模式构建 zip）`)
-          plugin.refreshPluginList()
-        } else {
-          ui.toast('保存失败: ' + (r.error || ''), 'err')
-        }
+        ui.toast('构建失败: ' + (r.error || r.publishError || ''), 'err')
       }
     } finally {
       building.value = false

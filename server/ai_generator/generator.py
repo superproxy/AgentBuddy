@@ -227,57 +227,64 @@ def _extract_keywords(prompt: str) -> list[str]:
 
 
 def _search_external_resources(prompt: str) -> dict:
-    """搜索外部市场（skill market + mcp market）。
+    """搜索服务端本地市场资源。
 
-    Returns:
-        {"skills": [...], "mcps": [...], "errors": [...]}
+    服务端不依赖 agentctl；这里只读取同机 SQLite 市场数据作为生成参考。
     """
-    from agentctl.lib.skill_market import search_skill_market
-    from agentctl.lib.mcp_market import search_mcp_market
-
     keywords = _extract_keywords(prompt)
     if not keywords:
-        # 用整个 prompt 作为搜索词
         keywords = [prompt[:30]]
 
     skills = []
     mcps = []
     errors = []
 
-    for kw in keywords[:2]:  # 最多搜2个关键词避免太慢
-        # 搜索 skills
+    for kw in keywords[:2]:
         try:
-            sk = search_skill_market(kw, limit_per_source=5)
-            if sk.get("ok"):
-                for item in sk.get("data", [])[:8]:
-                    skills.append({
-                        "name": item.get("name", ""),
-                        "description": item.get("description", ""),
-                        "source": item.get("source_label", ""),
-                        "install": item.get("install_command", ""),
-                    })
+            found = _search_server_marketplace(kw, limit=8)
+            skills.extend(found.get("skills", []))
+            mcps.extend(found.get("mcps", []))
         except Exception as e:
-            errors.append(f"skill search ({kw}): {e}")
+            errors.append(f"market search ({kw}): {e}")
 
-        # 搜索 MCP
-        try:
-            mc = search_mcp_market(kw, limit_per_source=5)
-            if mc.get("ok"):
-                for item in mc.get("data", [])[:8]:
-                    mcps.append({
-                        "name": item.get("name", ""),
-                        "description": item.get("description", ""),
-                        "source": item.get("source_label", ""),
-                        "homepage": item.get("homepage", ""),
-                    })
-        except Exception as e:
-            errors.append(f"mcp search ({kw}): {e}")
-
-    # 去重
     skills = _dedupe_by_key(skills, "name")
     mcps = _dedupe_by_key(mcps, "name")
 
     return {"skills": skills[:20], "mcps": mcps[:15], "errors": errors}
+
+
+def _search_server_marketplace(query: str, limit: int = 8) -> dict:
+    """从服务端 SQLite 市场中搜索可复用插件资源。"""
+    server_dir = Path(__file__).resolve().parents[1]
+    db_path = server_dir / "data" / "agentbuddy.db"
+    if not db_path.exists():
+        return {"skills": [], "mcps": []}
+
+    import sqlite3
+    pattern = f"%{query}%"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """SELECT name, description, file, tags
+               FROM plugins
+               WHERE name LIKE ? OR description LIKE ? OR tags LIKE ?
+               ORDER BY downloads DESC, likes DESC, published_at DESC
+               LIMIT ?""",
+            (pattern, pattern, pattern, limit),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    skills = []
+    for row in rows:
+        skills.append({
+            "name": row["name"] or "",
+            "description": (row["description"] or "")[:100],
+            "source": "server-marketplace",
+            "install": row["file"] or "",
+        })
+    return {"skills": skills, "mcps": []}
 
 
 def _dedupe_by_key(items: list[dict], key: str) -> list[dict]:
@@ -524,43 +531,13 @@ def _tavily_search(query: str, tavily_key: str) -> list[dict]:
 
 
 def _search_market(query: str, search_type: str = "both") -> dict:
-    """搜索本地+外部 skill/mcp 市场。
-
-    Args:
-        query: 搜索关键词
-        search_type: "skill" | "mcp" | "both"
-    """
+    """搜索服务端本地市场。"""
+    found = _search_server_marketplace(query, limit=8)
     result = {"skills": [], "mcps": []}
     if search_type in ("skill", "both"):
-        try:
-            from agentctl.lib.skill_market import search_skill_market
-            sk = search_skill_market(query, limit_per_source=5)
-            if sk.get("ok"):
-                for item in sk.get("data", [])[:8]:
-                    result["skills"].append({
-                        "name": item.get("name", ""),
-                        "description": item.get("description", "")[:100],
-                        "source": item.get("source_label", ""),
-                        "install": item.get("install_command", "")[:100],
-                    })
-        except Exception as e:
-            result["skills"].append({"error": str(e)})
-
+        result["skills"] = found.get("skills", [])
     if search_type in ("mcp", "both"):
-        try:
-            from agentctl.lib.mcp_market import search_mcp_market
-            mc = search_mcp_market(query, limit_per_source=5)
-            if mc.get("ok"):
-                for item in mc.get("data", [])[:8]:
-                    result["mcps"].append({
-                        "name": item.get("name", ""),
-                        "description": item.get("description", "")[:100],
-                        "source": item.get("source_label", ""),
-                        "homepage": item.get("homepage", ""),
-                    })
-        except Exception as e:
-            result["mcps"].append({"error": str(e)})
-
+        result["mcps"] = found.get("mcps", [])
     return result
 
 

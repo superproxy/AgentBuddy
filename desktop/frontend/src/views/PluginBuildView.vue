@@ -1276,7 +1276,7 @@ onMounted(() => {
             <template v-for="(m, i) in chat.active?.messages || []" :key="i">
               <!-- 本地分析卡片 -->
               <div v-if="m.role === 'analysis'" class="pb-chat-card">
-                <div class="pb-chat-card-head">📊 来源分析（本地引擎）</div>
+                <div class="pb-chat-card-head">📊 来源分析（服务端）</div>
                 <pre class="pb-chat-card-body">{{ formatAnalysis(m.content) }}</pre>
               </div>
               <!-- 用户 / 助手气泡 -->
@@ -1335,7 +1335,7 @@ onMounted(() => {
         </div>
         <div>
           <h3>快速生成插件</h3>
-          <p>输入 GitHub 仓库（owner/repo）、文章 URL 或本地目录路径，自动分析并打包为插件 zip。</p>
+          <p>输入 GitHub 仓库或文章 URL，由服务端提炼插件草稿并完成构建发布。</p>
         </div>
       </div>
 
@@ -1346,7 +1346,7 @@ onMounted(() => {
             v-model="urlSource"
             type="text"
             class="pb-url-input"
-            placeholder="QwenLM/Qwen-MM-Plugins  或  https://github.com/owner/repo  或  ./my-plugin/"
+            placeholder="QwenLM/Qwen-MM-Plugins  或  https://github.com/owner/repo  或  文章 URL"
             @keyup.enter="analyzeSource()"
           />
           <button
