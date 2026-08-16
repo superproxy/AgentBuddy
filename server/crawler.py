@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -264,6 +265,108 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
 
 
 # ============================================================
+# 每日配额调度（服务端内置定时捞取）
+# ============================================================
+
+# 默认每日发布配额（env AGENTBUDDY_CRAWL_QUOTA 可覆盖）
+DEFAULT_DAILY_QUOTA = 10
+STATE_FILE = SERVER_DIR / "data" / "crawler-state.json"
+
+
+def _today() -> str:
+    return time.strftime("%Y-%m-%d")
+
+
+def load_state() -> dict:
+    """读取调度状态：{date, published, last_run, last_result}。"""
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_state(state: dict) -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        warn(f"写入调度状态失败: {e}")
+
+
+def get_daily_progress() -> dict:
+    """今日进度：{date, published, quota, remaining}。"""
+    state = load_state()
+    quota = int(os.environ.get("AGENTBUDDY_CRAWL_QUOTA", str(DEFAULT_DAILY_QUOTA)))
+    if state.get("date") != _today():
+        return {"date": _today(), "published": 0, "quota": quota, "remaining": quota}
+    published = int(state.get("published", 0))
+    return {"date": _today(), "published": published, "quota": quota,
+            "remaining": max(0, quota - published)}
+
+
+def run_daily(quota: int | None = None, force: bool = False) -> dict:
+    """每日定时的定量捞取：遍历启用源，发布满 quota 个即停。
+
+    状态持久化到 data/crawler-state.json，服务重启不会重复发布当天额度。
+    force=True 时忽略已发布计数（用于手动补跑，仍受 quota 限制）。
+    """
+    if quota is None:
+        quota = int(os.environ.get("AGENTBUDDY_CRAWL_QUOTA", str(DEFAULT_DAILY_QUOTA)))
+    quota = max(0, quota)
+
+    state = load_state()
+    if state.get("date") != _today():
+        state = {"date": _today(), "published": 0}
+    if force:
+        state["published"] = 0
+
+    already = int(state.get("published", 0))
+    remaining = max(0, quota - already)
+    header(f"Crawler Daily Run (quota={quota}, published={already}, remaining={remaining})")
+
+    results = {"published": 0, "skipped": 0, "error": 0, "quota": quota,
+               "already_today": already, "stopped_reason": "sources_exhausted"}
+    if remaining <= 0:
+        info("今日配额已满，跳过")
+        results["stopped_reason"] = "quota_reached"
+        state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        state["last_result"] = results
+        save_state(state)
+        return results
+
+    sources = [s for s in load_sources() if s.get("enabled", True)]
+    if not sources:
+        warn("无启用的源配置")
+        results["stopped_reason"] = "no_sources"
+        return results
+
+    for source in sources:
+        if int(state.get("published", 0)) >= quota:
+            results["stopped_reason"] = "quota_reached"
+            break
+        try:
+            r = crawl_and_publish(source, dry_run=False)
+            status = r.get("status", "error")
+            if status == "published":
+                state["published"] = int(state.get("published", 0)) + 1
+                results["published"] += 1
+            elif status == "skip":
+                results["skipped"] += 1
+            else:
+                results["error"] += 1
+        except Exception as e:
+            error(f"处理异常: {source.get('name')}: {e}")
+            results["error"] += 1
+        time.sleep(2)
+
+    state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    state["last_result"] = results
+    save_state(state)
+    info(f"今日已发布 {state['published']}/{quota}，剩余源耗尽或配额已满")
+    return results
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -373,6 +476,12 @@ def main():
                         help="添加源时的标签（逗号分隔）")
     parser.add_argument("--remove", metavar="NAME",
                         help="移除源")
+    parser.add_argument("--daily", action="store_true",
+                        help="每日定时模式：按配额发布（env AGENTBUDDY_CRAWL_QUOTA，默认 10）")
+    parser.add_argument("--quota", type=int, default=None,
+                        help="本次配额（--daily 时生效）")
+    parser.add_argument("--force", action="store_true",
+                        help="忽略今日已发布计数（--daily 时生效）")
     args = parser.parse_args()
 
     if args.list:
@@ -383,6 +492,9 @@ def main():
         return
     if args.remove:
         cmd_remove(args.remove)
+        return
+    if args.daily:
+        run_daily(quota=args.quota, force=args.force)
         return
     cmd_run(source_name=args.source, dry_run=args.dry_run)
 

@@ -69,6 +69,91 @@ def create_app() -> Flask:
     ai_bp = create_ai_bp(project_root=PROJECT_ROOT, llm_config_path=LLM_CONFIG_PATH)
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
 
+    # === 定时捞取（Crawler）管理 API + 内置每日调度 ===
+    # 环境变量：
+    #   AGENTBUDDY_CRAWL_ENABLED=0       关闭内置调度（默认开）
+    #   AGENTBUDDY_CRAWL_HOUR=3          每日执行时刻（0-23，默认 3 点）
+    #   AGENTBUDDY_CRAWL_QUOTA=10        每日发布配额（默认 10）
+    from auth.middleware import require_auth, get_current_user
+    from flask import g as _g
+
+    @app.route("/api/crawler/status", methods=["GET"])
+    @require_auth
+    def crawler_status():
+        """捞取调度状态：今日进度 + 源列表 + 上次运行结果。"""
+        import crawler as crawler_mod
+        import yaml as _yaml
+        from pathlib import Path as _P
+        sources_file = _P(__file__).resolve().parent / "config" / "plugin-sources.yaml"
+        try:
+            cfg = _yaml.safe_load(sources_file.read_text(encoding="utf-8")) or {}
+            sources = cfg.get("sources", [])
+        except Exception:
+            sources = []
+        state = crawler_mod.load_state()
+        return jsonify({
+            "ok": True,
+            "today": crawler_mod.get_daily_progress(),
+            "scheduler": {
+                "enabled": os.environ.get("AGENTBUDDY_CRAWL_ENABLED", "1") != "0",
+                "hour": int(os.environ.get("AGENTBUDDY_CRAWL_HOUR", "3")),
+                "quota": int(os.environ.get("AGENTBUDDY_CRAWL_QUOTA",
+                                            str(crawler_mod.DEFAULT_DAILY_QUOTA))),
+            },
+            "sources": [{"name": s.get("name"), "enabled": s.get("enabled", True)} for s in sources],
+            "last_run": state.get("last_run", ""),
+            "last_result": state.get("last_result"),
+        })
+
+    @app.route("/api/crawler/run", methods=["POST"])
+    @require_auth
+    def crawler_run():
+        """手动触发一次定量捞取（仅 admin）。Body: {quota?, force?}。"""
+        from flask import request as _req
+        if (_g.current_user or {}).get("role") != "admin":
+            return jsonify({"ok": False, "error": "仅管理员可手动触发捞取"}), 403
+        body = _req.get_json(silent=True) or {}
+        import crawler as crawler_mod
+        quota = body.get("quota")
+        force = bool(body.get("force", False))
+        result = crawler_mod.run_daily(
+            quota=int(quota) if isinstance(quota, (int, float)) else None,
+            force=force,
+        )
+        return jsonify({"ok": True, "result": result, "today": crawler_mod.get_daily_progress()})
+
+    def _start_crawler_scheduler():
+        """内置每日调度线程：到点执行 run_daily（状态文件保证重启不重复）。"""
+        import threading
+        import time as _time
+        import crawler as crawler_mod
+
+        def _loop():
+            hour = int(os.environ.get("AGENTBUDDY_CRAWL_HOUR", "3"))
+            while True:
+                try:
+                    now = _time.localtime()
+                    # 计算距离下一个 hour 点的秒数
+                    target = _time.mktime((now.tm_year, now.tm_mon, now.tm_mday, hour, 0, 0, 0, 0, -1))
+                    if target <= _time.time():
+                        target += 86400
+                    _time.sleep(max(1, target - _time.time()))
+                    # 到点：state 里当天已满额则 run_daily 内部自动跳过
+                    crawler_mod.run_daily()
+                except Exception as e:  # 调度线程绝不能挂
+                    print(f"[crawler-scheduler] 运行异常: {e}", flush=True)
+                    _time.sleep(600)
+
+        t = threading.Thread(target=_loop, daemon=True, name="crawler-scheduler")
+        t.start()
+        print(f"[crawler-scheduler] 已启动：每日 {os.environ.get('AGENTBUDDY_CRAWL_HOUR', '3')} 点执行，"
+              f"每日发布配额 {os.environ.get('AGENTBUDDY_CRAWL_QUOTA', str(crawler_mod.DEFAULT_DAILY_QUOTA))} 个",
+              flush=True)
+        return t
+
+    if os.environ.get("AGENTBUDDY_CRAWL_ENABLED", "1") != "0":
+        _start_crawler_scheduler()
+
     # 健康检查
     @app.route("/api/health", methods=["GET"])
     def health():

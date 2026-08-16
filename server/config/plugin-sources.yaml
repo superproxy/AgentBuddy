@@ -5,16 +5,38 @@
 #   python server/crawler.py             # 执行所有启用的源
 #   python server/crawler.py --source qwen-mm  # 只执行匹配的源
 #   python server/crawler.py --dry-run   # 只分析+构建不发布
+#   python server/crawler.py --daily     # 每日配额模式（发布满 quota 个即停，默认 10）
 #   python server/crawler.py --add <url> --add-name my-plugin --add-tags ai,mcp
 #
-# crontab 调度（每天凌晨 3 点）:
-#   0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py >> /var/log/agentbuddy-crawler.log 2>&1
+# 定时调度（两种方式）:
+#   1. 内置调度（推荐）：server/app.py 启动时自动开每日调度线程（默认凌晨 3 点，
+#      每日发布 10 个）。env 可调：
+#        AGENTBUDDY_CRAWL_ENABLED=0   关闭
+#        AGENTBUDDY_CRAWL_HOUR=3      执行时刻（0-23）
+#        AGENTBUDDY_CRAWL_QUOTA=10    每日发布配额
+#   2. crontab（备用）:
+#      0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py --daily >> /var/log/agentbuddy-crawler.log 2>&1
+#
+# 注：skill 名必须是来源仓库 SKILL.md frontmatter 里的权威全名（如
+#     qwen-mm-plugins-core，不是 core），否则过滤会落空导致打包 0 个 skill。
 
 sources:
   - name: qwen-mm-plugins
     url: https://github.com/QwenLM/Qwen-MM-Plugins
-    skills: [core, api, search]
+    skills: [qwen-mm-plugins-core, qwen-mm-plugins-api, qwen-mm-plugins-search]
     tags: [multimodal, vision, ocr]
+    enabled: true
+    schedule: daily
+
+  - name: anthropic-skills
+    url: https://github.com/anthropics/skills
+    tags: [skills, official, documents]
+    enabled: true
+    schedule: daily
+
+  - name: superpowers
+    url: https://github.com/obra/superpowers
+    tags: [skills, workflow, devtools]
     enabled: true
     schedule: daily
 
