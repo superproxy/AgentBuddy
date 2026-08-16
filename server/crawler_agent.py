@@ -98,8 +98,12 @@ def _get_github_token() -> str:
     return os.environ.get("GITHUB_TOKEN", "").strip()
 
 
-def llm_chat(messages: list[dict], *, json_mode: bool = False, timeout: int = 60) -> str:
-    """OpenAI 兼容 chat completions 调用，返回文本内容。"""
+def llm_chat(messages: list[dict], *, json_mode: bool = False, timeout: int = 60,
+             retries: int = 2) -> str:
+    """OpenAI 兼容 chat completions 调用，返回文本内容。
+
+    对 5xx / 网络错误重试 retries 次（间隔 2/4 秒），提高对不稳定网关的容错。
+    """
     cfg = _get_llm_config()
     if not cfg:
         raise RuntimeError("OPENAI_API_KEY 未设置；crawler_agent 需通过环境变量注入 LLM 配置")
@@ -112,18 +116,34 @@ def llm_chat(messages: list[dict], *, json_mode: bool = False, timeout: int = 60
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
-    resp = requests.post(
-        f"{cfg['base_url']}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {cfg['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"] or ""
+    last_err: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(
+                f"{cfg['base_url']}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {cfg['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"] or ""
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
+            last_err = e
+            # 仅对 5xx / 网络错误重试；4xx 直接抛
+            if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code < 500:
+                raise
+            if attempt < retries:
+                import time
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise
+    if last_err:
+        raise last_err
+    raise RuntimeError("llm_chat: unreachable")
 
 
 # ============================================================
@@ -869,23 +889,32 @@ def run_task(
 
         # 5. 抓正文（GitHub 仓库已有 content，跳过抓取）
         source = hit.get("source", "")
+        snippet = hit.get("content", "") or ""
         if source == "github":
             article = {
                 "title": title,
-                "content": hit.get("content", ""),
+                "content": snippet,
                 "html": "",
                 "blocked": False,
             }
         else:
-            try:
-                article = fetch_article(url)
-            except Exception as e:
-                mark_seen(seen_state, url, title=title, status="fetch_error")
-                results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
-                continue
+            # Tavily 来源：snippet 已是清洁正文摘要，优先使用。
+            # 仅当 snippet 异常短（< 200 字符）时才 fetch 补充（可能抓到更好的正文）。
+            # 注意：juejin/zhihu 等是 SPA，fetch 往往只拿到空壳，snippet 质量更高。
+            if len(snippet) >= 200:
+                article = {"title": title, "content": snippet, "html": "", "blocked": False}
+            else:
+                try:
+                    article = fetch_article(url)
+                except Exception as e:
+                    mark_seen(seen_state, url, title=title, status="fetch_error")
+                    results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
+                    continue
+                # fetch 失败但有 snippet → 用 snippet 兜底
+                if not article.get("content"):
+                    article["content"] = snippet
 
         blocked = bool(article.get("blocked"))
-        snippet = hit.get("content", "") or ""
         # 风控且无摘要 → 评级 0 分，跳过
         if blocked and not snippet:
             mark_seen(seen_state, url, title=title, status="blocked_no_snippet")
