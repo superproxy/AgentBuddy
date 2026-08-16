@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
-import { api } from '../api/client'
+import { api, serverApi, getAuthToken } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { useSyncStore } from './sync'
@@ -195,9 +195,35 @@ export const usePluginStore = defineStore('plugin', () => {
       ui.toast(parts.join('\n'))
       refreshPluginList()
       skill.loadInstalledSkills()
+      // 联动下架：本地删除的插件若仍发布在市场，提示一并移除，避免"本地删了市场还挂着"
+      await offerMarketplaceUnpublish(p.name)
     } else {
       ui.toast('删除失败: ' + (r.error || '未知错误'), 'err')
     }
+  }
+
+  /** 删除本地插件后，按名字匹配市场「我的发布」，命中则询问是否同时下架。 */
+  async function offerMarketplaceUnpublish(name: string) {
+    try {
+      const url = serverApi('/api/marketplace/mine')
+      const token = getAuthToken()
+      if (!url || !token) return  // 未配置服务器或未登录，跳过联动
+      const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + token } })
+      const d = await resp.json()
+      const mine: any[] = (d && d.ok && d.data) || []
+      const hits = mine.filter(it => it.name === name)
+      if (!hits.length) return
+      const ids = hits.map(h => h.id).join(', ')
+      if (!confirm(`插件「${name}」还在市场「我的发布」里（${hits.length} 条），是否同时下架？`)) return
+      let okCount = 0
+      for (const h of hits) {
+        const delUrl = serverApi('/api/marketplace/remove?id=' + encodeURIComponent(h.id))
+        const delResp = await fetch(delUrl, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } })
+        if (delResp.ok) okCount++
+      }
+      ui.toast(okCount ? `已从市场下架 ${okCount} 条` : '下架失败（无权限或网络错误）', okCount ? 'ok' : 'warn')
+      marketplace.browse()
+    } catch { /* 市场不可达等，不阻塞本地删除流程 */ }
   }
   async function publishToMarketplace(file: string, scope?: 'public' | 'team', teamId?: number) {
     await marketplace.publish(file, [], scope || 'public', teamId)

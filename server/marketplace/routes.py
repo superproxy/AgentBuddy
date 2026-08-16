@@ -217,7 +217,9 @@ def create_marketplace_bp(marketplace_dir: Path):
     def marketplace_remove():
         """从市场移除插件。需要登录。
 
-        权限：仅 author 或团队 owner 可删除。
+        权限：admin 可删除任意插件；否则仅 author、团队 owner 可删；
+        无主条目（author_id 为 NULL，早期数据迁移遗留）任何登录用户可删——
+        它们不属于任何人，不清理就永远挂在市场里。
         """
         user = g.current_user
         item_id = (request.args.get("id") or "").strip()
@@ -228,7 +230,10 @@ def create_marketplace_bp(marketplace_dir: Path):
             return jsonify({"ok": False, "error": "插件不存在"}), 404
 
         author_id = entry.get("author_id")
+        is_admin = user.get("role") == "admin"
         is_author = author_id == user["id"]
+        # 无主条目（旧数据迁移未写 author_id）：孤儿数据，登录即可删
+        is_orphan = author_id is None
 
         # 团队插件，检查是否是团队 owner
         is_team_owner = False
@@ -241,8 +246,8 @@ def create_marketplace_bp(marketplace_dir: Path):
             conn.close()
             is_team_owner = owner and owner["role"] == "owner"
 
-        if not is_author and not is_team_owner:
-            return jsonify({"ok": False, "error": "无权删除此插件（仅作者或团队 owner 可删除）"}), 403
+        if not (is_admin or is_author or is_orphan or is_team_owner):
+            return jsonify({"ok": False, "error": "无权删除此插件（仅作者、团队 owner 或管理员可删除）"}), 403
 
         # 删除包文件
         pkg_path = marketplace_dir / entry["file"]
