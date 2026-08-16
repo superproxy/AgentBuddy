@@ -76,6 +76,116 @@ def header(msg: str):
 
 # ── 配置 ──
 SERVER_URL = os.environ.get("AGENTBUDDY_SERVER_URL", "http://127.0.0.1:5001")
+
+# ============================================================
+# 服务端直连模式 — crawler 与数据库/市场同机部署时免登录直写
+# （不走 HTTP + JWT：直接读写 SQLite 与 packages/ 目录）
+# ============================================================
+
+DB_FILE = SERVER_DIR / "data" / "agentbuddy.db"
+MARKET_DIR = SERVER_DIR / "data" / "marketplace"
+
+_auth_models = None  # 惰性加载（避免 CLI 模式强依赖 server 侧模块）
+
+
+def server_mode() -> bool:
+    """服务端直连模式判定：本地存在市场数据库（与 app.py 同机）。"""
+    return DB_FILE.exists()
+
+
+def _init_db_access():
+    global _auth_models
+    if _auth_models is not None:
+        return _auth_models
+    sys.path.insert(0, str(SERVER_DIR))
+    from auth import models as auth_models
+    auth_models.set_db_path(DB_FILE)
+    auth_models.init_db()
+    _auth_models = auth_models
+    return _auth_models
+
+
+def ensure_crawler_user() -> int:
+    """确保 crawler 服务账号存在（首跑自动创建），返回用户 id。
+
+    密码为随机串——该账号仅供直连发布归属用，不可（也无需）登录。
+    """
+    m = _init_db_access()
+    conn = m.get_db()
+    row = conn.execute("SELECT id FROM users WHERE username = 'crawler'").fetchone()
+    if row:
+        uid = row["id"]
+        conn.close()
+        return uid
+    import bcrypt as _bcrypt
+    import secrets as _secrets
+    hashed = _bcrypt.hashpw(_secrets.token_hex(16).encode(), _bcrypt.gensalt()).decode()
+    cur = conn.execute(
+        "INSERT INTO users (username, password, email, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        ("crawler", hashed, "", "member", m.now_iso()),
+    )
+    conn.commit()
+    uid = cur.lastrowid
+    conn.close()
+    info("[OK] 已自动创建 crawler 服务账号（仅供直连发布归属，不可登录）")
+    return uid
+
+
+def already_published_local(name: str, version: str) -> bool:
+    """直连去重：查库同 id（name-version）是否已发布。"""
+    m = _init_db_access()
+    return m.plugin_get(f"{name}-{version}") is not None
+
+
+def publish_local(zip_path: Path, tags: list | None = None, scope: str = "public") -> dict:
+    """直连发布：包文件写入 packages/ + plugin_save 入库（对齐 publish 路由逻辑）。"""
+    import zipfile as _zip
+    m = _init_db_access()
+    packages = MARKET_DIR / "packages"
+    plugin_name, version, description, author = zip_path.stem, "1.0.0", "", "crawler"
+
+    with _zip.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            n = info.filename
+            if n.endswith((".plugin.yaml", ".plugin.yml")):
+                try:
+                    data = yaml.safe_load(zf.read(n).decode("utf-8"))
+                    if isinstance(data, dict):
+                        plugin_name = data.get("name", Path(n).stem)
+                        version = str(data.get("version", "1.0.0")).strip() or "1.0.0"
+                        description = str(data.get("description") or "").strip()
+                        yaml_author = str(data.get("author") or "").strip()
+                        if yaml_author:
+                            author = yaml_author
+                except Exception:
+                    pass
+                break
+
+    safe = "".join(c for c in str(plugin_name) if c.isalnum() or c in ("-", "_"))
+    pkg_name = f"{safe or 'plugin'}-{version}.zip"
+    packages.mkdir(parents=True, exist_ok=True)
+    (packages / pkg_name).write_bytes(zip_path.read_bytes())
+
+    entry = {
+        "id": f"{plugin_name}-{version}",
+        "name": plugin_name,
+        "version": version,
+        "description": description[:500],
+        "author": author,
+        "author_id": ensure_crawler_user(),
+        "file": f"packages/{pkg_name}",
+        "size": (packages / pkg_name).stat().st_size,
+        "published_at": m.now_iso(),
+        "tags": tags if isinstance(tags, list) else [],
+        "downloads": 0,
+        "likes": 0,
+        "scope": scope,
+        "team_id": None,
+    }
+    m.plugin_save(entry)
+    return entry
 CRAWLER_USERNAME = os.environ.get("AGENTBUDDY_CRAWLER_USER", "crawler")
 CRAWLER_PASSWORD = os.environ.get("AGENTBUDDY_CRAWLER_PASS", "")
 MIN_QUALITY_SCORE = 30  # 最低质量分（满分 100）
@@ -107,8 +217,13 @@ def save_sources(sources: list[dict]) -> None:
 # 去重检查
 # ============================================================
 
-def already_published(name: str, version: str, token: str) -> bool:
-    """查询市场是否已发布同名同版本的插件。"""
+def already_published(name: str, version: str, token: str = "") -> bool:
+    """查询市场是否已发布同名同版本的插件。
+
+    服务端直连模式：直接查库（免登录）；远程模式：走 HTTP 搜索接口。
+    """
+    if server_mode():
+        return already_published_local(name, version)
     import requests
     try:
         resp = requests.get(
@@ -196,7 +311,7 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
         warn(f"  [SKIP] 源无 URL: {name}")
         return {"status": "skip", "reason": "no url"}
 
-    header(f"Crawling: {name}")
+    header(f"Crawling: {name} {'[server-direct]' if server_mode() else '[http]'}")
     info(f"  URL: {url}")
 
     # 1. 分析来源
@@ -219,9 +334,9 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
         warn(f"  [SKIP] 质量分低于阈值 ({score} < {MIN_QUALITY_SCORE})")
         return {"status": "skip", "reason": f"low quality score: {score}"}
 
-    # 3. 去重检查
+    # 3. 去重检查（服务端直连模式免登录直接查库）
     if not dry_run:
-        token = get_crawler_token()
+        token = "" if server_mode() else get_crawler_token()
         if already_published(meta.name, meta.version, token):
             info(f"  [SKIP] 已发布同版本: {meta.name} v{meta.version}")
             return {"status": "skip", "reason": "already published"}
@@ -246,18 +361,22 @@ def crawl_and_publish(source: dict, dry_run: bool = False) -> dict:
         error(f"  构建失败: {e}")
         return {"status": "error", "reason": str(e)}
 
-    # 6. 发布
+    # 6. 发布（服务端直连模式免登录直写库和包目录；远程模式走 HTTP）
     if dry_run:
         info(f"  [DRY-RUN] 跳过发布")
         return {"status": "dry_run", "zip_path": str(zip_path)}
 
     try:
-        token = get_crawler_token()
-        result = builder.publish(
-            zip_path, SERVER_URL, token,
-            tags=tags or meta.tags, scope="public",
-        )
-        info(f"  [OK] 发布成功: {result.get('name', meta.name)}")
+        if server_mode():
+            result = publish_local(zip_path, tags=tags or meta.tags, scope="public")
+            info(f"  [OK] 直连发布成功: {result.get('name', meta.name)}")
+        else:
+            token = get_crawler_token()
+            result = builder.publish(
+                zip_path, SERVER_URL, token,
+                tags=tags or meta.tags, scope="public",
+            )
+            info(f"  [OK] 发布成功: {result.get('name', meta.name)}")
         return {"status": "published", "data": result}
     except Exception as e:
         error(f"  发布失败: {e}")

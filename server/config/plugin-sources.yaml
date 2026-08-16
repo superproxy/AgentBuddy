@@ -19,6 +19,9 @@
 #
 # 注：skill 名必须是来源仓库 SKILL.md frontmatter 里的权威全名（如
 #     qwen-mm-plugins-core，不是 core），否则过滤会落空导致打包 0 个 skill。
+# 认证：与 app.py 同机部署时 crawler 自动走"服务端直连"（免登录直写库和
+#     packages/，首跑自动创建 crawler 服务账号）；仅远程执行才需要
+#     agentctl plugin auth login 或 AGENTBUDDY_CRAWL_PASS。
 
 sources:
   - name: qwen-mm-plugins
