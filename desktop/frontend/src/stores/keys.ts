@@ -3,6 +3,24 @@ import { reactive, computed, ref } from 'vue'
 import { api } from '../api/client'
 import { useUiStore } from './ui'
 
+/** 密钥名归一化：全角字符→半角（中文输入法常见误入，视觉上无法区分），
+ *  空格/连字符→下划线（如 ARK-KEY → ARK_KEY，因变量会 export 为 shell 环境变量，
+ *  连字符非法）。归一化后再走合法性校验。 */
+export function normalizeKeyName(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/[\s\-—–]+/g, '_')
+}
+
+/** 校验归一化后的变量名，返回错误原因（可执行的具体提示）或 null */
+export function invalidKeyNameReason(key: string): string | null {
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null
+  if (/^[0-9]/.test(key)) return `「${key}」以数字开头：变量会导出为系统环境变量，不能以数字开头（可改为 ${'K' + key} 之类）`
+  const bad = key.replace(/[A-Za-z0-9_]/g, '')
+  return `「${key}」包含不支持的字符 ${bad.slice(0, 5)}：变量会导出为系统环境变量，仅支持字母、数字、下划线（连字符/空格会自动转为下划线）`
+}
+
 export const useKeysStore = defineStore('keys', () => {
   const ui = useUiStore()
   const keysData = reactive<any>({ mcp: {} })
@@ -99,13 +117,19 @@ export const useKeysStore = defineStore('keys', () => {
 
   /** 提交新建行 → 调用后端 API 创建 */
   async function commitAdd() {
-    const key = draft.key.trim()
-    if (!key) {
+    const raw = draft.key.trim()
+    if (!raw) {
       draft.error = '变量名不能为空'
       return false
     }
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      draft.error = '仅支持字母、数字、下划线，且不能以数字开头'
+    const key = normalizeKeyName(raw)
+    if (key !== raw) {
+      ui.toast(`已自动规范变量名: ${raw} → ${key}（全角/空格/连字符转为下划线）`)
+      draft.key = key
+    }
+    const invalid = invalidKeyNameReason(key)
+    if (invalid) {
+      draft.error = invalid
       return false
     }
     if (keysData.mcp[key]) {

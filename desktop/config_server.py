@@ -1542,13 +1542,21 @@ def save_keys():
 
 @app.route("/api/keys/key", methods=["POST"])
 def add_key():
-    """添加单个密钥条目。Body: {key, value='', description=''}"""
+    """添加单个密钥条目。Body: {key, value='', description=''}
+
+    key 名归一化：全角字符→半角（中文输入法误入）、空格/连字符→下划线
+    （变量会 export 为 shell 环境变量，连字符非法）；归一化后再校验。
+    """
     body = request.get_json(force=True)
-    key = (body.get("key") or "").strip()
-    if not key:
+    raw = (body.get("key") or "").strip()
+    if not raw:
         return jsonify({"ok": False, "error": "key 必填"}), 400
+    key = _normalize_key_name(raw)
     if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
-        return jsonify({"ok": False, "error": "仅支持字母、数字、下划线，且不能以数字开头"}), 400
+        if key[:1].isdigit():
+            return jsonify({"ok": False, "error": f"「{key}」以数字开头：变量会导出为系统环境变量，不能以数字开头"}), 400
+        bad = re.sub(r"[A-Za-z0-9_]", "", key)[:5]
+        return jsonify({"ok": False, "error": f"「{key}」包含不支持的字符 {bad}：仅支持字母、数字、下划线（连字符/空格已自动转为下划线）"}), 400
     try:
         full = _load_keys_full()
         if key in full["mcp"]:
@@ -1558,9 +1566,15 @@ def add_key():
             "description": body.get("description", "") or "",
         }
         _save_keys_full(full)
-        return jsonify({"ok": True, "key": key})
+        return jsonify({"ok": True, "key": key, "normalized_from": raw if raw != key else None})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _normalize_key_name(raw: str) -> str:
+    """密钥名归一化：全角→半角、空白/连字符→下划线。"""
+    half = re.sub(r"[\uff01-\uff5e]", lambda m: chr(ord(m.group()) - 0xfee0), raw)
+    return re.sub(r"[\s\-—–]+", "_", half.strip())
 
 
 @app.route("/api/keys/key/<key>", methods=["PATCH"])

@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { useSyncStore } from './sync'
+import { normalizeKeyName, invalidKeyNameReason } from './keys'
 
 export const MCP_SOURCE_ORDER = ['registry', 'smithery', 'modelscope', 'pulsemcp', 'glama'] as const
 export type McpSourceId = (typeof MCP_SOURCE_ORDER)[number]
@@ -457,21 +458,22 @@ export const useMcpStore = defineStore('mcp', () => {
   async function addMcpConfigKey() {
     const key = await ui.askPrompt({
       title: '添加密钥',
-      message: '写入 mcp.yaml，作为 ${KEY} 占位符的 fallback（OS 环境变量优先）。',
+      message: '写入 mcp.yaml，作为 ${KEY} 占位符的 fallback（OS 环境变量优先）。连字符/全角会自动转为下划线。',
       label: '密钥名称',
       placeholder: '例如 TAVILY_API_KEY / MODELSCOPE_TOKEN',
       confirmText: '添加',
       mono: true,
       validate: (v) => {
         if (!v) return '请输入密钥名称'
-        if (mcpConfigData.mcp[v]) return 'Key 已存在'
-        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v)) return '仅支持字母、数字、下划线，且不能以数字开头'
-        return null
+        const normalized = normalizeKeyName(v)
+        if (mcpConfigData.mcp[normalized]) return `Key 已存在: ${normalized}`
+        return invalidKeyNameReason(normalized)
       },
     })
     if (!key) return
-    mcpConfigData.mcp[key.trim()] = ''
-    ui.toast('已添加: ' + key.trim())
+    const normalized = normalizeKeyName(key)
+    mcpConfigData.mcp[normalized] = ''
+    ui.toast('已添加: ' + normalized + (normalized !== key.trim() ? `（已自动规范：${key.trim()} → ${normalized}）` : ''))
   }
   async function deleteMcpConfigKey(key: string) {
     const ok = await ui.askConfirm({
