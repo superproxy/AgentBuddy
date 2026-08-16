@@ -1,39 +1,34 @@
 #!/usr/bin/env python3
-"""AgentBuddy 插件市场 — 定时抓取 Worker。
+"""AgentBuddy 插件市场 — 定时抓取 Worker（CrawlerAgent + BuildAgent 双智能体架构）。
 
-独立运行，不依赖 Flask 进程。用系统 crontab 调度：
+独立运行，不依赖 Flask 进程。两种调度方式：
 
-    # 每天凌晨 3 点执行
-    0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py >> /var/log/agentbuddy-crawler.log 2>&1
+1. crontab（备用）:
+    # 凌晨 3 点跑 CrawlerAgent（产出 spec.yaml）
+    0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --crawler-agent >> /var/log/agentbuddy-crawler-agent.log 2>&1
+    # 凌晨 4 点跑 BuildAgent（读 spec 构建 + 发布）
+    0 4 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --build-agent >> /var/log/agentbuddy-build-agent.log 2>&1
 
-    # 手动触发
-    python PluginMarketWorker.py                       # 执行所有启用的源（已知 URL 抓取）
-    python PluginMarketWorker.py --source qwen-mm       # 只执行指定源
-    python PluginMarketWorker.py --dry-run              # 只分析+构建，不发布
-    python PluginMarketWorker.py --list                 # 列出所有源及状态
-    python PluginMarketWorker.py --add <url>            # 添加新源
-    python PluginMarketWorker.py --remove <name>        # 移除源
+2. 内置调度（推荐）：server/app.py 启动时自动开每日调度线程（默认凌晨 3 点，
+   串联 CrawlerAgent + BuildAgent，发布满 quota 个即停）。
 
-    # CrawlerAgent（搜索智能体）+ BuildAgent（构建智能体）双智能体架构
+CLI:
     python PluginMarketWorker.py --crawler-agent            # 跑全部 CrawlerAgent 任务（产出 spec.yaml）
     python PluginMarketWorker.py --crawler-agent <name>     # 跑指定任务
     python PluginMarketWorker.py --build-agent              # 读 spec 构建 + 发布
     python PluginMarketWorker.py --build-agent --dry-run    # 读 spec 只构建不发布
-    python PluginMarketWorker.py --list-discovery           # 列出 CrawlerAgent 任务
+    python PluginMarketWorker.py --list                     # 列出 CrawlerAgent 任务及状态
 
-读取 config/plugin-sources.yaml 中的源列表，逐个：
-  1. 去重检查（已发布的同名同版本跳过）
-  2. analyze_source → 提取 skills / MCP / envVars
-  3. 质量评分（star 数、文档完整度、skill 数量）
-  4. 服务端自包含打包（inline 模式）
-  5. 服务端直连发布到市场
+架构：
+  CrawlerAgent（搜索智能体）：固定 channels + topic → Tavily 搜索 → 抓正文
+                             → 文章评级 → LLM 抽 skills → 写 spec.yaml
+  BuildAgent（构建智能体）：读 spec.yaml（按 rating 降序）→ build_plugin 打 zip → 发布
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -87,8 +82,18 @@ SERVER_URL = os.environ.get("AGENTBUDDY_SERVER_URL", "http://127.0.0.1:5001")
 # （不走 HTTP + JWT：直接读写 SQLite 与 packages/ 目录）
 # ============================================================
 
-DB_FILE = SERVER_DIR / "data" / "agentbuddy.db"
-MARKET_DIR = SERVER_DIR / "data" / "marketplace"
+def _resolve_data_dir() -> Path:
+    """解析数据目录：环境变量优先，相对路径相对 SERVER_DIR 解析（与 app.py 一致）。"""
+    raw = os.environ.get("AGENTBUDDY_DATA_DIR")
+    if not raw or not raw.strip():
+        return SERVER_DIR / "data"
+    p = Path(raw.strip())
+    return p if p.is_absolute() else (SERVER_DIR / p).resolve()
+
+
+DATA_DIR = _resolve_data_dir()
+DB_FILE = DATA_DIR / "agentbuddy.db"
+MARKET_DIR = DATA_DIR / "marketplace"
 
 _auth_models = None  # 惰性加载（避免 CLI 模式强依赖 server 侧模块）
 
@@ -154,112 +159,7 @@ def publish_local(zip_path: Path, tags: list | None = None, scope: str = "public
         user={"id": ensure_crawler_user(), "username": "crawler"},
         service_username="crawler",
     )
-MIN_QUALITY_SCORE = 30  # 最低质量分（满分 100）
 
-
-# ============================================================
-# 源配置管理
-# ============================================================
-
-def load_sources() -> list[dict]:
-    """从 config/plugin-sources.yaml 加载源列表（已知 URL 源）。"""
-    if not SOURCES_FILE.exists():
-        return []
-    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    return data.get("sources", [])
-
-
-def load_discovery_tasks() -> list[dict]:
-    """从 config/plugin-sources.yaml 加载 discovery 任务列表（搜索发现源）。
-
-    discovery 与 sources 并列：sources 是已知 URL 抓取，discovery 是 Tavily 搜索发现。
-    """
-    if not SOURCES_FILE.exists():
-        return []
-    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    return data.get("discovery", []) or []
-
-
-def save_sources(sources: list[dict]) -> None:
-    SOURCES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # 保留已有的 discovery 段
-    existing_discovery: list[dict] = []
-    if SOURCES_FILE.exists():
-        try:
-            with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-                existing = yaml.safe_load(f) or {}
-            existing_discovery = list(existing.get("discovery", []) or [])
-        except Exception:
-            pass
-    payload: dict = {"sources": sources}
-    if existing_discovery:
-        payload["discovery"] = existing_discovery
-    with open(SOURCES_FILE, "w", encoding="utf-8") as f:
-        yaml.dump(payload, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-
-
-# ============================================================
-# 去重检查
-# ============================================================
-
-def already_published(name: str, version: str, token: str = "") -> bool:
-    """查询市场是否已发布同名同版本的插件。
-
-    服务端直连模式：直接查库（免登录）；远程模式：走 HTTP 搜索接口。
-    """
-    if server_mode():
-        return already_published_local(name, version)
-    import requests
-    try:
-        resp = requests.get(
-            f"{SERVER_URL}/api/marketplace/search",
-            params={"q": name},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if not resp.ok:
-            return False
-        result = resp.json()
-        packages = result.get("data", {}).get("packages", [])
-        return any(p.get("name") == name and p.get("version") == version for p in packages)
-    except Exception:
-        return False
-
-
-# ============================================================
-# 质量评分
-# ============================================================
-
-def evaluate_quality(meta) -> int:
-    """对分析结果打分（0-100）。
-
-    评分维度：
-    - skill 数量（30 分）：每个 skill 10 分，上限 30
-    - MCP servers（20 分）：每个 10 分，上限 20
-    - 有描述（15 分）
-    - 有 README/homepage（15 分）
-    - 有 license（10 分）
-    - 有环境变量声明（10 分）
-    """
-    score = 0
-    score += min(len(meta.skills) * 10, 30)
-    score += min(len(meta.mcp_servers) * 10, 20)
-    if meta.description and len(meta.description) > 20:
-        score += 15
-    if meta.homepage:
-        score += 15
-    if meta.license:
-        score += 10
-    if meta.env_vars:
-        score += 10
-    return score
-
-
-# ============================================================
-# 发布模式
-# ============================================================
 
 def require_server_direct_mode() -> None:
     """后台捞取只允许服务端直连模式运行。"""
@@ -269,217 +169,8 @@ def require_server_direct_mode() -> None:
 
 
 # ============================================================
-# 核心：抓取 + 构建 + 发布
+# 配置加载
 # ============================================================
-
-def crawl_and_publish(source: dict, dry_run: bool = False, remaining_quota: int | None = None) -> dict:
-    """处理单个源：动态发现 skills → 聚合成一个可安装插件 → 发布。"""
-    from plugin_build import analyze_source
-
-    name = source.get("name", "")
-    url = source.get("url", "")
-    tags = source.get("tags", [])
-
-    if not url:
-        warn(f"  [SKIP] 源无 URL: {name}")
-        return {"status": "skip", "reason": "no url", "published": 0, "skipped": 1, "error": 0, "items": []}
-
-    if remaining_quota is not None and remaining_quota <= 0:
-        return {"status": "skip", "reason": "quota reached", "published": 0, "skipped": 0, "error": 0, "items": [], "stopped_reason": "quota_reached"}
-
-    header(f"Crawling: {name} {'[server-direct]' if server_mode() else '[http]'}")
-    info(f"  URL: {url}")
-
-    try:
-        llm_cfg = source.get("llm") if isinstance(source.get("llm"), dict) else None
-        source_meta = analyze_source(
-            PROJECT_ROOT,
-            url,
-            ai=bool(source.get("ai", False)),
-            llm_config=llm_cfg,
-        )
-    except Exception as e:
-        error(f"  分析失败: {e}")
-        return {"status": "error", "reason": str(e), "published": 0, "skipped": 0, "error": 1, "items": []}
-
-    skills = _skills_for_source(source, source_meta)
-    if not skills:
-        warn("  [SKIP] 未发现 SKILL.md 或有效 skill 配置")
-        return {"status": "skip", "reason": "no skills", "published": 0, "skipped": 1, "error": 0, "items": []}
-
-    plugin_meta = _aggregate_meta_for_source(source, source_meta, skills, tags)
-    info(f"  Plugin: {plugin_meta.name}")
-    info(f"  Aggregated Skills: {len(plugin_meta.skills)}")
-    info(f"  MCP Servers: {len(plugin_meta.mcp_servers)}")
-    info(f"  Description: {plugin_meta.description[:80]}")
-
-    if not dry_run:
-        try:
-            require_server_direct_mode()
-        except Exception as e:
-            error(f"  发布模式错误: {e}")
-            return {"status": "error", "reason": str(e), "published": 0, "skipped": 0, "error": 1, "items": []}
-
-    item = _process_aggregate_plugin(plugin_meta, dry_run=dry_run, tags=tags or source_meta.tags)
-    result = {"status": item["status"], "published": 0, "skipped": 0, "error": 0, "items": [item]}
-    if item["status"] == "published":
-        result["published"] = 1
-    elif item["status"] == "dry_run":
-        result["status"] = "dry_run"
-    elif item["status"] == "error":
-        result["error"] = 1
-    else:
-        result["skipped"] = 1
-    return result
-
-
-def _skills_for_source(source: dict, source_meta) -> list:
-    from plugin_build import SkillInfo, analyze_github
-
-    discovered = list(source_meta.skills)
-    repos = source.get("repos") or source.get("github_repos") or source.get("repositories") or []
-    if isinstance(repos, str):
-        repos = [repos]
-    for repo in repos if isinstance(repos, list) else []:
-        try:
-            repo_meta = analyze_github(str(repo))
-        except Exception as e:
-            warn(f"  仓库扫描失败: {repo}: {e}")
-            continue
-        discovered.extend(repo_meta.skills)
-
-    selected = source.get("skills")
-    if selected and isinstance(selected, list):
-        known = {s.name: s for s in discovered}
-        return [known.get(str(name)) or SkillInfo(name=str(name), source=f"{source_meta.repository or source_meta.source_url}@{name}") for name in selected if name]
-
-    seen = set()
-    deduped = []
-    for skill in discovered:
-        if skill.name in seen:
-            continue
-        seen.add(skill.name)
-        deduped.append(skill)
-    return deduped
-
-
-def _aggregate_meta_for_source(source: dict, source_meta, skills: list, tags: list | None = None):
-    from plugin_build import PluginMeta, sanitize_name
-
-    plugin_name = sanitize_name(str(source.get("plugin_name") or source.get("pluginName") or source.get("name") or source_meta.name))
-    if not plugin_name.endswith("-skills") and len(skills) > 1:
-        plugin_name = sanitize_name(f"{plugin_name}-skills")
-    description = source_meta.description if _is_useful_source_description(source_meta.description) else ""
-    if not description:
-        origin = source_meta.repository or source_meta.source_url or source.get("url") or plugin_name
-        description = f"Aggregated skills from {origin}"
-    return PluginMeta(
-        name=plugin_name,
-        version=str(source.get("version") or source_meta.version or "1.0.0"),
-        description=description,
-        author=source_meta.author,
-        license=source_meta.license,
-        homepage=source_meta.homepage,
-        repository=source_meta.repository,
-        skills=skills,
-        mcp_servers=source_meta.mcp_servers,
-        env_vars=source_meta.env_vars,
-        tags=tags or source_meta.tags,
-        source_type=source_meta.source_type,
-        source_url=source_meta.source_url,
-    )
-
-
-def _is_useful_source_description(description: str) -> bool:
-    text = str(description or "").strip()
-    if not text:
-        return False
-    blocked_markers = (
-        "环境异常",
-        "完成验证后即可继续访问",
-        "微信扫一扫可打开此内容",
-        "Scan with Weixin",
-        "WeChat verification page",
-    )
-    return not any(marker in text for marker in blocked_markers)
-
-
-def _process_aggregate_plugin(meta, dry_run: bool, tags: list | None = None) -> dict:
-    from plugin_build import build_plugin
-
-    score = evaluate_quality(meta)
-    print(f"  {COLOR_DARKGRAY}{meta.name}: 质量评分 {score}/100{COLOR_RESET}")
-    if score < MIN_QUALITY_SCORE:
-        warn(f"  [SKIP] {meta.name} 质量分低于阈值 ({score} < {MIN_QUALITY_SCORE})")
-        return {"status": "skip", "name": meta.name, "reason": f"low quality score: {score}"}
-
-    if not dry_run and already_published(meta.name, meta.version):
-        info(f"  [SKIP] 已发布同版本: {meta.name} v{meta.version}")
-        return {"status": "skip", "name": meta.name, "reason": "already published"}
-
-    try:
-        cfg = _plugin_config_for_meta(meta)
-        zip_path, _ = build_plugin(SERVER_DIR, {"config_yaml": yaml.dump(cfg, allow_unicode=True, sort_keys=False), "mode": "inline"})
-        info(f"  [OK] 构建完成: {meta.name} -> {zip_path}")
-    except Exception as e:
-        error(f"  构建失败: {meta.name}: {e}")
-        return {"status": "error", "name": meta.name, "reason": str(e)}
-
-    if dry_run:
-        info(f"  [DRY-RUN] 跳过发布: {meta.name}")
-        return {"status": "dry_run", "name": meta.name, "zip_path": str(zip_path), "skills": [s.name for s in meta.skills]}
-
-    try:
-        result = publish_local(zip_path, tags=tags or meta.tags, scope="public")
-        info(f"  [OK] 直连发布成功: {result.get('name', meta.name)}")
-        return {"status": "published", "name": meta.name, "data": result, "skills": [s.name for s in meta.skills]}
-    except Exception as e:
-        error(f"  发布失败: {meta.name}: {e}")
-        return {"status": "error", "name": meta.name, "reason": str(e)}
-
-
-def _plugin_config_for_meta(meta) -> dict:
-    return {
-        "name": meta.name,
-        "version": meta.version,
-        "description": meta.description,
-        "author": meta.author,
-        "license": meta.license,
-        "homepage": meta.homepage,
-        "repository": {"type": "git", "url": meta.repository} if meta.repository else "",
-        "keywords": meta.tags,
-        "skills": [
-            {
-                "name": s.name,
-                "description": s.description,
-                "version": s.version,
-                **({"source": s.source} if s.source else {}),
-            }
-            for s in meta.skills
-        ],
-        "mcpServers": meta.mcp_servers,
-        "envVars": meta.env_vars,
-    }
-
-
-# ============================================================
-# CrawlerAgent + BuildAgent（双智能体架构，独立应用）
-# ============================================================
-#
-# CrawlerAgent（server/crawler_agent.py）：topic + 固定 channels → Tavily 搜索
-#                                        → 抓正文 → LLM 抽 skills → 写 spec.yaml
-# BuildAgent  （server/build_agent.py）  ：读 spec.yaml → build_plugin 打 zip → publish_local 发布
-#
-# 两个智能体串联使用，独立 cron 调度：
-#   python PluginMarketWorker.py --crawler-agent            # 跑全部 CrawlerAgent 任务（产出 spec）
-#   python PluginMarketWorker.py --crawler-agent <name>     # 跑指定任务
-#   python PluginMarketWorker.py --build-agent              # 读 spec 构建 + 发布
-#   python PluginMarketWorker.py --build-agent --dry-run    # 读 spec 只构建不发布
-#   python PluginMarketWorker.py --list-discovery           # 列出 CrawlerAgent 任务
-#
-# 环境变量（独立应用，不读 config/llm/llm.yaml 与 config/mcp/mcp.yaml）：
-#   OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL / TAVILY_API_KEY
-
 
 def load_channels() -> list[dict]:
     """从 plugin-sources.yaml 加载固定渠道池。"""
@@ -490,16 +181,33 @@ def load_channels() -> list[dict]:
     return list(data.get("channels", []) or [])
 
 
+def load_tasks() -> list[dict]:
+    """从 plugin-sources.yaml 加载 CrawlerAgent 任务列表（tasks 段）。
+
+    兼容旧的 discovery 段（已废弃，读取时自动识别）。
+    """
+    if not SOURCES_FILE.exists():
+        return []
+    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    tasks = data.get("tasks") or data.get("discovery") or []
+    return list(tasks)
+
+
+# ============================================================
+# CrawlerAgent 命令
+# ============================================================
+
 def cmd_run_crawler_agent(task_name: str | None = None):
-    """执行 CrawlerAgent 任务：搜索 → 抓取 → 抽 skills → 写 spec.yaml（不构建不发布）。"""
+    """执行 CrawlerAgent 任务：搜索 → 抓取 → 评级 → 抽 skills → 写 spec.yaml（不构建不发布）。"""
     from crawler_agent import run_task, require_env
 
     # 启动检查：缺失环境变量直接退出
     require_env()
 
-    tasks = load_discovery_tasks()
+    tasks = load_tasks()
     if not tasks:
-        warn("无 CrawlerAgent 任务配置。在 plugin-sources.yaml 增加 discovery 段。")
+        warn("无 CrawlerAgent 任务配置。在 plugin-sources.yaml 增加 tasks 段。")
         return
 
     if task_name:
@@ -533,7 +241,7 @@ def cmd_run_crawler_agent(task_name: str | None = None):
 
         for r in results:
             if r.status == "spec":
-                info(f"  [SPEC] {r.title[:60]} skills={r.skills}")
+                info(f"  [SPEC] {r.title[:60]} skills={r.skills} rating={r.rating}")
                 spec_count += 1
             elif r.status == "skip":
                 print(f"  {COLOR_DARKGRAY}[SKIP] {r.title[:60]}: {r.reason}{COLOR_RESET}")
@@ -553,11 +261,25 @@ def cmd_run_crawler_agent(task_name: str | None = None):
         hint(f"  下一步：python PluginMarketWorker.py --build-agent  （读 spec 构建并发布）")
 
 
-def cmd_run_build_agent(dry_run: bool = False):
-    """执行 BuildAgent：读 spec.yaml → build_plugin → 发布。"""
+def hint(msg: str):
+    print(f"{COLOR_CYAN}{msg}{COLOR_RESET}")
+
+
+# ============================================================
+# BuildAgent 命令
+# ============================================================
+
+def cmd_run_build_agent(dry_run: bool = False, max_publish: int = 0):
+    """执行 BuildAgent：读 spec.yaml → build_plugin → 发布。
+
+    Args:
+        dry_run: True 则只构建不发布
+        max_publish: 本次最多发布几个（0 表示不限）
+    """
     from build_agent import run as build_run
 
-    header(f"BuildAgent Run ({'dry-run' if dry_run else 'live'})")
+    header(f"BuildAgent Run ({'dry-run' if dry_run else 'live'}"
+           f"{f', max_publish={max_publish}' if max_publish > 0 else ''})")
 
     publish_fn = None
     already_published_fn = None
@@ -575,6 +297,7 @@ def cmd_run_build_agent(dry_run: bool = False):
         dry_run=dry_run,
         publish_fn=publish_fn,
         already_published_fn=already_published_fn,
+        max_publish=max_publish,
     )
 
     built = sum(1 for r in results if r.status == "built")
@@ -630,7 +353,11 @@ def get_daily_progress() -> dict:
 
 
 def run_daily(quota: int | None = None, force: bool = False) -> dict:
-    """每日定时的定量捞取：遍历启用源，发布满 quota 个即停。
+    """每日定时的定量捞取：串联 CrawlerAgent + BuildAgent，发布满 quota 个即停。
+
+    流程：
+      1. CrawlerAgent 跑所有启用任务 → 产出 spec.yaml
+      2. BuildAgent 读 spec（按 rating 降序）→ 构建 → 发布，max_publish=今日剩余配额
 
     状态持久化到 data/crawler-state.json，服务重启不会重复发布当天额度。
     force=True 时忽略已发布计数（用于手动补跑，仍受 quota 限制）。
@@ -649,8 +376,9 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
     remaining = max(0, quota - already)
     header(f"Crawler Daily Run (quota={quota}, published={already}, remaining={remaining})")
 
-    results = {"published": 0, "skipped": 0, "error": 0, "quota": quota,
-               "already_today": already, "stopped_reason": "sources_exhausted"}
+    results = {"spec_written": 0, "published": 0, "skipped": 0, "error": 0,
+               "quota": quota, "already_today": already,
+               "stopped_reason": "completed"}
     if remaining <= 0:
         info("今日配额已满，跳过")
         results["stopped_reason"] = "quota_reached"
@@ -659,34 +387,88 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
         save_state(state)
         return results
 
-    sources = [s for s in load_sources() if s.get("enabled", True)]
-    if not sources:
-        warn("无启用的源配置")
-        results["stopped_reason"] = "no_sources"
+    # ── 1. CrawlerAgent：搜索 → 抓取 → 评级 → 抽 skills → 写 spec.yaml ──
+    try:
+        info("[1/2] 启动 CrawlerAgent（搜索 + 抓取 + 评级 + 抽 skills）...")
+        from crawler_agent import run_task, require_env
+        require_env()
+        tasks = [t for t in load_tasks() if t.get("enabled", True)]
+        channels = load_channels()
+        if not tasks or not channels:
+            warn("无启用的 CrawlerAgent 任务或 channels 池，跳过抓取")
+            results["stopped_reason"] = "no_tasks"
+        else:
+            for task in tasks:
+                name = str(task.get("name", "")).strip()
+                try:
+                    crawl_results = run_task(task, channels)
+                    for r in crawl_results:
+                        if r.status == "spec":
+                            results["spec_written"] += 1
+                        elif r.status == "skip":
+                            results["skipped"] += 1
+                        elif r.status == "error":
+                            results["error"] += 1
+                except Exception as e:
+                    error(f"CrawlerAgent 任务 {name} 异常: {e}")
+                    results["error"] += 1
+                time.sleep(3)
+            info(f"[1/2] CrawlerAgent 完成：产出 {results['spec_written']} 个 spec")
+    except Exception as e:
+        error(f"CrawlerAgent 阶段失败: {e}")
+        results["stopped_reason"] = "crawler_error"
+        results["error"] += 1
+        state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        state["last_result"] = results
+        save_state(state)
         return results
 
-    for source in sources:
-        current = int(state.get("published", 0))
-        if current >= quota:
-            results["stopped_reason"] = "quota_reached"
-            break
-        try:
-            r = crawl_and_publish(source, dry_run=False, remaining_quota=quota - current)
-            _accumulate_crawl_result(results, r)
-            published_delta = int(r.get("published", 0)) if "published" in r else (1 if r.get("status") == "published" else 0)
-            state["published"] = int(state.get("published", 0)) + published_delta
-            if r.get("stopped_reason") == "quota_reached" or int(state.get("published", 0)) >= quota:
-                results["stopped_reason"] = "quota_reached"
-                break
-        except Exception as e:
-            error(f"处理异常: {source.get('name')}: {e}")
-            results["error"] += 1
-        time.sleep(2)
+    # 无 spec 产出，直接结束
+    if results["spec_written"] == 0:
+        warn("CrawlerAgent 未产出任何 spec，跳过 BuildAgent")
+        results["stopped_reason"] = "no_specs"
+        state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        state["last_result"] = results
+        save_state(state)
+        return results
 
+    # ── 2. BuildAgent：读 spec（按 rating 降序）→ 构建 → 发布（max_publish 限流）──
+    try:
+        info(f"[2/2] 启动 BuildAgent（构建 + 发布，max_publish={remaining}）...")
+        publish_fn = None
+        already_published_fn = None
+        try:
+            require_server_direct_mode()
+            publish_fn = publish_local
+            already_published_fn = already_published_local
+        except Exception as e:
+            warn(f"服务端直连模式不可用，仅构建不发布: {e}")
+
+        from build_agent import run as build_run
+        build_results = build_run(
+            dry_run=False,
+            publish_fn=publish_fn,
+            already_published_fn=already_published_fn,
+            max_publish=remaining,
+        )
+        published_delta = sum(1 for r in build_results if r.status == "published")
+        results["published"] = published_delta
+        if published_delta < remaining:
+            results["stopped_reason"] = "specs_exhausted"
+        else:
+            results["stopped_reason"] = "quota_reached"
+        info(f"[2/2] BuildAgent 完成：发布 {published_delta} 个")
+    except Exception as e:
+        error(f"BuildAgent 阶段失败: {e}")
+        results["stopped_reason"] = "build_error"
+        results["error"] += 1
+
+    # 更新今日已发布计数
+    state["published"] = int(state.get("published", 0)) + results["published"]
     state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
     state["last_result"] = results
     save_state(state)
-    info(f"今日已发布 {state['published']}/{quota}，剩余源耗尽或配额已满")
+    info(f"今日已发布 {state['published']}/{quota}（本次 +{results['published']}）")
     return results
 
 
@@ -694,83 +476,28 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
 # CLI
 # ============================================================
 
-def _accumulate_crawl_result(results: dict, result: dict) -> None:
-    has_counts = any(k in result for k in ("published", "skipped", "error", "items"))
-    if has_counts:
-        results["published"] = int(results.get("published", 0)) + int(result.get("published", 0))
-        results["skipped"] = int(results.get("skipped", 0)) + int(result.get("skipped", 0))
-        results["error"] = int(results.get("error", 0)) + int(result.get("error", 0))
-    else:
-        status = result.get("status")
-        if status == "published":
-            results["published"] = int(results.get("published", 0)) + 1
-        elif status == "skip":
-            results["skipped"] = int(results.get("skipped", 0)) + 1
-        elif status == "error":
-            results["error"] = int(results.get("error", 0)) + 1
-
-    if result.get("status") == "dry_run":
-        dry_run_items = [i for i in result.get("items", []) if i.get("status") == "dry_run"]
-        results["dry_run"] = int(results.get("dry_run", 0)) + (len(dry_run_items) or 1)
-
-
-def cmd_list():
-    sources = load_sources()
-    discovery_tasks = load_discovery_tasks()
-    if not sources and not discovery_tasks:
-        warn("无源配置。使用 --add <url> 添加源，或在 plugin-sources.yaml 配置 discovery 段。")
-        return
-
-    if sources:
-        header("插件抓取源列表（已知 URL）")
-        for i, s in enumerate(sources):
-            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if s.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
-            schedule = s.get("schedule", "daily")
-            print(f"  {i+1}. {status} {s.get('name', '?')} ({schedule})")
-            print(f"     URL: {s.get('url', '-')}")
-            print(f"     Tags: {', '.join(s.get('tags', [])) or '-'}")
-            print()
-
-    if discovery_tasks:
-        header("CrawlerAgent 任务列表（搜索发现：Tavily + LLM）")
-        channels = load_channels()
-        ch_map = {str(c.get("id", "")).lower(): c for c in channels}
-        for i, d in enumerate(discovery_tasks):
-            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if d.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
-            schedule = d.get("schedule", "daily")
-            print(f"  {i+1}. {status} {d.get('name', '?')} ({schedule})")
-            print(f"     Topic: {d.get('topic', '-')}")
-            task_ch_ids = d.get("channels") or []
-            if task_ch_ids:
-                domains = [ch_map[str(cid).lower()].get("domain", "?")
-                           for cid in task_ch_ids if str(cid).lower() in ch_map]
-                ch_text = ", ".join(domains) if domains else "(无匹配渠道)"
-            else:
-                ch_text = "(全部渠道)"
-            print(f"     Channels: {ch_text}")
-            print(f"     Tags: {', '.join(d.get('tags', [])) or '-'}")
-            print()
-
-
 def cmd_list_discovery():
     """列出 CrawlerAgent 任务（基于固定 channels 池 + topic 配置）。"""
     channels = load_channels()
-    discovery_tasks = load_discovery_tasks()
-    if not channels and not discovery_tasks:
-        warn("无 channels/discovery 配置。在 plugin-sources.yaml 增加 channels 池与 discovery 段。")
+    tasks = load_tasks()
+    if not channels and not tasks:
+        warn("无 channels/tasks 配置。在 plugin-sources.yaml 增加 channels 池与 tasks 段。")
         return
 
     if channels:
         header("固定渠道池（channels）")
         for c in channels:
-            print(f"  - {c.get('id', '?'):12s} {c.get('domain', '-'):24s} {c.get('name', '')}")
+            print(f"  - {c.get('id', '?'):12s} {c.get('domain', '-'):24s} "
+                  f"{c.get('name', '')}  (weight={c.get('weight', 10)})")
 
-    if discovery_tasks:
-        header("CrawlerAgent 任务列表（搜索发现：Tavily + LLM）")
+    if tasks:
+        header("CrawlerAgent 任务列表（tasks）")
         # 构造 id → domain 映射，用于解析每个任务的 channels 引用
         ch_map = {str(c.get("id", "")).lower(): c for c in channels}
-        for i, d in enumerate(discovery_tasks):
-            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if d.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
+        for i, d in enumerate(tasks):
+            status = (f"{COLOR_GREEN}[enabled]{COLOR_RESET}"
+                      if d.get("enabled", True)
+                      else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}")
             schedule = d.get("schedule", "daily")
             print(f"  {i+1}. {status} {d.get('name', '?')} ({schedule})")
             print(f"     Topic: {d.get('topic', '-')}")
@@ -786,122 +513,42 @@ def cmd_list_discovery():
             print(f"     Channels: {ch_text}")
             print(f"     Auto-discover topics: {auto}" +
                   (f" (max={d.get('max_topics', 5)})" if d.get("auto_discover_topics", False) else ""))
+            print(f"     Min rating: {d.get('min_rating', 40)}")
             print(f"     Tags: {', '.join(d.get('tags', [])) or '-'}")
             print()
-
-
-def cmd_add(url: str, name: str = None, tags: str = None):
-    sources = load_sources()
-    if not name:
-        name = url.rstrip("/").split("/")[-1]
-    new_source = {
-        "name": name,
-        "url": url,
-        "tags": [t.strip() for t in (tags or "").split(",") if t.strip()],
-        "enabled": True,
-        "schedule": "daily",
-    }
-    sources.append(new_source)
-    save_sources(sources)
-    info(f"[OK] 已添加源: {name}")
-    hint(f"配置文件: {SOURCES_FILE}")
-
-
-def cmd_remove(name: str):
-    sources = load_sources()
-    before = len(sources)
-    sources = [s for s in sources if s.get("name") != name]
-    if len(sources) == before:
-        warn(f"未找到源: {name}")
-        return
-    save_sources(sources)
-    info(f"[OK] 已移除源: {name}")
-
-
-def cmd_run(source_name: str | None = None, dry_run: bool = False):
-    sources = load_sources()
-    if not sources:
-        warn("无源配置。使用 --add <url> 添加源。")
-        return
-
-    if source_name:
-        sources = [s for s in sources if source_name.lower() in s.get("name", "").lower()]
-        if not sources:
-            warn(f"未匹配到源: {source_name}")
-            return
-
-    header(f"Crawler Run ({'dry-run' if dry_run else 'live'})")
-    print(f"  Server: {SERVER_URL}")
-    print(f"  Sources: {len(sources)} (filtered by enabled)")
-
-    results = {"published": 0, "skipped": 0, "error": 0, "dry_run": 0}
-    for source in sources:
-        if not source.get("enabled", True):
-            continue
-        try:
-            r = crawl_and_publish(source, dry_run=dry_run)
-            _accumulate_crawl_result(results, r)
-        except Exception as e:
-            error(f"处理异常: {source.get('name')}: {e}")
-            results["error"] += 1
-        time.sleep(2)  # 避免请求过快
-
-    header("Crawler Summary")
-    info(f"  Published: {results['published']}")
-    print(f"  {COLOR_DARKGRAY}Skipped: {results['skipped']}{COLOR_RESET}")
-    print(f"  {COLOR_DARKGRAY}Dry-run: {results['dry_run']}{COLOR_RESET}")
-    if results["error"]:
-        error(f"  Errors: {results['error']}")
 
 
 def main():
     parser = argparse.ArgumentParser(
         prog="crawler",
-        description="AgentBuddy 插件市场 — 定时抓取 Worker",
+        description="AgentBuddy 插件市场 — 定时抓取 Worker（CrawlerAgent + BuildAgent）",
     )
-    parser.add_argument("--source", "-s", default=None,
-                        help="只执行指定源（名称模糊匹配）")
+    # CrawlerAgent
+    parser.add_argument("--crawler-agent", default=None, const="__all__", nargs="?", metavar="NAME",
+                        help="执行 CrawlerAgent 任务（搜索智能体）：搜索 → 抓取 → 评级 → 抽 skills → 写 spec.yaml。"
+                             "不带值=跑全部启用任务，带值=模糊匹配任务名")
+    # BuildAgent
+    parser.add_argument("--build-agent", action="store_true",
+                        help="执行 BuildAgent（构建智能体）：读 spec.yaml → 构建 → 发布。"
+                             "可配合 --dry-run 只构建不发布")
+    parser.add_argument("--max-publish", type=int, default=0,
+                        help="BuildAgent 本次最多发布几个（0 表示不限，默认 0）")
     parser.add_argument("--dry-run", action="store_true",
                         help="只分析+构建，不发布")
+    # 列表
     parser.add_argument("--list", action="store_true",
-                        help="列出所有源及状态")
-    parser.add_argument("--add", metavar="URL",
-                        help="添加新源")
-    parser.add_argument("--add-name", default=None,
-                        help="添加源时的名称")
-    parser.add_argument("--add-tags", default=None,
-                        help="添加源时的标签（逗号分隔）")
-    parser.add_argument("--remove", metavar="NAME",
-                        help="移除源")
-    parser.add_argument("--daily", action="store_true",
-                        help="每日定时模式（仅 sources）：按配额发布（env AGENTBUDDY_CRAWL_QUOTA，默认 10）")
-    parser.add_argument("--quota", type=int, default=None,
-                        help="本次配额（--daily 时生效）")
-    parser.add_argument("--force", action="store_true",
-                        help="忽略今日已发布计数（--daily 时生效）")
-    parser.add_argument("--crawler-agent", default=None, const="__all__", nargs="?", metavar="NAME",
-                        help="执行 CrawlerAgent 任务（搜索智能体）：topic + 固定 channels → Tavily 搜索 → "
-                             "抓正文 → LLM 抽 skills → 写 spec.yaml（不构建不发布）。"
-                             "不传 NAME 执行全部；传 NAME 模糊匹配任务名。"
-                             "环境变量：OPENAI_API_KEY / TAVILY_API_KEY 必填")
-    parser.add_argument("--build-agent", action="store_true",
-                        help="执行 BuildAgent（构建智能体）：读 spec.yaml → build_plugin → 发布。"
-                             "可配合 --dry-run 只构建不发布")
-    parser.add_argument("--list-discovery", action="store_true",
                         help="列出所有 CrawlerAgent 任务及状态（基于固定 channels 池 + topic）")
+    # 每日调度
+    parser.add_argument("--daily", action="store_true",
+                        help="执行每日调度：串联 CrawlerAgent + BuildAgent，发布满 quota 个即停")
+    parser.add_argument("--quota", type=int, default=None,
+                        help="每日发布配额（覆盖 env AGENTBUDDY_CRAWL_QUOTA，仅 --daily 生效）")
+    parser.add_argument("--force", action="store_true",
+                        help="忽略今日已发布计数，从头开始（仅 --daily 生效）")
     args = parser.parse_args()
 
-    if args.list_discovery:
-        cmd_list_discovery()
-        return
     if args.list:
-        cmd_list()
-        return
-    if args.add:
-        cmd_add(args.add, args.add_name, args.add_tags)
-        return
-    if args.remove:
-        cmd_remove(args.remove)
+        cmd_list_discovery()
         return
     if args.daily:
         run_daily(quota=args.quota, force=args.force)
@@ -911,9 +558,11 @@ def main():
         cmd_run_crawler_agent(task_name=task_name)
         return
     if args.build_agent:
-        cmd_run_build_agent(dry_run=args.dry_run)
+        cmd_run_build_agent(dry_run=args.dry_run, max_publish=args.max_publish)
         return
-    cmd_run(source_name=args.source, dry_run=args.dry_run)
+
+    # 无参数时打印帮助
+    parser.print_help()
 
 
 if __name__ == "__main__":

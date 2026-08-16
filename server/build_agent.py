@@ -41,10 +41,16 @@ AlreadyPublishedFn = Callable[[str, str], bool]
 # ============================================================
 
 
-def iter_specs(specs_dir: Path | None = None) -> list[tuple[Path, dict]]:
-    """扫描所有 spec.yaml，返回 [(path, spec_dict), ...]。
+def iter_specs(
+    specs_dir: Path | None = None,
+    *,
+    min_rating: int = 0,
+) -> list[tuple[Path, dict]]:
+    """扫描所有 spec.yaml，按 rating 降序返回 [(path, spec_dict), ...]。
 
-    跳过非 yaml 文件和解析失败的文件。
+    - 跳过非 yaml 文件和解析失败的文件
+    - 过滤掉 rating < min_rating 的 spec（默认 0 不过滤）
+    - 按 spec.rating 降序排序（高分优先构建）
     """
     root = specs_dir or SPECS_DIR
     if not root.exists():
@@ -61,7 +67,13 @@ def iter_specs(specs_dir: Path | None = None) -> list[tuple[Path, dict]]:
         # 必须包含 build_plugin 兼容字段
         if not spec.get("name") or not spec.get("skills"):
             continue
+        # 评级过滤
+        rating = int(spec.get("rating", 0) or 0)
+        if rating < min_rating:
+            continue
         out.append((p, spec))
+    # 按 rating 降序（高分优先构建）
+    out.sort(key=lambda x: int(x[1].get("rating", 0) or 0), reverse=True)
     return out
 
 
@@ -98,6 +110,8 @@ def run(
     publish_fn: PublishFn | None = None,
     already_published_fn: AlreadyPublishedFn | None = None,
     specs_dir: Path | None = None,
+    min_rating: int = 0,
+    max_publish: int = 0,
 ) -> list[BuildResult]:
     """BuildAgent 主入口：扫描 spec → 构建 → 发布。
 
@@ -107,19 +121,26 @@ def run(
         publish_fn: 发布函数 (zip_path, tags) -> dict；None 则不发布
         already_published_fn: 去重函数 (name, version) -> bool；None 则不去重
         specs_dir: spec 目录（测试用），None 则用默认 SPECS_DIR
+        min_rating: 只处理 rating >= min_rating 的 spec（默认 0 不过滤）
+        max_publish: 最多发布几个（含本次已发布的累计计数，0 表示不限）。
+                     达到上限后剩余 spec 不再构建发布。
 
     Returns: [BuildResult, ...]
     """
     from plugin_build import build_plugin
 
-    specs = iter_specs(specs_dir)
+    specs = iter_specs(specs_dir, min_rating=min_rating)
     if not specs:
         print("[build_agent] 无 spec.yaml 待构建（data/specs/ 为空）")
         return []
 
-    print(f"[build_agent] 发现 {len(specs)} 个 spec{'（dry-run）' if dry_run else ''}")
+    print(f"[build_agent] 发现 {len(specs)} 个 spec"
+          f"{'（dry-run）' if dry_run else ''}"
+          f"{'（min_rating=%d）' % min_rating if min_rating > 0 else ''}"
+          f"{'（max_publish=%d）' % max_publish if max_publish > 0 else ''}")
 
     results: list[BuildResult] = []
+    published_count = 0  # 本次新发布的计数（max_publish 限流用）
     for spec_path, spec in specs:
         task = str(spec.get("task", "")).strip()
         if only_task and task != only_task:
@@ -146,6 +167,16 @@ def run(
             results.append(BuildResult(
                 spec_path=str(spec_path), plugin_name=plugin_name,
                 status="skipped", reason="already built", skills=skills,
+            ))
+            continue
+
+        # max_publish 限流：达上限后剩余 spec 不再构建发布
+        # （已 published/built 的不算在 max_publish 内，直接跳过）
+        if max_publish > 0 and published_count >= max_publish:
+            print(f"  [SKIP-QUOTA] {plugin_name}（已达 max_publish={max_publish}）")
+            results.append(BuildResult(
+                spec_path=str(spec_path), plugin_name=plugin_name,
+                status="skipped", reason=f"quota full ({max_publish})", skills=skills,
             ))
             continue
 
@@ -182,6 +213,7 @@ def run(
                             spec_path=str(spec_path), plugin_name=plugin_name,
                             status="published", zip_path=str(zip_path), skills=skills,
                         ))
+                        published_count += 1
                         continue
                     except Exception as e:
                         spec["build_status"] = "error"
@@ -246,6 +278,7 @@ def run(
                 spec_path=str(spec_path), plugin_name=plugin_name,
                 status="published", zip_path=str(zip_path), skills=skills,
             ))
+            published_count += 1
         except Exception as e:
             spec["build_status"] = "error"
             spec["_last_error"] = f"publish: {e}"
@@ -267,6 +300,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="只构建不发布")
     parser.add_argument("--task", default=None, help="仅构建指定 task 的 spec")
     parser.add_argument("--no-publish", action="store_true", help="不发布（仅构建到 zip）")
+    parser.add_argument("--min-rating", type=int, default=0,
+                        help="只构建 rating >= 此值的 spec（默认 0 不过滤）")
+    parser.add_argument("--max-publish", type=int, default=0,
+                        help="本次最多发布几个（0 表示不限）")
     args = parser.parse_args(argv)
 
     publish_fn: PublishFn | None = None
@@ -286,6 +323,8 @@ def main(argv: list[str] | None = None) -> int:
         only_task=args.task,
         publish_fn=publish_fn,
         already_published_fn=already_published_fn,
+        min_rating=args.min_rating,
+        max_publish=args.max_publish,
     )
 
     # 统计

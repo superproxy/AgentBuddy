@@ -25,15 +25,27 @@ from flask_cors import CORS
 SERVER_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SERVER_DIR))
 
-# 数据目录
-DATA_DIR = Path(os.environ.get("AGENTBUDDY_DATA_DIR", SERVER_DIR / "data"))
+
+def _resolve_path(raw: str | None, default: Path) -> Path:
+    """解析路径：环境变量优先，绝对路径直接用，相对路径相对 SERVER_DIR 解析。
+
+    .env 里写 ./data 会解析为 server/data（而非相对 cwd），与默认值语义一致。
+    """
+    if not raw or not raw.strip():
+        return default
+    p = Path(raw.strip())
+    return p if p.is_absolute() else (SERVER_DIR / p).resolve()
+
+
+# 数据目录（.env 相对路径以 server 目录为基准）
+DATA_DIR = _resolve_path(os.environ.get("AGENTBUDDY_DATA_DIR"), SERVER_DIR / "data")
 MARKETPLACE_DIR = DATA_DIR / "marketplace"
 
-# LLM 配置
-LLM_CONFIG_PATH = Path(os.environ.get(
-    "AGENTBUDDY_LLM_CONFIG",
+# LLM 配置（.env 相对路径以 server 目录为基准）
+LLM_CONFIG_PATH = _resolve_path(
+    os.environ.get("AGENTBUDDY_LLM_CONFIG"),
     SERVER_DIR / "config" / "llm" / "llm.yaml",
-))
+)
 
 # 服务端运行目录（AI 配置、服务端构建输出与资源读取）。
 PROJECT_ROOT = SERVER_DIR
@@ -136,16 +148,22 @@ def create_app() -> Flask:
     @app.route("/api/crawler/status", methods=["GET"])
     @require_auth
     def crawler_status():
-        """捞取调度状态：今日进度 + 源列表 + 上次运行结果。"""
+        """捞取调度状态：今日进度 + CrawlerAgent 任务列表 + 上次运行结果。
+
+        架构：渠道固定（channels 池）+ tasks（topic 配置）→ CrawlerAgent 产出 spec.yaml
+              → BuildAgent 读 spec 构建 + 发布。旧的 sources 段已废弃。
+        """
         import PluginMarketWorker as crawler_mod
         import yaml as _yaml
         from pathlib import Path as _P
         sources_file = _P(__file__).resolve().parent / "config" / "plugin-sources.yaml"
         try:
             cfg = _yaml.safe_load(sources_file.read_text(encoding="utf-8")) or {}
-            sources = cfg.get("sources", [])
+            # 兼容旧的 discovery 段（已重命名为 tasks）
+            tasks = cfg.get("tasks") or cfg.get("discovery") or []
+            channels = cfg.get("channels", []) or []
         except Exception:
-            sources = []
+            tasks, channels = [], []
         state = crawler_mod.load_state()
         return jsonify({
             "ok": True,
@@ -156,7 +174,15 @@ def create_app() -> Flask:
                 "quota": int(os.environ.get("AGENTBUDDY_CRAWL_QUOTA",
                                             str(crawler_mod.DEFAULT_DAILY_QUOTA))),
             },
-            "sources": [{"name": s.get("name"), "enabled": s.get("enabled", True)} for s in sources],
+            # 返回 tasks（CrawlerAgent 任务列表）+ channels（固定渠道池）
+            "tasks": [{"name": t.get("name"), "topic": t.get("topic"),
+                       "enabled": t.get("enabled", True),
+                       "min_rating": t.get("min_rating", 40)}
+                      for t in tasks],
+            "channels": [{"id": c.get("id"), "domain": c.get("domain"),
+                          "weight": c.get("weight", 10)} for c in channels],
+            # 向后兼容：旧字段 sources 永远为空（已废弃）
+            "sources": [],
             "last_run": state.get("last_run", ""),
             "last_result": state.get("last_result"),
         })

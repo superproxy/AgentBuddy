@@ -338,6 +338,143 @@ def _extract_main_text(html: str) -> str:
 
 
 # ============================================================
+# 搜索智能体 — 文章评级（0-100）
+# ============================================================
+
+# 渠道权重缓存（首次用时从 plugin-sources.yaml 加载）
+_channel_weight_cache: dict[str, int] = {}
+
+
+def _load_channel_weights() -> dict[str, int]:
+    """从 plugin-sources.yaml 加载渠道权重 {domain_lower: weight}。"""
+    global _channel_weight_cache
+    if _channel_weight_cache:
+        return _channel_weight_cache
+    try:
+        sources_file = SERVER_DIR / "config" / "plugin-sources.yaml"
+        with open(sources_file, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        for c in data.get("channels", []) or []:
+            domain = str(c.get("domain", "")).strip().lower()
+            weight = int(c.get("weight", 10) or 10)
+            if domain:
+                _channel_weight_cache[domain] = max(0, min(20, weight))
+    except Exception:
+        pass
+    return _channel_weight_cache
+
+
+def _channel_weight(url: str) -> int:
+    """根据文章 URL 匹配渠道域名，返回该渠道权重（0-20，未匹配返回 10）。"""
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(url).hostname or "").lower()
+        if not host:
+            return 10
+        weights = _load_channel_weights()
+        # 精确匹配
+        if host in weights:
+            return weights[host]
+        # 后缀匹配（如 blog.csdn.net → csdn.net）
+        for domain, w in weights.items():
+            if host == domain or host.endswith("." + domain):
+                return w
+    except Exception:
+        pass
+    return 10
+
+
+def _topic_relevance(title: str, content: str, topic: str) -> float:
+    """计算 topic 关键词在标题/正文中的命中率（0-1）。
+
+    topic 拆分为关键词（按空格/标点切分，长度 ≥ 2），
+    统计有多少关键词出现在标题或正文里。
+    """
+    if not topic:
+        return 0.0
+    # 拆分关键词：中英文混合，按非字母数字汉字切分
+    keywords = [w for w in re.split(r"[^\w\u4e00-\u9fff]+", topic.lower())
+                if len(w) >= 2]
+    if not keywords:
+        return 0.0
+    title_l = title.lower()
+    content_l = content.lower()
+    hits = sum(1 for kw in keywords if kw in title_l or kw in content_l)
+    return hits / len(keywords)
+
+
+def rate_article(
+    *,
+    title: str,
+    content: str,
+    url: str,
+    topic: str,
+    blocked: bool = False,
+    has_snippet_fallback: bool = False,
+) -> dict:
+    """对一篇文章打分（0-100），返回 {score, breakdown}。
+
+    评分维度：
+    - content_length   20 分：正文长度（>2000 满分，500-2000 线性，<500 得 0）
+    - code_blocks      25 分：代码块数量（每个 5 分，上限 25）
+    - topic_relevance  25 分：topic 关键词命中率 * 25
+    - channel          20 分：渠道权重（直接取 channel.weight，0-20）
+    - penalty          风控惩罚：blocked 但有摘要 -15，blocked 且无摘要直接 0 分
+
+    Returns: {"score": int, "breakdown": {dim: score, ...}}
+    """
+    # 风控无摘要：直接 0 分
+    if blocked and not has_snippet_fallback:
+        return {
+            "score": 0,
+            "breakdown": {
+                "content_length": 0, "code_blocks": 0, "topic_relevance": 0,
+                "channel": 0, "penalty": -100,
+            },
+            "reason": "blocked_no_snippet",
+        }
+
+    text = content or ""
+    text_len = len(text)
+
+    # 1. 内容长度（20 分）
+    if text_len >= 2000:
+        cl_score = 20
+    elif text_len >= 500:
+        cl_score = int(20 * (text_len - 500) / 1500)
+    else:
+        cl_score = 0
+
+    # 2. 代码块数量（25 分，每个 5 分）
+    code_count = len(re.findall(r"```", text)) // 2
+    cb_score = min(code_count * 5, 25)
+
+    # 3. topic 相关性（25 分）
+    rel = _topic_relevance(title, text, topic)
+    tr_score = int(rel * 25)
+
+    # 4. 渠道权重（20 分）
+    ch_score = _channel_weight(url)
+
+    # 5. 风控惩罚
+    penalty = 0
+    reason = ""
+    if blocked and has_snippet_fallback:
+        penalty = -15
+        reason = "blocked_with_snippet"
+
+    total = max(0, cl_score + cb_score + tr_score + ch_score + penalty)
+    breakdown = {
+        "content_length": cl_score,
+        "code_blocks": cb_score,
+        "topic_relevance": tr_score,
+        "channel": ch_score,
+        "penalty": penalty,
+    }
+    return {"score": total, "breakdown": breakdown, "reason": reason}
+
+
+# ============================================================
 # 搜索智能体 — LLM 从文章抽取 skills
 # ============================================================
 
@@ -440,6 +577,7 @@ def write_spec(
     article_content: str,
     skills: list[DiscoveredSkill],
     tags: list[str],
+    rating: dict | None = None,
 ) -> Path:
     """写一个 spec.yaml 文件，返回路径。
 
@@ -448,7 +586,10 @@ def write_spec(
 
     spec.yaml 顶层包含 build_plugin 兼容字段（name/version/description/skills/...），
     BuildAgent 直接将整个 spec 内容作为 config_yaml 传给 build_plugin 即可。
-    额外的元信息（spec_version / source_article / build_status）build_plugin 会忽略。
+    额外的元信息（spec_version / source_article / build_status / rating）build_plugin 会忽略。
+
+    rating 为 rate_article() 的返回值，写入 source_article.rating 与顶层 rating 字段，
+    BuildAgent 按顶层 rating 降序构建（高分优先）。
     """
     slug = _slugify(article_title) or "article"
     if len(slug) > 60:
@@ -470,11 +611,14 @@ def write_spec(
         "generated_by": "crawler_agent",
         "task": task_name,
         "build_status": "pending",  # pending / built / published / error
+        # 顶层 rating：BuildAgent 按此降序构建（高分优先）
+        "rating": int(rating.get("score", 0)) if rating else 0,
         "source_article": {
             "url": article_url,
             "title": article_title,
             "fetched_at": datetime.now().isoformat(timespec="seconds"),
             "content_excerpt": article_content[:500],
+            "rating": rating or {},
         },
         # build_plugin 兼容字段（meta_from_config 读取）
         "name": plugin_name,
@@ -514,7 +658,7 @@ class CrawlResult:
 
     status 取值：
     - spec: 已写出 spec.yaml（待 BuildAgent 构建）
-    - skip: 跳过（已 seen / 无 skills / 风控且无摘要）
+    - skip: 跳过（已 seen / 评级过低 / 无 skills / 风控且无摘要）
     - error: 抓取/抽取失败
     """
     url: str
@@ -523,6 +667,7 @@ class CrawlResult:
     spec_path: str = ""
     skills: list[str] = field(default_factory=list)
     reason: str = ""
+    rating: int = 0  # 文章评级分数（0-100）
 
 
 def run_task(
@@ -606,35 +751,65 @@ def run_task(
             results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
             continue
 
-        if article.get("blocked"):
-            content = hit.get("content", "")
-            if not content:
-                mark_seen(seen_state, url, title=title, status="blocked_no_snippet")
-                results.append(CrawlResult(url=url, title=title, status="skip",
-                                           reason="blocked & no snippet"))
-                continue
+        blocked = bool(article.get("blocked"))
+        snippet = hit.get("content", "") or ""
+        # 风控且无摘要 → 评级 0 分，跳过
+        if blocked and not snippet:
+            mark_seen(seen_state, url, title=title, status="blocked_no_snippet")
+            results.append(CrawlResult(url=url, title=title, status="skip",
+                                       reason="blocked & no snippet", rating=0))
+            continue
+        # 风控但有摘要 → 用摘要兜底
+        if blocked and snippet:
             article["title"] = article.get("title") or title
-            article["content"] = content
+            article["content"] = snippet
 
         article_title = article.get("title") or title
         article_content = article.get("content", "")
 
-        # 6. LLM 抽 skills
+        # 6. 文章评级（0-100）：低于阈值的跳过，不调用 LLM 抽 skills（省钱）
+        rating = rate_article(
+            title=article_title,
+            content=article_content,
+            url=url,
+            topic=topic,
+            blocked=blocked,
+            has_snippet_fallback=bool(snippet) if blocked else False,
+        )
+        rating_score = int(rating.get("score", 0))
+        min_rating = int(task_cfg.get("min_rating", 40))
+        if rating_score < min_rating:
+            mark_seen(seen_state, url, title=article_title,
+                      status=f"low_rating_{rating_score}")
+            results.append(CrawlResult(
+                url=url, title=article_title, status="skip",
+                reason=f"low rating {rating_score} < {min_rating}",
+                rating=rating_score,
+            ))
+            continue
+        print(f"  [rating] {rating_score}/100 "
+              f"(len={rating['breakdown']['content_length']} "
+              f"code={rating['breakdown']['code_blocks']} "
+              f"rel={rating['breakdown']['topic_relevance']} "
+              f"ch={rating['breakdown']['channel']} "
+              f"pen={rating['breakdown']['penalty']})")
+
+        # 7. LLM 抽 skills
         try:
             skills = extract_skills_from_article(article_title, article_content, url)
         except Exception as e:
             mark_seen(seen_state, url, title=article_title, status="extract_error")
             results.append(CrawlResult(url=url, title=article_title, status="error",
-                                       reason=f"extract: {e}"))
+                                       reason=f"extract: {e}", rating=rating_score))
             continue
 
         if not skills:
             mark_seen(seen_state, url, title=article_title, status="no_skills")
             results.append(CrawlResult(url=url, title=article_title, status="skip",
-                                       reason="no skills"))
+                                       reason="no skills", rating=rating_score))
             continue
 
-        # 7. 写 spec.yaml（不构建）
+        # 8. 写 spec.yaml（带 rating，不构建）
         try:
             spec_path = write_spec(
                 task_name=name,
@@ -643,11 +818,12 @@ def run_task(
                 article_content=article_content,
                 skills=skills,
                 tags=tags,
+                rating=rating,
             )
         except Exception as e:
             mark_seen(seen_state, url, title=article_title, status="spec_error")
             results.append(CrawlResult(url=url, title=article_title, status="error",
-                                       reason=f"spec: {e}"))
+                                       reason=f"spec: {e}", rating=rating_score))
             continue
 
         mark_seen(seen_state, url, title=article_title, status="spec_written")
@@ -657,6 +833,7 @@ def run_task(
             status="spec",
             spec_path=str(spec_path),
             skills=[s.name for s in skills],
+            rating=rating_score,
         ))
 
     save_seen_urls(seen_state)

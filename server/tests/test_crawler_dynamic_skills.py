@@ -1,4 +1,15 @@
-"""Crawler 动态发现 skills 并聚合发布的回归测试。"""
+"""CrawlerAgent 文章抓取与 skill 抽取回归测试。
+
+注：旧的 sources 段（已知 URL 抓取 + crawl_and_publish）已废弃，
+统一为渠道搜索架构（CrawlerAgent + BuildAgent）。本文件保留：
+- skill frontmatter 解析
+- 微信公众号文章抓取（移动端 UA + cgiDataNew 元数据提取）
+- 直配 LLM 兜底（analyze_source 透传 llm_config）
+
+旧的 crawl_and_publish / evaluate_quality / load_sources 相关测试已删除，
+对应能力由 crawler_agent.run_task + build_agent.run 覆盖（见
+test_rate_article.py 与 test_crawler_quota.py）。
+"""
 import sys
 import unittest
 from pathlib import Path
@@ -6,7 +17,6 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import PluginMarketWorker as crawler  # noqa: E402
 from plugin_build import (  # noqa: E402
     PluginMeta,
     SkillInfo,
@@ -20,114 +30,12 @@ from plugin_build import (  # noqa: E402
 )
 
 
-class TestCrawlerDynamicSkills(unittest.TestCase):
-    def _meta(self) -> PluginMeta:
-        return PluginMeta(
-            name="source-repo",
-            version="1.0.0",
-            description="A source repo with useful skills for automated publishing.",
-            homepage="https://github.com/acme/source-repo",
-            repository="https://github.com/acme/source-repo",
-            skills=[
-                SkillInfo(name="alpha-skill", description="Alpha automation skill", source="acme/source-repo@alpha-skill"),
-                SkillInfo(name="beta-skill", description="Beta automation skill", source="acme/source-repo@beta-skill"),
-            ],
-            tags=["automation"],
-            source_type="github",
-            source_url="https://github.com/acme/source-repo",
-        )
-
+class TestSkillFrontmatter(unittest.TestCase):
     def test_parse_skill_frontmatter(self):
         data = _parse_skill_frontmatter("---\nname: demo-skill\ndescription: Demo skill\nversion: 1.2.3\n---\n# Demo\n")
         self.assertEqual(data["name"], "demo-skill")
         self.assertEqual(data["description"], "Demo skill")
         self.assertEqual(str(data["version"]), "1.2.3")
-
-    def test_crawl_and_publish_dry_run_builds_aggregate_plugin(self):
-        built = []
-
-        def fake_build(_root, data):
-            built.append(data["config_yaml"])
-            return Path("/tmp/aggregate.zip"), {}
-
-        with mock.patch("plugin_build.analyze_source", return_value=self._meta()), \
-             mock.patch.object(crawler, "evaluate_quality", return_value=45), \
-             mock.patch("plugin_build.build_plugin", side_effect=fake_build):
-            result = crawler.crawl_and_publish({"name": "src", "url": "https://github.com/acme/source-repo"}, dry_run=True)
-
-        self.assertEqual(result["status"], "dry_run")
-        self.assertEqual(len(result["items"]), 1)
-        self.assertEqual(result["items"][0]["name"], "src-skills")
-        self.assertEqual(result["items"][0]["skills"], ["alpha-skill", "beta-skill"])
-        self.assertEqual(len(built), 1)
-        self.assertIn("name: src-skills", built[0])
-        self.assertIn("name: alpha-skill", built[0])
-        self.assertIn("name: beta-skill", built[0])
-
-    def test_source_skills_whitelist_limits_published_items(self):
-        with mock.patch("plugin_build.analyze_source", return_value=self._meta()), \
-             mock.patch.object(crawler, "evaluate_quality", return_value=45), \
-             mock.patch("plugin_build.build_plugin", return_value=(Path("/tmp/beta.zip"), {})):
-            result = crawler.crawl_and_publish(
-                {"name": "src", "url": "https://github.com/acme/source-repo", "skills": ["beta-skill"]},
-                dry_run=True,
-            )
-
-        self.assertEqual(result["status"], "dry_run")
-        self.assertEqual(len(result["items"]), 1)
-        self.assertEqual(result["items"][0]["name"], "src")
-        self.assertEqual(result["items"][0]["skills"], ["beta-skill"])
-
-    def test_url_source_can_use_configured_repositories_when_page_has_no_skills(self):
-        article_meta = PluginMeta(
-            name="wechat-article",
-            description="WeChat verification page without article body.",
-            homepage="https://mp.weixin.qq.com/s/example",
-            source_type="url",
-            source_url="https://mp.weixin.qq.com/s/example",
-        )
-        repo_meta = self._meta()
-        built = []
-
-        def fake_build(_root, data):
-            built.append(data["config_yaml"])
-            return Path("/tmp/wechat.zip"), {}
-
-        with mock.patch("plugin_build.analyze_source", return_value=article_meta), \
-             mock.patch("plugin_build.analyze_github", return_value=repo_meta), \
-             mock.patch.object(crawler, "evaluate_quality", return_value=45), \
-             mock.patch("plugin_build.build_plugin", side_effect=fake_build):
-            result = crawler.crawl_and_publish(
-                {
-                    "name": "codex-game-top10",
-                    "url": "https://mp.weixin.qq.com/s/example",
-                    "repos": ["acme/source-repo"],
-                },
-                dry_run=True,
-            )
-
-        self.assertEqual(result["status"], "dry_run")
-        self.assertEqual(result["items"][0]["name"], "codex-game-top10-skills")
-        self.assertEqual(result["items"][0]["skills"], ["alpha-skill", "beta-skill"])
-        self.assertEqual(len(built), 1)
-        self.assertIn("name: alpha-skill", built[0])
-        self.assertIn("name: beta-skill", built[0])
-        self.assertNotIn("WeChat verification page", built[0])
-        self.assertIn("Aggregated skills from https://mp.weixin.qq.com/s/example", built[0])
-
-    def test_remaining_quota_zero_skips_source(self):
-        with mock.patch("plugin_build.analyze_source") as analyze, \
-             mock.patch("plugin_build.build_plugin") as build:
-            result = crawler.crawl_and_publish(
-                {"name": "src", "url": "https://github.com/acme/source-repo"},
-                dry_run=False,
-                remaining_quota=0,
-            )
-
-        analyze.assert_not_called()
-        build.assert_not_called()
-        self.assertEqual(result["status"], "skip")
-        self.assertEqual(result["stopped_reason"], "quota_reached")
 
 
 class TestWeChatExtraction(unittest.TestCase):
@@ -184,7 +92,7 @@ class TestWeChatExtraction(unittest.TestCase):
 
 
 class TestDirectLLMFallback(unittest.TestCase):
-    """crawler 直配 LLM 兜底：source.llm 透传 + 候选 skills 生成。"""
+    """直配 LLM 兜底：analyze_source 透传 llm_config + 候选 skills 生成。"""
 
     def test_analyze_source_passes_llm_config_when_ai(self):
         captured: dict = {}
@@ -228,41 +136,6 @@ class TestDirectLLMFallback(unittest.TestCase):
     def test_generate_plugin_with_direct_llm_requires_all_fields(self):
         with self.assertRaises(ValueError):
             generate_plugin_with_direct_llm("prompt", {"base_url": "", "api_key": "", "model": ""})
-
-    def test_crawler_passes_source_llm_to_analyze_source(self):
-        built = []
-
-        def fake_build(_root, data):
-            built.append(data["config_yaml"])
-            return Path("/tmp/llm.zip"), {}
-
-        ai_meta = PluginMeta(
-            name="codex-game-skills",
-            description="基于文章摘要生成的 Codex 游戏 skills 聚合插件",
-            source_type="url",
-            source_url="https://mp.weixin.qq.com/s/example",
-            skills=[SkillInfo(name="game-prototype-gen", source="ai-extracted:https://mp.weixin.qq.com/s/example")],
-        )
-
-        source = {
-            "name": "codex-game-top10",
-            "url": "https://mp.weixin.qq.com/s/example",
-            "ai": True,
-            "llm": {"base_url": "https://api.example.com/v1", "api_key": "sk-test", "model": "gpt-4o-mini"},
-            "tags": ["codex", "game"],
-        }
-
-        with mock.patch("plugin_build.analyze_source", return_value=ai_meta) as analyze, \
-             mock.patch.object(crawler, "evaluate_quality", return_value=45), \
-             mock.patch("plugin_build.build_plugin", side_effect=fake_build):
-            result = crawler.crawl_and_publish(source, dry_run=True)
-
-        analyze.assert_called_once()
-        _, kwargs = analyze.call_args
-        self.assertEqual(kwargs["ai"], True)
-        self.assertEqual(kwargs["llm_config"]["model"], "gpt-4o-mini")
-        self.assertEqual(result["status"], "dry_run")
-        self.assertEqual(result["items"][0]["skills"], ["game-prototype-gen"])
 
 
 if __name__ == "__main__":

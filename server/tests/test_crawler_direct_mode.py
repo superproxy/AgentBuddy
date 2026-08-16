@@ -72,13 +72,13 @@ class TestDirectMode(unittest.TestCase):
         # 入库可查 → 去重生效
         self.assertTrue(crawler.already_published_local("direct-test", "2.1.0"))
 
-    def test_already_published_dispatch(self):
-        """already_published 在直连模式下走查库分支（无 token 也可用）。"""
+    def test_already_published_local_after_publish(self):
+        """already_published_local 在直连模式下走查库分支（无 token 也可用）。"""
         self.db.write_bytes(b"")
-        # init 会重建表；先发布一个再验分发
+        # init 会重建表；先发布一个再验去重
         zp = self._make_zip("dispatch-test")
         crawler.publish_local(zp)
-        self.assertTrue(crawler.already_published("dispatch-test", "1.0.0", token=""))
+        self.assertTrue(crawler.already_published_local("dispatch-test", "1.0.0"))
         crawler._auth_models = None
 
 

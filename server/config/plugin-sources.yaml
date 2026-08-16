@@ -1,104 +1,28 @@
-# 插件抓取源配置 — PluginMarketWorker.py 读取此文件
+# 插件抓取源配置 — CrawlerAgent + BuildAgent 双智能体架构
 #
-# 用法:
-#   python server/PluginMarketWorker.py --list     # 查看所有源
-#   python server/PluginMarketWorker.py             # 执行所有启用的源
-#   python server/PluginMarketWorker.py --source qwen-mm  # 只执行匹配的源
-#   python server/PluginMarketWorker.py --dry-run   # 只分析+构建不发布
-#   python server/PluginMarketWorker.py --daily     # 每日配额模式（发布满 quota 个即停，默认 10）
-#   python server/PluginMarketWorker.py --add <url> --add-name my-plugin --add-tags ai,mcp
+# 架构：
+#   CrawlerAgent（搜索智能体）：固定 channels + topic → Tavily 搜索 → 抓正文
+#                                → 文章评级 → LLM 抽 skills → 写 spec.yaml
+#   BuildAgent（构建智能体）：读 spec.yaml（按 rating 降序）→ build_plugin 打 zip → 发布
 #
-# 定时调度（两种方式）:
-#   1. 内置调度（推荐）：server/app.py 启动时自动开每日调度线程（默认凌晨 3 点，
-#      每日发布 10 个）。env 可调：
-#        AGENTBUDDY_CRAWL_ENABLED=0   关闭
-#        AGENTBUDDY_CRAWL_HOUR=3      执行时刻（0-23）
-#        AGENTBUDDY_CRAWL_QUOTA=10    每日发布配额
-#   2. crontab（备用）:
-#      0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --daily >> /var/log/agentbuddy-crawler.log 2>&1
-#
-# 注：crawler 会把一个来源聚合成一个可安装插件，插件内包含多个 skills。
-#     GitHub 来源会自动扫描仓库内所有 SKILL.md。
-#     文章/公众号 URL 如果抓不到正文，可配置 repos/github_repos/repositories 作为仓库种子，
-#     crawler 会扫描这些仓库并聚合发现的 skills。
-#     skills 为可选白名单；配置时必须使用 SKILL.md frontmatter 里的权威全名
-#     （如 qwen-mm-plugins-core，不是 core），否则过滤会落空。
-#
-# LLM 兜底（文章/URL 抓不到真实 SKILL.md 时用 AI 生成候选 skills）：
-#   - ai: true 开启 LLM 分析；需要在同一 source 下配置 llm 直配项。
-#   - llm 配置直接写 OpenAI-compatible 的 base_url / api_key / model，
-#     crawler 不会去读 config/llm/llm.yaml，只认这里写的值。
-#     llm:
-#       base_url: https://api.example.com/v1
-#       api_key: sk-xxxxxxxx
-#       model: gpt-4o-mini
-#   - 微信公众号文章建议加 ai: true，因为公众号正文常被风控拦截，
-#     只有标题/摘要能稳定抓到，需要 LLM 按摘要推断候选 skills。
-#
-# 发布：crawler 必须与 app.py 同机部署，自动走"服务端直连"（免登录直写库和
-#     packages/，首跑自动创建 crawler 服务账号）。
-
-sources:
-  - name: qwen-mm-plugins
-    url: https://github.com/QwenLM/Qwen-MM-Plugins
-    skills: [qwen-mm-plugins-core, qwen-mm-plugins-api, qwen-mm-plugins-search]
-    tags: [multimodal, vision, ocr]
-    enabled: true
-    schedule: daily
-
-  - name: anthropic-skills
-    url: https://github.com/anthropics/skills
-    tags: [skills, official, documents]
-    enabled: true
-    schedule: daily
-
-  - name: superpowers
-    url: https://github.com/obra/superpowers
-    tags: [skills, workflow, devtools]
-    enabled: true
-    schedule: daily
-
-  - name: awesome-mcp-servers
-    url: https://github.com/punkpeye/awesome-mcp-servers
-    type: directory
-    tags: [mcp, directory]
-    enabled: false
-    schedule: weekly
-
-  # 示例：RSS / 技术博客源（需 AI 分析，当前未启用）
-  # - name: mcp-weekly
-  #   url: https://example.com/feed.xml
-  #   type: rss
-  #   enabled: false
-  #   schedule: weekly
-
-  # 示例：微信公众号文章源（正文常被风控拦截，用 LLM 按摘要生成候选 skills）
-  # - name: codex-game-top10
-  #   url: https://mp.weixin.qq.com/s/PqkrlotuYwjApDn3VZ5DZw
-  #   ai: true
-  #   llm:
-  #     base_url: https://api.openai.com/v1
-  #     api_key: sk-xxxxxxxx
-  #     model: gpt-4o-mini
-  #   tags: [codex, game, skills]
-  #   enabled: false
-  #   schedule: daily
-
-# ============================================================
-# CrawlerAgent 任务配置 — server/crawler_agent.py 读取此段
-# ============================================================
-#
-# 架构（两个独立智能体，串联使用）：
-#   CrawlerAgent（搜索智能体）：topic + 固定 channels → Tavily 搜索 → 抓正文
-#                                → LLM 抽 skills → 写 spec.yaml（不构建不发布）
-#   BuildAgent（构建智能体）：读 spec.yaml → build_plugin 打 zip → publish_local 发布
-#
-# CLI：
+# CLI（PluginMarketWorker.py）：
 #   python PluginMarketWorker.py --crawler-agent                # 跑全部 CrawlerAgent 任务（产出 spec）
 #   python PluginMarketWorker.py --crawler-agent <name>         # 跑指定任务
 #   python PluginMarketWorker.py --build-agent                  # 读 spec 构建 + 发布
 #   python PluginMarketWorker.py --build-agent --dry-run        # 读 spec 只构建不发布
-#   python PluginMarketWorker.py --list-discovery               # 列出 CrawlerAgent 任务
+#   python PluginMarketWorker.py --list                         # 列出所有任务及状态
+#
+# 定时调度（两种方式）:
+#   1. 内置调度（推荐）：server/app.py 启动时自动开每日调度线程（默认凌晨 3 点，
+#      串联 CrawlerAgent + BuildAgent，发布满 quota 个即停）。env 可调：
+#        AGENTBUDDY_CRAWL_ENABLED=0   关闭
+#        AGENTBUDDY_CRAWL_HOUR=3      执行时刻（0-23）
+#        AGENTBUDDY_CRAWL_QUOTA=10    每日发布配额
+#   2. crontab（备用）:
+#      # 凌晨 3 点跑 CrawlerAgent（产出 spec）
+#      0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --crawler-agent >> /var/log/agentbuddy-crawler-agent.log 2>&1
+#      # 凌晨 4 点跑 BuildAgent（读 spec 构建 + 发布）
+#      0 4 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --build-agent >> /var/log/agentbuddy-build-agent.log 2>&1
 #
 # 环境变量（独立应用，不读 config/llm/llm.yaml 与 config/mcp/mcp.yaml）：
 #   OPENAI_API_KEY     必填（OpenAI 兼容 LLM，用于抽 skills / 生成 topic）
@@ -108,42 +32,49 @@ sources:
 #
 # 启动检查：PluginMarketWorker.py --crawler-agent 启动时校验上述环境变量，缺失则提示退出。
 #
-# 定时调度（CrawlerAgent + BuildAgent 串联，独立 cron）：
-#   # 凌晨 4 点跑搜索（产出 spec）
-#   0 4 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --crawler-agent >> /var/log/agentbuddy-crawler-agent.log 2>&1
-#   # 凌晨 5 点跑构建（读 spec → 构建 → 发布）
-#   0 5 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --build-agent >> /var/log/agentbuddy-build-agent.log 2>&1
+# 发布：crawler 必须与 app.py 同机部署，自动走"服务端直连"（免登录直写库和
+#     packages/，首跑自动创建 crawler 服务账号）。
 
-# 固定渠道池：所有 CrawlerAgent 任务共享，任务里通过 channels.id 引用
-# 任务未配 channels 时，默认用全部 channels
+# ============================================================
+# 固定渠道池 — 所有 CrawlerAgent 任务共享
+# ============================================================
+# 字段说明：
+#   id      渠道标识（任务里通过 channels.id 引用）
+#   domain  渠道域名（Tavily site: 过滤用）
+#   name    渠道中文名
+#   weight  渠道权重（0-20，文章评级用；github/zhihu 等高质量社区权重高，wechat 风控高降权）
 channels:
-  - {id: wechat,      domain: mp.weixin.qq.com, name: 微信公众号}
-  - {id: zhihu,       domain: zhihu.com,        name: 知乎}
-  - {id: juejin,      domain: juejin.cn,        name: 掘金}
-  - {id: csdn,        domain: csdn.net,         name: CSDN}
-  - {id: xiaohongshu, domain: xiaohongshu.com,  name: 小红书}
-  - {id: youtube,     domain: youtube.com,      name: YouTube}
-  - {id: bilibili,    domain: bilibili.com,     name: 哔哩哔哩}
-  - {id: github,      domain: github.com,       name: GitHub}
+  - {id: github,      domain: github.com,       name: GitHub,     weight: 20}
+  - {id: zhihu,       domain: zhihu.com,        name: 知乎,        weight: 18}
+  - {id: juejin,      domain: juejin.cn,        name: 掘金,        weight: 15}
+  - {id: csdn,        domain: csdn.net,         name: CSDN,       weight: 12}
+  - {id: bilibili,    domain: bilibili.com,     name: 哔哩哔哩,    weight: 12}
+  - {id: youtube,     domain: youtube.com,      name: YouTube,    weight: 10}
+  - {id: xiaohongshu, domain: xiaohongshu.com,  name: 小红书,      weight: 8}
+  - {id: wechat,      domain: mp.weixin.qq.com, name: 微信公众号,  weight: 5}
 
+# ============================================================
 # CrawlerAgent 任务列表
+# ============================================================
 # 字段说明：
 #   name                  任务名（必填，去重/CLI 模糊匹配用）
-#   topic                 搜索主题（用户必填指定，作为 Tavily 主查询词）
+#   topic                 搜索主题（必填，作为 Tavily 主查询词）
 #   channels              限定的渠道 id 列表（可选，引用上方 channels.id；留空=全部）
 #   auto_discover_topics  是否让 LLM 基于当前 topic 通过 Google 扩展更多高质量 topic（默认 false）
 #   max_topics            auto_discover_topics=true 时最多生成几个新 topic（默认 5）
 #   max_results           每个 topic 的 Tavily 返回结果数（默认 10）
+#   min_rating            文章评级阈值（0-100，默认 40）；低于阈值的文章跳过，不抽 skills 不写 spec
 #   tags                  spec.yaml 中写入的插件标签
 #   enabled               是否启用
 #   schedule              调度频率（仅文档用，实际由 cron 控制）
-discovery:
+tasks:
   - name: claude-code-skills-cn
     topic: "Claude Code skills 实战"
     channels: [wechat, zhihu, juejin]
     auto_discover_topics: true
     max_topics: 5
     max_results: 10
+    min_rating: 40
     tags: [skills, claude-code, cn]
     enabled: true
     schedule: daily
@@ -154,6 +85,7 @@ discovery:
     auto_discover_topics: true
     max_topics: 5
     max_results: 10
+    min_rating: 40
     tags: [mcp, server, tutorial]
     enabled: true
     schedule: daily
@@ -163,6 +95,7 @@ discovery:
     channels: [youtube]
     auto_discover_topics: false
     max_results: 8
+    min_rating: 40
     tags: [agent, youtube, en]
     enabled: false
     schedule: weekly
@@ -174,6 +107,7 @@ discovery:
   #   auto_discover_topics: true
   #   max_topics: 5
   #   max_results: 10
+  #   min_rating: 40
   #   tags: [cursor, skills]
   #   enabled: false
   #   schedule: daily
