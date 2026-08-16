@@ -25,6 +25,10 @@ from flask_cors import CORS
 SERVER_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SERVER_DIR))
 
+# 自动加载 server/.env（shell/system 环境变量优先，不被覆盖）
+from _env_loader import load_env_file  # noqa: E402
+load_env_file()
+
 
 def _resolve_path(raw: str | None, default: Path) -> Path:
     """解析路径：环境变量优先，绝对路径直接用，相对路径相对 SERVER_DIR 解析。

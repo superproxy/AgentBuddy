@@ -41,7 +41,11 @@ SOURCES_FILE = SERVER_DIR / "config" / "plugin-sources.yaml"
 # server 目录用于导入 auth / plugin_build 等服务端模块。
 sys.path.insert(0, str(SERVER_DIR))
 
-import yaml
+import yaml  # noqa: E402
+
+# 自动加载 server/.env（shell/system 环境变量优先，不被覆盖）
+from _env_loader import load_env_file  # noqa: E402
+load_env_file()
 
 # ── 颜色日志 ──
 COLOR_GREEN = "\033[92m"
