@@ -20,7 +20,7 @@ CLI:
     python PluginMarketWorker.py --list                     # 列出 CrawlerAgent 任务及状态
 
 架构：
-  CrawlerAgent（搜索智能体）：固定 channels + topic → Tavily 搜索 → 抓正文
+  CrawlerAgent（搜索智能体）：固定 channels + intent → 多源聚合搜索 → 抓正文
                              → 文章评级 → LLM 抽 skills → 写 spec.yaml
   BuildAgent（构建智能体）：读 spec.yaml（按 rating 降序）→ build_plugin 打 zip → 发布
 """
@@ -230,7 +230,7 @@ def cmd_run_crawler_agent(task_name: str | None = None):
             continue
         name = str(task.get("name", "")).strip()
         header(f"CrawlerAgent: {name}")
-        info(f"  Topic: {task.get('topic', name)}")
+        info(f"  Intent: {task.get('intent', 'trending')}")
         try:
             results = run_task(task, channels)
         except Exception as e:
@@ -477,7 +477,7 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
 # ============================================================
 
 def cmd_list_discovery():
-    """列出 CrawlerAgent 任务（基于固定 channels 池 + topic 配置）。"""
+    """列出 CrawlerAgent 任务（基于固定 channels 池 + intent 配置）。"""
     channels = load_channels()
     tasks = load_tasks()
     if not channels and not tasks:
@@ -500,7 +500,7 @@ def cmd_list_discovery():
                       else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}")
             schedule = d.get("schedule", "daily")
             print(f"  {i+1}. {status} {d.get('name', '?')} ({schedule})")
-            print(f"     Topic: {d.get('topic', '-')}")
+            print(f"     Intent: {d.get('intent', 'trending')}")
             # 解析 channels 引用 → domain 列表
             task_ch_ids = d.get("channels") or []
             if task_ch_ids:
@@ -509,12 +509,9 @@ def cmd_list_discovery():
                 ch_text = ", ".join(domains) if domains else "(无匹配渠道)"
             else:
                 ch_text = "(全部渠道)"
-            auto = "是" if d.get("auto_discover_topics", False) else "否"
             print(f"     Channels: {ch_text}")
-            print(f"     Auto-discover topics: {auto}" +
-                  (f" (max={d.get('max_topics', 5)})" if d.get("auto_discover_topics", False) else ""))
+            print(f"     Max results: {d.get('max_results', 15)}")
             print(f"     Min rating: {d.get('min_rating', 40)}")
-            print(f"     Tags: {', '.join(d.get('tags', [])) or '-'}")
             print()
 
 
@@ -537,7 +534,7 @@ def main():
                         help="只分析+构建，不发布")
     # 列表
     parser.add_argument("--list", action="store_true",
-                        help="列出所有 CrawlerAgent 任务及状态（基于固定 channels 池 + topic）")
+                        help="列出所有 CrawlerAgent 任务及状态（基于固定 channels 池 + intent）")
     # 每日调度
     parser.add_argument("--daily", action="store_true",
                         help="执行每日调度：串联 CrawlerAgent + BuildAgent，发布满 quota 个即停")

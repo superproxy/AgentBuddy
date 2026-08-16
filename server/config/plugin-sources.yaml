@@ -1,7 +1,8 @@
 # 插件抓取源配置 — CrawlerAgent + BuildAgent 双智能体架构
 #
 # 架构：
-#   CrawlerAgent（搜索智能体）：固定 channels + topic → Tavily 搜索 → 抓正文
+#   CrawlerAgent（搜索智能体）：tasks.intent → LLM 生成查询词 → 多源聚合搜索
+#                                （Tavily 网页 + GitHub API 仓库）→ 抓正文
 #                                → 文章评级 → LLM 抽 skills → 写 spec.yaml
 #   BuildAgent（构建智能体）：读 spec.yaml（按 rating 降序）→ build_plugin 打 zip → 发布
 #
@@ -25,10 +26,11 @@
 #      0 4 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --build-agent >> /var/log/agentbuddy-build-agent.log 2>&1
 #
 # 环境变量（独立应用，不读 config/llm/llm.yaml 与 config/mcp/mcp.yaml）：
-#   OPENAI_API_KEY     必填（OpenAI 兼容 LLM，用于抽 skills / 生成 topic）
+#   OPENAI_API_KEY     必填（OpenAI 兼容 LLM，用于生成查询词 / 抽 skills）
 #   OPENAI_BASE_URL    可选（默认 https://api.openai.com/v1）
 #   OPENAI_MODEL       可选（默认 gpt-4o-mini）
-#   TAVILY_API_KEY     必填（Tavily 搜索，独立 MCP 凭据）
+#   TAVILY_API_KEY     必填（Tavily 网页搜索，独立 MCP 凭据）
+#   GITHUB_TOKEN       可选（GitHub API 搜索，无 token 60 次/小时，有 5000 次/小时）
 #
 # 启动检查：PluginMarketWorker.py --crawler-agent 启动时校验上述环境变量，缺失则提示退出。
 #
@@ -57,57 +59,30 @@ channels:
 # CrawlerAgent 任务列表
 # ============================================================
 # 字段说明：
-#   name                  任务名（必填，去重/CLI 模糊匹配用）
-#   topic                 搜索主题（必填，作为 Tavily 主查询词）
-#   channels              限定的渠道 id 列表（可选，引用上方 channels.id；留空=全部）
-#   auto_discover_topics  是否让 LLM 基于当前 topic 通过 Google 扩展更多高质量 topic（默认 false）
-#   max_topics            auto_discover_topics=true 时最多生成几个新 topic（默认 5）
-#   max_results           每个 topic 的 Tavily 返回结果数（默认 10）
-#   min_rating            文章评级阈值（0-100，默认 40）；低于阈值的文章跳过，不抽 skills 不写 spec
-#   tags                  spec.yaml 中写入的插件标签
-#   enabled               是否启用
-#   schedule              调度频率（仅文档用，实际由 cron 控制）
+#   name          任务名（必填，去重/CLI 模糊匹配用）
+#   intent        搜索意图（必填）：latest(最新) / trending(热门) / recommend(综合推荐)
+#   channels      限定的渠道 id 列表（可选，引用上方 channels.id；留空=全部）
+#   max_results   每个查询词的返回结果数（默认 10）
+#   min_rating    文章评级阈值（0-100，默认 40）；低于阈值的文章跳过，不抽 skills 不写 spec
+#   enabled       是否启用
+#   schedule      调度频率（仅文档用，实际由 cron 控制）
+#
+# 查询词由 LLM 按 intent 生成（如 trending → "热门 Claude Code skills 推荐"，
+# "best MCP skills this month" 等），再交由 Tavily + GitHub API 聚合搜索。
+# tags 字段已移除：spec.yaml 的标签由 LLM 抽 skills 时按文章内容自动生成。
 tasks:
-  - name: claude-code-skills-cn
-    topic: "Claude Code skills 实战"
-    channels: [wechat, zhihu, juejin]
-    auto_discover_topics: true
-    max_topics: 5
-    max_results: 10
+  - name: skills-daily
+    intent: trending      # latest(最新) / trending(热门) / recommend(综合推荐)
+    channels: [github, zhihu, juejin, wechat, csdn]  # 留空=全部渠道
+    max_results: 15
     min_rating: 40
-    tags: [skills, claude-code, cn]
     enabled: true
     schedule: daily
-
-  - name: mcp-servers-discovery
-    topic: "MCP server 实现 教程"
-    channels: [github, zhihu, juejin, csdn]
-    auto_discover_topics: true
-    max_topics: 5
-    max_results: 10
-    min_rating: 40
-    tags: [mcp, server, tutorial]
-    enabled: true
-    schedule: daily
-
-  - name: ai-agent-youtube
-    topic: "AI agent build tutorial"
-    channels: [youtube]
-    auto_discover_topics: false
-    max_results: 8
-    min_rating: 40
-    tags: [agent, youtube, en]
-    enabled: false
-    schedule: weekly
 
   # 示例：未启用，留作模板
-  # - name: cursor-skills
-  #   topic: "Cursor skills workflow"
-  #   channels: [wechat, zhihu]
-  #   auto_discover_topics: true
-  #   max_topics: 5
+  # - name: skills-latest
+  #   intent: latest
   #   max_results: 10
   #   min_rating: 40
-  #   tags: [cursor, skills]
   #   enabled: false
   #   schedule: daily

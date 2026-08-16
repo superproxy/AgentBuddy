@@ -150,7 +150,7 @@ def create_app() -> Flask:
     def crawler_status():
         """捞取调度状态：今日进度 + CrawlerAgent 任务列表 + 上次运行结果。
 
-        架构：渠道固定（channels 池）+ tasks（topic 配置）→ CrawlerAgent 产出 spec.yaml
+        架构：渠道固定（channels 池）+ tasks（intent 配置）→ CrawlerAgent 产出 spec.yaml
               → BuildAgent 读 spec 构建 + 发布。旧的 sources 段已废弃。
         """
         import PluginMarketWorker as crawler_mod
@@ -175,7 +175,9 @@ def create_app() -> Flask:
                                             str(crawler_mod.DEFAULT_DAILY_QUOTA))),
             },
             # 返回 tasks（CrawlerAgent 任务列表）+ channels（固定渠道池）
-            "tasks": [{"name": t.get("name"), "topic": t.get("topic"),
+            "tasks": [{"name": t.get("name"), "intent": t.get("intent", "trending"),
+                       "channels": t.get("channels", []),
+                       "max_results": t.get("max_results", 15),
                        "enabled": t.get("enabled", True),
                        "min_rating": t.get("min_rating", 40)}
                       for t in tasks],

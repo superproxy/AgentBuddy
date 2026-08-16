@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """CrawlerAgent — 搜索智能体。
 
-职责：topic + 固定 channels → Tavily 搜索 → 抓正文 → LLM 抽 skills → 写 spec.yaml。
+职责：tasks.intent → LLM 生成查询词 → 多源聚合搜索（Tavily 网页 + GitHub API 仓库）
+      → 抓正文 → 文章评级 → LLM 抽 skills → 写 spec.yaml。
 不构建、不发布。BuildAgent 读 spec.yaml 完成构建与发布。
 
 独立应用，不依赖客户端配置（config/llm/llm.yaml、config/mcp/mcp.yaml）。
 所有外部凭据通过环境变量注入：
 
-    OPENAI_API_KEY     必填（OpenAI 兼容 LLM，用于 topic 扩展 / skill 抽取）
+    OPENAI_API_KEY     必填（OpenAI 兼容 LLM，用于生成查询词 / skill 抽取）
     OPENAI_BASE_URL    默认 https://api.openai.com/v1
     OPENAI_MODEL       默认 gpt-4o-mini
-    TAVILY_API_KEY     必填（Google 搜索发现，独立 MCP 凭据）
+    TAVILY_API_KEY     必填（Tavily 网页搜索，独立 MCP 凭据）
+    GITHUB_TOKEN       可选（GitHub API 搜索，无 token 60 次/小时，有 5000 次/小时）
 
 启动检查：调用 require_env() 在程序入口检查环境变量；缺失时直接退出。
 """
@@ -39,8 +41,8 @@ SEEN_URLS_FILE = SERVER_DIR / "data" / "crawler-agent-seen-urls.json"
 # ============================================================
 
 _REQUIRED_ENV: dict[str, str] = {
-    "OPENAI_API_KEY": "OpenAI 兼容 LLM 的 API Key（用于 topic 扩展 / skill 抽取）",
-    "TAVILY_API_KEY": "Tavily 搜索 API Key（Google 搜索发现，独立 MCP 凭据）",
+    "OPENAI_API_KEY": "OpenAI 兼容 LLM 的 API Key（用于生成查询词 / skill 抽取）",
+    "TAVILY_API_KEY": "Tavily 网页搜索 API Key（独立 MCP 凭据）",
 }
 
 _OPTIONAL_ENV: dict[str, str] = {
@@ -68,6 +70,7 @@ def require_env() -> None:
     print("  export TAVILY_API_KEY=tvly-xxxx", file=sys.stderr)
     print("  export OPENAI_BASE_URL=https://api.openai.com/v1   # 可选", file=sys.stderr)
     print("  export OPENAI_MODEL=gpt-4o-mini                    # 可选", file=sys.stderr)
+    print("  export GITHUB_TOKEN=ghp-xxxx                       # 可选（GitHub 搜索）", file=sys.stderr)
     sys.exit(2)
 
 
@@ -89,6 +92,10 @@ def _get_llm_config() -> dict[str, str]:
 
 def _get_tavily_key() -> str:
     return os.environ.get("TAVILY_API_KEY", "").strip()
+
+
+def _get_github_token() -> str:
+    return os.environ.get("GITHUB_TOKEN", "").strip()
 
 
 def llm_chat(messages: list[dict], *, json_mode: bool = False, timeout: int = 60) -> str:
@@ -120,75 +127,163 @@ def llm_chat(messages: list[dict], *, json_mode: bool = False, timeout: int = 60
 
 
 # ============================================================
-# 搜索智能体 — topic 扩展（基于 Google 高质量结果）
+# 搜索智能体 — 查询词生成（LLM 按 intent 生成）
 # ============================================================
 
 
-def discover_topics(seed_topic: str, max_topics: int = 5) -> list[str]:
-    """通过 Tavily（Google）搜索种子主题，让 LLM 从结果中归纳出更聚焦的子 topic。
+# intent → 搜索意图说明，指导 LLM 生成查询词
+_INTENT_DESC: dict[str, str] = {
+    "latest": "最新发布（近期出现的、版本更新、新功能）",
+    "trending": "热门推荐（TOP 10、best、最受欢迎、本周热门）",
+    "recommend": "综合推荐（实战、教程、最佳实践、避坑指南）",
+}
 
-    流程：
-    1. Tavily 搜 seed_topic（不限渠道，拿最相关的 Google 结果）
-    2. LLM 读搜索结果摘要，归纳出 max_topics 个高质量子 topic
-    返回：[topic1, topic2, ...]（不含 seed_topic 本身，去重）
+
+def generate_queries(intent: str, *, count: int = 5) -> list[str]:
+    """让 LLM 按 intent 生成搜索查询词。
+
+    intent 取值：
+    - latest   最新（新功能、版本更新、近期发布）
+    - trending 热门（TOP 10、best、最受欢迎、本周热门）
+    - recommend 综合（实战、教程、最佳实践）
+
+    返回：[query1, query2, ...]（去重，最多 count 个）
     """
-    key = _get_tavily_key()
-    if not key:
-        raise RuntimeError("TAVILY_API_KEY 未设置")
+    intent = (intent or "").strip().lower() or "trending"
+    desc = _INTENT_DESC.get(intent, _INTENT_DESC["trending"])
 
-    # 1. Tavily 搜种子主题（不限渠道，拿 Google 高质量结果）
-    resp = requests.post(
-        "https://api.tavily.com/search",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={
-            "query": seed_topic,
-            "search_depth": "advanced",
-            "max_results": 10,
-            "include_answer": True,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-
-    answer = str(data.get("answer", "")).strip()
-    snippets = []
-    for item in data.get("results", [])[:10]:
-        snippets.append(f"- {item.get('title', '')}: {item.get('content', '')[:200]}")
-    snippet_text = "\n".join(snippets)[:4000]
-
-    # 2. LLM 归纳高质量子 topic
     prompt = (
-        f"你是技术内容策划专家。种子主题「{seed_topic}」。\n"
-        f"Google 搜索摘要：\n{snippet_text}\n\n"
-        f"AI 概述：{answer}\n\n"
-        "基于以上 Google 高质量搜索结果，归纳出 "
-        f"{max_topics} 个更聚焦、更适合在中文技术社区（公众号/知乎/掘金）"
-        "和 YouTube 搜索的子 topic。\n\n"
+        "你是技术内容策划专家。AgentBuddy 是 Claude Code / Cursor / Codex 等 AI 编码助手的"
+        " skills 聚合市场。"
+        f"现在需要抓取「{desc}」类的 skills 推荐文章，从中抽取可安装的 skill。\n\n"
+        "请生成适合在中文技术社区（公众号/知乎/掘金/CSDN）和 GitHub/YouTube 搜索的查询词，"
+        f"覆盖 Claude Code skills、MCP servers、AI agent、Cursor rules 等方向。\n\n"
         "要求：\n"
-        "1. 每个 topic 5-15 字，自然语言\n"
-        "2. 兼顾教程、实战、对比、避坑等不同形态\n"
-        "3. 不与种子主题重复\n"
-        "4. 中英文混合，符合博主写作习惯\n\n"
-        '返回 JSON：{"topics": ["topic1", "topic2", ...]}'
+        "1. 每个查询词 5-20 字，自然语言\n"
+        "2. 中英文混合，符合博主写作习惯\n"
+        f"3. 兼顾盘点、实战、对比、教程等不同形态\n"
+        "4. 与 intent 强相关（避免泛搜）\n\n"
+        f'返回 JSON：{{"queries": ["query1", "query2", ...]}}（最多 {count} 个）'
     )
     try:
         text = llm_chat([{"role": "user", "content": prompt}], json_mode=True)
-        data2 = json.loads(text)
-        topics = [str(t).strip() for t in data2.get("topics", []) if str(t).strip()]
+        data = json.loads(text)
+        queries = [str(q).strip() for q in data.get("queries", []) if str(q).strip()]
     except Exception:
-        topics = []
+        queries = []
 
-    # 去重 + 去种子
-    seed_lower = seed_topic.lower()
-    seen = {seed_lower}
+    # 去重
+    seen: set[str] = set()
     out: list[str] = []
-    for t in topics:
-        tl = t.lower()
-        if tl and tl not in seen:
-            seen.add(tl)
-            out.append(t)
-    return out[:max_topics]
+    for q in queries:
+        ql = q.lower()
+        if ql and ql not in seen:
+            seen.add(ql)
+            out.append(q)
+    return out[:count]
+
+
+# ============================================================
+# 搜索智能体 — GitHub API 仓库搜索
+# ============================================================
+
+
+def github_search(query: str, *, max_results: int = 10) -> list[dict]:
+    """GitHub API 搜索仓库，返回 [{title, url, content}]。
+
+    用 GITHUB_SEARCH_TOPIC 前缀拼接 query，定位 SKILL.md / skills 集合类仓库。
+    无 token 时走匿名（60 次/小时），有 token 时 5000 次/小时。
+    """
+    token = _get_github_token()
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "AgentBuddy-CrawlerAgent",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    # 搜含 SKILL.md 的仓库，或 README 提及 skills 的仓库
+    full_query = f"{query} skills in:name,description,readme"
+    try:
+        resp = requests.get(
+            "https://api.github.com/search/repositories",
+            params={
+                "q": full_query,
+                "sort": "stars",
+                "order": "desc",
+                "per_page": min(max_results, 30),
+            },
+            headers=headers,
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  [github-search-error] {e}")
+        return []
+
+    results: list[dict] = []
+    for item in data.get("items", [])[:max_results]:
+        url = str(item.get("html_url", "")).strip()
+        if not url:
+            continue
+        title = str(item.get("full_name", "")).strip()
+        desc = str(item.get("description", "") or "").strip()
+        stars = int(item.get("stargazers_count", 0) or 0)
+        # content 字段供评级用：包含描述 + star 数（让评级维度有内容可打分）
+        content = f"{desc}\n\nStars: {stars}\nLanguage: {item.get('language', '')}"
+        results.append({"title": title, "url": url, "content": content})
+    return results
+
+
+# ============================================================
+# 搜索智能体 — 多源聚合搜索（Tavily 网页 + GitHub 仓库）
+# ============================================================
+
+
+def aggregate_search(
+    query: str,
+    *,
+    sites: list[str] | None = None,
+    max_results: int = 10,
+) -> list[dict]:
+    """聚合多搜索源：Tavily 网页搜索 + GitHub 仓库搜索。
+
+    sites 中的 github.com 域名会触发 GitHub API 搜索（更精准）；
+    其余域名走 Tavily site: 过滤。
+
+    Returns: [{title, url, content, source}]，source 标记来源（tavily/github）
+    """
+    all_hits: list[dict] = []
+    seen_urls: set[str] = set()
+
+    # 1. GitHub API 搜索（如果 github.com 在 sites 中或 sites 为空）
+    use_github = (not sites) or ("github.com" in [s.lower() for s in sites])
+    if use_github:
+        try:
+            gh_hits = github_search(query, max_results=max_results)
+            for h in gh_hits:
+                if h["url"] not in seen_urls:
+                    seen_urls.add(h["url"])
+                    h["source"] = "github"
+                    all_hits.append(h)
+        except Exception as e:
+            print(f"  [github-search-error] {e}")
+
+    # 2. Tavily 网页搜索（排除 github.com，避免与 GitHub API 重复）
+    tavily_sites = [s for s in (sites or []) if s.lower() != "github.com"]
+    if tavily_sites or not sites:
+        try:
+            tv_hits = tavily_search(query, sites=tavily_sites or None, max_results=max_results)
+            for h in tv_hits:
+                if h["url"] not in seen_urls:
+                    seen_urls.add(h["url"])
+                    h["source"] = "tavily"
+                    all_hits.append(h)
+        except Exception as e:
+            print(f"  [tavily-search-error] {e}")
+
+    return all_hits
 
 
 # ============================================================
@@ -384,23 +479,54 @@ def _channel_weight(url: str) -> int:
     return 10
 
 
-def _topic_relevance(title: str, content: str, topic: str) -> float:
-    """计算 topic 关键词在标题/正文中的命中率（0-1）。
+def _intent_relevance(title: str, content: str, intent: str) -> float:
+    """判断文章是否与 intent 强相关（推荐/盘点/教程类内容得分高）。
 
-    topic 拆分为关键词（按空格/标点切分，长度 ≥ 2），
-    统计有多少关键词出现在标题或正文里。
+    intent: latest / trending / recommend
+    返回 0-1：
+    - 标题含盘点/推荐类关键词（TOP 10、best、推荐、热门、2026、new、latest 等）→ 1.0
+    - 内容含 skills / mcp / agent / claude code 等领域关键词 → 0.6
+    - 单篇技术博客但无推荐信号 → 0.3
+    - 完全无关 → 0.0
     """
-    if not topic:
+    if not title and not content:
         return 0.0
-    # 拆分关键词：中英文混合，按非字母数字汉字切分
-    keywords = [w for w in re.split(r"[^\w\u4e00-\u9fff]+", topic.lower())
-                if len(w) >= 2]
-    if not keywords:
-        return 0.0
-    title_l = title.lower()
-    content_l = content.lower()
-    hits = sum(1 for kw in keywords if kw in title_l or kw in content_l)
-    return hits / len(keywords)
+    title_l = (title or "").lower()
+    content_l = (content or "").lower()
+    intent_l = (intent or "").strip().lower() or "trending"
+
+    # 1. intent 特定信号
+    trending_signals = ("top 10", "top10", "best", "trending", "热门", "推荐",
+                        "最受欢迎", "盘点", "汇总", "合集", "must-have", "favorite")
+    latest_signals = ("new", "latest", "最新", "新发布", "version", "release",
+                      "刚刚", "近期", "2024", "2025", "2026")
+    recommend_signals = ("实战", "教程", "best practice", "最佳实践", "避坑",
+                         "tutorial", "guide", "指南", "how to", "如何")
+
+    intent_signals = {
+        "trending": trending_signals,
+        "latest": latest_signals,
+        "recommend": recommend_signals,
+    }.get(intent_l, trending_signals)
+
+    if any(sig in title_l for sig in intent_signals):
+        return 1.0
+    if any(sig in content_l for sig in intent_signals):
+        return 0.8
+
+    # 2. 领域关键词（skills / mcp / agent / claude code 等）
+    domain_signals = ("skill", "mcp", "agent", "claude code", "cursor",
+                      "codex", "copilot", "rules", "hook")
+    if any(sig in title_l for sig in domain_signals):
+        return 0.6
+    if any(sig in content_l for sig in domain_signals):
+        return 0.4
+
+    # 3. 有技术内容（代码块）但无推荐信号
+    if "```" in content_l:
+        return 0.3
+
+    return 0.0
 
 
 def rate_article(
@@ -408,18 +534,18 @@ def rate_article(
     title: str,
     content: str,
     url: str,
-    topic: str,
+    intent: str = "trending",
     blocked: bool = False,
     has_snippet_fallback: bool = False,
 ) -> dict:
     """对一篇文章打分（0-100），返回 {score, breakdown}。
 
     评分维度：
-    - content_length   20 分：正文长度（>2000 满分，500-2000 线性，<500 得 0）
-    - code_blocks      25 分：代码块数量（每个 5 分，上限 25）
-    - topic_relevance  25 分：topic 关键词命中率 * 25
-    - channel          20 分：渠道权重（直接取 channel.weight，0-20）
-    - penalty          风控惩罚：blocked 但有摘要 -15，blocked 且无摘要直接 0 分
+    - content_length     20 分：正文长度（>2000 满分，500-2000 线性，<500 得 0）
+    - code_blocks        25 分：代码块数量（每个 5 分，上限 25）
+    - intent_relevance   25 分：与 intent 的相关性（0/0.3/0.4/0.6/0.8/1.0）* 25
+    - channel            20 分：渠道权重（直接取 channel.weight，0-20）
+    - penalty            风控惩罚：blocked 但有摘要 -15，blocked 且无摘要直接 0 分
 
     Returns: {"score": int, "breakdown": {dim: score, ...}}
     """
@@ -428,7 +554,7 @@ def rate_article(
         return {
             "score": 0,
             "breakdown": {
-                "content_length": 0, "code_blocks": 0, "topic_relevance": 0,
+                "content_length": 0, "code_blocks": 0, "intent_relevance": 0,
                 "channel": 0, "penalty": -100,
             },
             "reason": "blocked_no_snippet",
@@ -449,9 +575,9 @@ def rate_article(
     code_count = len(re.findall(r"```", text)) // 2
     cb_score = min(code_count * 5, 25)
 
-    # 3. topic 相关性（25 分）
-    rel = _topic_relevance(title, text, topic)
-    tr_score = int(rel * 25)
+    # 3. intent 相关性（25 分）
+    rel = _intent_relevance(title, text, intent)
+    ir_score = int(rel * 25)
 
     # 4. 渠道权重（20 分）
     ch_score = _channel_weight(url)
@@ -463,11 +589,11 @@ def rate_article(
         penalty = -15
         reason = "blocked_with_snippet"
 
-    total = max(0, cl_score + cb_score + tr_score + ch_score + penalty)
+    total = max(0, cl_score + cb_score + ir_score + ch_score + penalty)
     breakdown = {
         "content_length": cl_score,
         "code_blocks": cb_score,
-        "topic_relevance": tr_score,
+        "intent_relevance": ir_score,
         "channel": ch_score,
         "penalty": penalty,
     }
@@ -674,16 +800,16 @@ def run_task(
     task_cfg: dict,
     channels: list[dict],
 ) -> list[CrawlResult]:
-    """执行一个 CrawlerAgent 任务：搜索 → 抓取 → 抽 skills → 写 spec.yaml。
+    """执行一个 CrawlerAgent 任务：生成查询词 → 多源聚合搜索 → 抓取 → 抽 skills → 写 spec.yaml。
 
     Args:
-        task_cfg: plugin-sources.yaml 中 discovery 列表的一个元素
+        task_cfg: plugin-sources.yaml 中 tasks 列表的一个元素
         channels: 顶层 channels 池
     """
     name = str(task_cfg.get("name", "")).strip()
-    topic = str(task_cfg.get("topic") or name).strip()
-    if not topic:
-        return [CrawlResult(url="", title="", status="error", reason="no topic")]
+    intent = str(task_cfg.get("intent") or "trending").strip().lower()
+    if not name:
+        return [CrawlResult(url="", title="", status="error", reason="no name")]
 
     # 1. 解析本任务可用渠道域名
     task_channel_ids = task_cfg.get("channels") or []
@@ -695,30 +821,29 @@ def run_task(
     if not task_sites:
         return [CrawlResult(url="", title="", status="error", reason="no channels resolved")]
 
-    print(f"  [topic] {topic}")
+    print(f"  [intent] {intent}")
     print(f"  [channels] {task_sites}")
 
-    # 2. topic 扩展（可选，通过 Google 高质量结果归纳）
-    topics = [topic]
-    if task_cfg.get("auto_discover_topics", False):
-        max_topics = int(task_cfg.get("max_topics", 5))
-        try:
-            extra = discover_topics(topic, max_topics=max_topics)
-            if extra:
-                print(f"  [topics-extended] +{extra}")
-                topics.extend(extra)
-        except Exception as e:
-            print(f"  [topics-extend-error] {e}")
+    # 2. LLM 按 intent 生成查询词（替代旧的 topic + auto_discover_topics）
+    try:
+        queries = generate_queries(intent, count=5)
+    except Exception as e:
+        print(f"  [generate-queries-error] {e}")
+        queries = []
+    if not queries:
+        # 兜底：intent 直接当查询词
+        queries = [intent]
+    print(f"  [queries] {queries}")
 
-    # 3. Tavily 搜索（每个 topic）
+    # 3. 多源聚合搜索（每个查询词：Tavily 网页 + GitHub API 仓库）
     max_results = int(task_cfg.get("max_results", 10))
     all_hits: list[dict] = []
     seen_urls_in_run: set[str] = set()
-    for t in topics:
+    for q in queries:
         try:
-            hits = tavily_search(t, sites=task_sites, max_results=max_results)
+            hits = aggregate_search(q, sites=task_sites, max_results=max_results)
         except Exception as e:
-            print(f"  [search-error] {t}: {e}")
+            print(f"  [search-error] {q}: {e}")
             continue
         for h in hits:
             if h["url"] in seen_urls_in_run:
@@ -732,7 +857,6 @@ def run_task(
 
     # 4. 跨运行去重
     seen_state = load_seen_urls()
-    tags = list(task_cfg.get("tags", []) or [])
     results: list[CrawlResult] = []
 
     for hit in all_hits:
@@ -743,13 +867,22 @@ def run_task(
             results.append(CrawlResult(url=url, title=title, status="skip", reason="seen"))
             continue
 
-        # 5. 抓正文
-        try:
-            article = fetch_article(url)
-        except Exception as e:
-            mark_seen(seen_state, url, title=title, status="fetch_error")
-            results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
-            continue
+        # 5. 抓正文（GitHub 仓库已有 content，跳过抓取）
+        source = hit.get("source", "")
+        if source == "github":
+            article = {
+                "title": title,
+                "content": hit.get("content", ""),
+                "html": "",
+                "blocked": False,
+            }
+        else:
+            try:
+                article = fetch_article(url)
+            except Exception as e:
+                mark_seen(seen_state, url, title=title, status="fetch_error")
+                results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
+                continue
 
         blocked = bool(article.get("blocked"))
         snippet = hit.get("content", "") or ""
@@ -772,7 +905,7 @@ def run_task(
             title=article_title,
             content=article_content,
             url=url,
-            topic=topic,
+            intent=intent,
             blocked=blocked,
             has_snippet_fallback=bool(snippet) if blocked else False,
         )
@@ -790,7 +923,7 @@ def run_task(
         print(f"  [rating] {rating_score}/100 "
               f"(len={rating['breakdown']['content_length']} "
               f"code={rating['breakdown']['code_blocks']} "
-              f"rel={rating['breakdown']['topic_relevance']} "
+              f"rel={rating['breakdown']['intent_relevance']} "
               f"ch={rating['breakdown']['channel']} "
               f"pen={rating['breakdown']['penalty']})")
 
