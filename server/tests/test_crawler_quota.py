@@ -57,12 +57,21 @@ class TestDailyQuota(unittest.TestCase):
         self.assertEqual(crawler.load_state(), {})
 
     def test_run_daily_quota_full_skips(self):
-        """配额已满：不触达 CrawlerAgent/BuildAgent，stopped_reason=quota_reached。"""
+        """配额已满：仍跑 CrawlerAgent 生成 spec（每日沉淀），跳过 BuildAgent。
+
+        新架构：spec 每日生成，即使发布配额已满，CrawlerAgent 仍会执行
+        以沉淀知识；仅 BuildAgent 发布阶段被跳过。
+        """
+        from crawler_agent import CrawlResult
+        fake_crawl = [CrawlResult(url="https://x/0", title="t0",
+                                  status="spec", rating=60)]
         crawler.save_state({"date": crawler._today(), "published": 10})
-        with mock.patch("crawler_agent.run_task") as ct, \
+        with mock.patch("crawler_agent.run_task", return_value=fake_crawl) as ct, \
              mock.patch("build_agent.run") as br:
             r = crawler.run_daily(quota=10)
-        ct.assert_not_called()
+        # CrawlerAgent 仍被调用（生成 spec）
+        ct.assert_called()
+        # BuildAgent 被跳过（配额已满，不发布）
         br.assert_not_called()
         self.assertEqual(r["stopped_reason"], "quota_reached")
         self.assertEqual(r["published"], 0)

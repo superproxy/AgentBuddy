@@ -6,3 +6,5 @@ openai>=1.0.0
 requests>=2.28.0
 bcrypt>=4.0.0
 PyJWT>=2.8.0
+# MySQL backend（可选；AGENTBUDDY_DB_BACKEND=mysql 时启用）
+PyMySQL>=1.1.0

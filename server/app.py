@@ -63,10 +63,21 @@ def create_app() -> Flask:
     # 确保数据目录存在
     MARKETPLACE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 初始化用户认证数据库
+    # 初始化用户认证数据库（按 backend 选 SQLite/MySQL）
     from auth.models import set_db_path, set_marketplace_dir, migrate_index_json
-    DB_PATH = DATA_DIR / "agentbuddy.db"
-    set_db_path(DB_PATH)
+    import db as _db
+    _db_backend = os.environ.get("AGENTBUDDY_DB_BACKEND", "sqlite").strip().lower()
+    if _db_backend == "mysql":
+        # MySQL 模式：从 .env 读取 AGENTBUDDY_DB_URL，自动建库使用
+        from auth.models import set_mysql_url
+        mysql_url = os.environ.get("AGENTBUDDY_DB_URL", "").strip()
+        if not mysql_url:
+            raise RuntimeError("AGENTBUDDY_DB_BACKEND=mysql 但未配置 AGENTBUDDY_DB_URL")
+        set_mysql_url(mysql_url)
+    else:
+        # SQLite 模式（默认，零配置）
+        DB_PATH = DATA_DIR / "agentbuddy.db"
+        set_db_path(DB_PATH)
     set_marketplace_dir(MARKETPLACE_DIR)
     migrate_index_json()
 

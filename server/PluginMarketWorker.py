@@ -103,17 +103,44 @@ _auth_models = None  # 惰性加载（避免 CLI 模式强依赖 server 侧模�
 
 
 def server_mode() -> bool:
-    """服务端直连模式判定：本地存在市场数据库（与 app.py 同机）。"""
+    """服务端直连模式判定：
+
+    - SQLite backend：本地存在市场数据库文件（与 app.py 同机）
+    - MySQL backend：已配置 AGENTBUDDY_DB_URL 即视为直连模式
+    """
+    try:
+        import db as _db
+        if _db.backend() == "mysql":
+            return bool(os.environ.get("AGENTBUDDY_DB_URL"))
+    except Exception:
+        pass
     return DB_FILE.exists()
 
 
 def _init_db_access():
+    """惰性加载 auth.models，并按 backend 初始化数据库连接。
+
+    - SQLite：用 DB_FILE（兼容旧行为）
+    - MySQL：用环境变量 AGENTBUDDY_DB_URL（与 app.py 一致）
+    """
     global _auth_models
     if _auth_models is not None:
         return _auth_models
     sys.path.insert(0, str(SERVER_DIR))
     from auth import models as auth_models
-    auth_models.set_db_path(DB_FILE)
+    # 按 backend 切换初始化路径
+    try:
+        import db as _db
+        if _db.backend() == "mysql":
+            url = os.environ.get("AGENTBUDDY_DB_URL", "").strip()
+            if not url:
+                raise RuntimeError("MySQL backend 需要配置 AGENTBUDDY_DB_URL")
+            auth_models.set_mysql_url(url)
+        else:
+            auth_models.set_db_path(DB_FILE)
+    except ImportError:
+        # db 模块缺失时回退到 SQLite（兼容最小依赖场景）
+        auth_models.set_db_path(DB_FILE)
     auth_models.init_db()
     _auth_models = auth_models
     return _auth_models

@@ -1,25 +1,41 @@
-"""SQLite 数据模型 — 用户、团队、成员关系、插件、点赞。
+"""数据模型 — 用户、团队、成员关系、插件、点赞。
 
-单文件 SQLite，零配置。数据库文件路径由 app.py 通过 DB_PATH 传入。
+底层经 db.py 抽象层支持 SQLite / MySQL 双驱动，由环境变量
+AGENTBUDDY_DB_BACKEND 切换（默认 sqlite，零配置）。
+数据库连接配置由 app.py 通过 set_db_path / set_mysql_url 传入。
 启动时自动从 index.json 迁移已有插件数据。
 首次注册的用户自动成为管理员。
 """
-import sqlite3
 import json
 from pathlib import Path
 from datetime import datetime, timezone
 import bcrypt
 
-DB_PATH: Path | None = None
+import db as _db
+
+DB_PATH: Path | None = None          # SQLite 路径（兼容旧接口）
 MARKETPLACE_DIR: Path | None = None
 
 
 def set_db_path(path: Path):
-    """设置数据库文件路径（由 app.py 在启动时调用）。"""
+    """设置 SQLite 数据库文件路径（由 app.py 在启动时调用）。
+
+    兼容旧 API：内部委托给 db.set_sqlite_path。
+    """
     global DB_PATH
     DB_PATH = path
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    init_db()
+    _db.set_sqlite_path(path)
+    _db.set_init_sql(_DDL)
+    _db.init_db()
+
+
+def set_mysql_url(url: str):
+    """切换到 MySQL backend（由 app.py 在启动时按环境变量调用）。"""
+    global DB_PATH
+    DB_PATH = None  # MySQL 模式不用文件路径
+    _db.set_mysql_url(url)
+    _db.set_init_sql(_DDL)
+    _db.init_db()
 
 
 def set_marketplace_dir(path: Path):
@@ -28,14 +44,9 @@ def set_marketplace_dir(path: Path):
     MARKETPLACE_DIR = path
 
 
-def get_db() -> sqlite3.Connection:
-    """获取数据库连接（启用外键 + Row 工厂）。"""
-    if DB_PATH is None:
-        raise RuntimeError("DB_PATH 未设置，请先调用 set_db_path()")
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+def get_db():
+    """获取数据库连接（统一接口，SQLite/MySQL 自适应）。"""
+    return _db.get_db()
 
 
 def now_iso() -> str:
@@ -43,78 +54,98 @@ def now_iso() -> str:
 
 
 def init_db():
-    """初始化数据库表（幂等，已存在则跳过）。"""
-    conn = get_db()
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            username    TEXT NOT NULL UNIQUE,
-            password    TEXT NOT NULL,
-            email       TEXT DEFAULT '',
-            role        TEXT NOT NULL DEFAULT 'member',
-            created_at  TEXT NOT NULL
-        );
+    """初始化数据库表（幂等，已存在则跳过）。
 
-        CREATE TABLE IF NOT EXISTS teams (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            owner_id    INTEGER NOT NULL REFERENCES users(id),
-            created_at  TEXT NOT NULL
-        );
+    委托给 db.init_db(_DDL)。set_db_path / set_mysql_url 会自动调用，
+    通常不需要外部手动调用本函数。
+    """
+    _db.init_db(_DDL)
 
-        CREATE TABLE IF NOT EXISTS team_members (
-            team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            role        TEXT NOT NULL DEFAULT 'member',
-            joined_at   TEXT NOT NULL,
-            PRIMARY KEY (team_id, user_id)
-        );
 
-        CREATE TABLE IF NOT EXISTS plugins (
-            id           TEXT PRIMARY KEY,
-            name         TEXT NOT NULL,
-            version      TEXT NOT NULL DEFAULT '1.0.0',
-            description  TEXT DEFAULT '',
-            author       TEXT DEFAULT '管理员',
-            author_id    INTEGER REFERENCES users(id),
-            file         TEXT NOT NULL,
-            size         INTEGER DEFAULT 0,
-            published_at TEXT NOT NULL,
-            tags         TEXT DEFAULT '[]',
-            downloads    INTEGER DEFAULT 0,
-            likes        INTEGER DEFAULT 0,
-            scope        TEXT DEFAULT 'public',
-            team_id      INTEGER REFERENCES teams(id)
-        );
+# 建表 DDL（MySQL 方言；SQLite 模式由 db.py 自动翻译）
+_DDL = """
+CREATE TABLE IF NOT EXISTS users (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(64) NOT NULL UNIQUE,
+    password    VARCHAR(128) NOT NULL,
+    email       VARCHAR(128) DEFAULT '',
+    role        VARCHAR(16) NOT NULL DEFAULT 'member',
+    created_at  VARCHAR(40) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-        CREATE TABLE IF NOT EXISTS plugin_likes (
-            plugin_id   TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
-            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            created_at  TEXT NOT NULL,
-            PRIMARY KEY (plugin_id, user_id)
-        );
+CREATE TABLE IF NOT EXISTS teams (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    name        VARCHAR(128) NOT NULL,
+    description TEXT,
+    owner_id    INT NOT NULL,
+    created_at  VARCHAR(40) NOT NULL,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-        CREATE TABLE IF NOT EXISTS plugin_favorites (
-            plugin_id   TEXT NOT NULL REFERENCES plugins(id) ON DELETE CASCADE,
-            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            created_at  TEXT NOT NULL,
-            PRIMARY KEY (plugin_id, user_id)
-        );
+CREATE TABLE IF NOT EXISTS team_members (
+    team_id     INT NOT NULL,
+    user_id     INT NOT NULL,
+    role        VARCHAR(16) NOT NULL DEFAULT 'member',
+    joined_at  VARCHAR(40) NOT NULL,
+    PRIMARY KEY (team_id, user_id),
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-        CREATE TABLE IF NOT EXISTS invitations (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            team_id     INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-            inviter_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            invitee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            status      TEXT NOT NULL DEFAULT 'pending',
-            message     TEXT DEFAULT '',
-            created_at  TEXT NOT NULL,
-            responded_at TEXT
-        );
-    """)
-    conn.commit()
-    conn.close()
+CREATE TABLE IF NOT EXISTS plugins (
+    id           VARCHAR(128) PRIMARY KEY,
+    name         VARCHAR(128) NOT NULL,
+    version      VARCHAR(32) NOT NULL DEFAULT '1.0.0',
+    description  TEXT,
+    author       VARCHAR(64) DEFAULT '管理员',
+    author_id    INT DEFAULT NULL,
+    file         VARCHAR(255) NOT NULL,
+    size         INT DEFAULT 0,
+    published_at VARCHAR(40) NOT NULL,
+    tags         TEXT,
+    downloads    INT DEFAULT 0,
+    likes        INT DEFAULT 0,
+    scope        VARCHAR(16) DEFAULT 'public',
+    team_id      INT DEFAULT NULL,
+    INDEX idx_plugins_author (author),
+    INDEX idx_plugins_published (published_at),
+    INDEX idx_plugins_downloads (downloads),
+    FOREIGN KEY (author_id) REFERENCES users(id),
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS plugin_likes (
+    plugin_id   VARCHAR(128) NOT NULL,
+    user_id     INT NOT NULL,
+    created_at  VARCHAR(40) NOT NULL,
+    PRIMARY KEY (plugin_id, user_id),
+    FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS plugin_favorites (
+    plugin_id   VARCHAR(128) NOT NULL,
+    user_id     INT NOT NULL,
+    created_at  VARCHAR(40) NOT NULL,
+    PRIMARY KEY (plugin_id, user_id),
+    FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS invitations (
+    id          INT PRIMARY KEY AUTO_INCREMENT,
+    team_id     INT NOT NULL,
+    inviter_id  INT NOT NULL,
+    invitee_id  INT NOT NULL,
+    status      VARCHAR(16) NOT NULL DEFAULT 'pending',
+    message     TEXT,
+    created_at  VARCHAR(40) NOT NULL,
+    responded_at VARCHAR(40),
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (inviter_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invitee_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
 
 
 def migrate_index_json():
@@ -146,7 +177,7 @@ def migrate_index_json():
         else:
             tags = "[]"
         conn.execute(
-            """INSERT OR IGNORE INTO plugins
+            """INSERT IGNORE INTO plugins
                (id, name, version, description, author, author_id, file, size,
                 published_at, tags, downloads, likes, scope, team_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -324,10 +355,10 @@ def _get_liked_ids(conn, plugin_ids: list[str], user_id: int) -> set[str]:
     """批量查询用户已点赞的插件 ID。"""
     if not plugin_ids:
         return set()
-    placeholders = ",".join("?" * len(plugin_ids))
+    ph, params = _db.in_clause(plugin_ids)
     rows = conn.execute(
-        f"SELECT plugin_id FROM plugin_likes WHERE user_id = ? AND plugin_id IN ({placeholders})",
-        [user_id] + plugin_ids,
+        f"SELECT plugin_id FROM plugin_likes WHERE user_id = ? AND plugin_id IN ({ph})",
+        [user_id] + params,
     ).fetchall()
     return {r["plugin_id"] for r in rows}
 
@@ -336,10 +367,10 @@ def _get_favorited_ids(conn, plugin_ids: list[str], user_id: int) -> set[str]:
     """批量查询用户已收藏的插件 ID。"""
     if not plugin_ids:
         return set()
-    placeholders = ",".join("?" * len(plugin_ids))
+    ph, params = _db.in_clause(plugin_ids)
     rows = conn.execute(
-        f"SELECT plugin_id FROM plugin_favorites WHERE user_id = ? AND plugin_id IN ({placeholders})",
-        [user_id] + plugin_ids,
+        f"SELECT plugin_id FROM plugin_favorites WHERE user_id = ? AND plugin_id IN ({ph})",
+        [user_id] + params,
     ).fetchall()
     return {r["plugin_id"] for r in rows}
 
@@ -376,11 +407,11 @@ def plugin_save(entry: dict):
         """INSERT INTO plugins (id, name, version, description, author, author_id, file, size,
            published_at, tags, downloads, likes, scope, team_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             name=excluded.name, version=excluded.version,
-             description=excluded.description, author=excluded.author,
-             author_id=excluded.author_id, file=excluded.file, size=excluded.size,
-             tags=excluded.tags, scope=excluded.scope, team_id=excluded.team_id""",
+           ON DUPLICATE KEY UPDATE
+             name=VALUES(name), version=VALUES(version),
+             description=VALUES(description), author=VALUES(author),
+             author_id=VALUES(author_id), file=VALUES(file), size=VALUES(size),
+             tags=VALUES(tags), scope=VALUES(scope), team_id=VALUES(team_id)""",
         (
             entry["id"],
             entry.get("name", ""),
@@ -405,13 +436,13 @@ def plugin_save(entry: dict):
 def plugin_delete(plugin_id: str):
     conn = get_db()
     try:
-        conn.execute("BEGIN")
+        # MySQL/SQLite 均在 autocommit=False 下默认开启事务，无需显式 BEGIN
         conn.execute("DELETE FROM plugin_likes WHERE plugin_id = ?", (plugin_id,))
         conn.execute("DELETE FROM plugin_favorites WHERE plugin_id = ?", (plugin_id,))
         conn.execute("DELETE FROM plugins WHERE id = ?", (plugin_id,))
-        conn.execute("COMMIT")
+        conn.commit()
     except Exception:
-        conn.execute("ROLLBACK")
+        conn.rollback()
         raise
     finally:
         conn.close()
@@ -499,8 +530,8 @@ def get_favorited_plugins(user_id: int) -> list[dict]:
     return items
 
 
-def _plugin_row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
+def _plugin_row_to_dict(row) -> dict:
+    d = dict(row) if row else {}
     # tags 从 JSON 字符串转回 list
     try:
         d["tags"] = json.loads(d.get("tags", "[]"))

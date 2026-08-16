@@ -254,16 +254,20 @@ def _search_external_resources(prompt: str) -> dict:
 
 
 def _search_server_marketplace(query: str, limit: int = 8) -> dict:
-    """从服务端 SQLite 市场中搜索可复用插件资源。"""
+    """从服务端市场（SQLite 或 MySQL）中搜索可复用插件资源。
+
+    通过 db.py 抽象层自适应 backend，避免硬编码 sqlite3。
+    """
+    import db as _db
     server_dir = Path(__file__).resolve().parents[1]
     db_path = server_dir / "data" / "agentbuddy.db"
-    if not db_path.exists():
+
+    # MySQL 模式下不走文件存在性检测，直接连接（由 app.py 启动时已初始化）
+    if _db.backend() == "sqlite" and not db_path.exists():
         return {"skills": [], "mcps": []}
 
-    import sqlite3
     pattern = f"%{query}%"
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
+    conn = _db.get_db()
     try:
         rows = conn.execute(
             """SELECT name, description, file, tags
@@ -274,15 +278,16 @@ def _search_server_marketplace(query: str, limit: int = 8) -> dict:
             (pattern, pattern, pattern, limit),
         ).fetchall()
     finally:
-        conn.close()
+        _db.release(conn)
 
     skills = []
     for row in rows:
+        d = _db.row_to_dict(row) or {}
         skills.append({
-            "name": row["name"] or "",
-            "description": (row["description"] or "")[:100],
+            "name": d.get("name") or "",
+            "description": (d.get("description") or "")[:100],
             "source": "server-marketplace",
-            "install": row["file"] or "",
+            "install": d.get("file") or "",
         })
     return {"skills": skills, "mcps": []}
 
