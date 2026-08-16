@@ -37,9 +37,9 @@ PROJECT_ROOT = SERVER_DIR.parent
 CLI_DIR = PROJECT_ROOT / "cli"
 SOURCES_FILE = SERVER_DIR / "config" / "plugin-sources.yaml"
 
-# server 目录 + cli 目录加入 sys.path
+# server 目录用于导入 auth；项目根用于把 cli/ 解析为 agentctl 包。
 sys.path.insert(0, str(SERVER_DIR))
-sys.path.insert(0, str(CLI_DIR))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import yaml
 
