@@ -58,6 +58,7 @@ desktop/frontend/*.tsbuildinfo
 
 # 桌面端 Vite 构建产物（由 build.py 生成）
 desktop/dist-ui/
+desktop/service/
 
 # 桌面端运行时配置（frozen 模式首次运行生成，含真实密钥）
 desktop/config/

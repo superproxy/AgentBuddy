@@ -391,7 +391,8 @@ function copyYaml() {
 
 // ── 自定义生成（会话工作台）──
 const chatInputEl = ref<HTMLElement | null>(null)
-const starterA = ref(false)
+// starterType 三选一：'source' | 'local' | ''（点击切换，互斥展开）
+const starterType = ref<'' | 'source' | 'local'>('')
 const starterSource = ref('')
 const starterSkillFilter = ref('')
 const starterSkills = ref<string[]>([])
@@ -411,7 +412,7 @@ function onEnterChat() {
 }
 
 function focusChatInput() {
-  starterA.value = false
+  starterType.value = ''
   chatInputEl.value?.focus()
 }
 
@@ -445,7 +446,7 @@ function copyChatYaml() {
 function chatStartFromSource() {
   const s = starterSource.value.trim()
   if (!s) { ui.toast('请输入来源地址', 'warn'); return }
-  starterA.value = false
+  starterType.value = ''
   starterSource.value = ''
   chat.startFromSource(s)
 }
@@ -456,7 +457,7 @@ function chatStartFromSkills() {
   const metas = (skill.localSkills || [])
     .filter((x: any) => names.includes(x.skill_name))
     .map((x: any) => ({ name: x.skill_name, description: x.description }))
-  starterA.value = false
+  starterType.value = ''
   starterSkills.value = []
   starterSkillFilter.value = ''
   chat.startFromLocalSkills(names, metas)
@@ -1233,19 +1234,38 @@ onMounted(() => {
           <div class="pb-chat-messages" ref="chatMsgBox">
             <div v-if="!chat.active?.messages.length" class="pb-chat-empty">
               <div class="pb-chat-starters">
-                <button type="button" class="pb-chat-starter" @click="starterA = !starterA">
+                <button
+                  type="button"
+                  class="pb-chat-starter"
+                  :class="{ on: starterType === 'source' }"
+                  @click="starterType = starterType === 'source' ? '' : 'source'"
+                >
                   <span class="pb-chat-starter-icon">📦</span>
-                  <b>基于已有构建</b>
-                  <small>粘贴仓库/URL，或从本地 {{ skill.localSkills.length }} 个 skills 勾选</small>
+                  <b>从来源开始</b>
+                  <small>粘贴 GitHub 仓库或文章 URL，分析后开始</small>
                 </button>
-                <button type="button" class="pb-chat-starter" @click="focusChatInput()">
+                <button
+                  type="button"
+                  class="pb-chat-starter"
+                  :class="{ on: starterType === 'local' }"
+                  @click="starterType = starterType === 'local' ? '' : 'local'"
+                >
+                  <span class="pb-chat-starter-icon">📚</span>
+                  <b>从本地 skills</b>
+                  <small>勾选已安装的 {{ skill.localSkills.length }} 个 skills 直接打包</small>
+                </button>
+                <button
+                  type="button"
+                  class="pb-chat-starter"
+                  @click="focusChatInput()"
+                >
                   <span class="pb-chat-starter-icon">🎯</span>
-                  <b>从目标生成</b>
+                  <b>自由对话</b>
                   <small>描述你要的能力，AI 推导 LLM / MCP / Skill 组合</small>
                 </button>
               </div>
 
-              <div v-if="starterA" class="pb-chat-starter-panel">
+              <div v-if="starterType === 'source'" class="pb-chat-starter-panel">
                 <div class="pb-chat-starter-row">
                   <input
                     v-model="starterSource" type="text" class="pb-url-input"
@@ -1254,7 +1274,9 @@ onMounted(() => {
                   />
                   <button type="button" class="pb-btn pb-btn-primary" @click="chatStartFromSource()">分析并开始</button>
                 </div>
-                <div class="pb-chat-starter-divider">或从本地 skills 勾选</div>
+              </div>
+
+              <div v-if="starterType === 'local'" class="pb-chat-starter-panel">
                 <input v-model="starterSkillFilter" type="text" class="pb-url-input" placeholder="搜索本地 skills…" />
                 <div class="pb-chat-skill-picker">
                   <label v-for="s in starterSkillList" :key="s.skill_name" class="pb-chat-skill-option">
@@ -1271,7 +1293,7 @@ onMounted(() => {
                 >用选中的 {{ starterSkills.length }} 个 skills 开始</button>
               </div>
 
-              <p v-if="!starterA" class="pb-chat-empty-hint">示例：帮我基于 QwenLM/Qwen-MM-Plugins 做个多模态插件，只要 core 和 search</p>
+              <p v-if="!starterType" class="pb-chat-empty-hint">示例：帮我基于 QwenLM/Qwen-MM-Plugins 做个多模态插件，只要 core 和 search</p>
             </div>
             <template v-for="(m, i) in chat.active?.messages || []" :key="i">
               <!-- 本地分析卡片 -->
@@ -2062,9 +2084,10 @@ onMounted(() => {
 .pb-chat-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .pb-chat-messages { flex: 1; min-height: 260px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; border: 1px dashed var(--border-base); border-radius: 10px; }
 .pb-chat-empty { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
-.pb-chat-starters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pb-chat-starters { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .pb-chat-starter { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border: 1px solid var(--border-base); border-radius: 10px; background: var(--color-ink-50, #f8fafc); cursor: pointer; text-align: left; }
 .pb-chat-starter:hover { border-color: var(--brand-500, #6366f1); }
+.pb-chat-starter.on { border-color: var(--brand-500, #6366f1); background: var(--color-ink-100, #eef2ff); }
 .pb-chat-starter-icon { font-size: 20px; }
 .pb-chat-starter b { font-size: 13px; }
 .pb-chat-starter small { color: var(--color-ink-500); font-size: 11.5px; line-height: 1.4; }
