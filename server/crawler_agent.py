@@ -641,18 +641,28 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
     snippet = content[:8000]
     prompt = (
         "你是 skill 抽取专家。从下面的技术文章中识别出可以沉淀为可安装 skill 的知识点。\n\n"
-        "skill 定义：一段可复用的能力描述，包含 name（短小、kebab-case、唯一）、"
-        "description（一句话说明这个 skill 能做什么）、version（默认 1.0.0）。\n\n"
+        "skill 定义：一段可复用的 Prompt 类能力描述（不是 MCP server、不是 CLI 工具、"
+        "不是 API 服务），包含 name（短小、kebab-case、唯一）、"
+        "description（一句话说明这个 skill 能做什么）、version（默认 1.0.0）、"
+        "source（该 skill 对应的开源仓库地址）。\n\n"
         "抽取规则：\n"
+        "0. 类型判断：先判断文章主要讲解的是 skill/Prompt 能力，还是 MCP server/工具/API 服务。\n"
+        "   - 如果是 MCP server、工具服务、API 服务类文章（如\"多模态 RAG\"、\"Jupyter 控制\"、"
+        "\"统一数据访问\"等描述服务能力的），返回空数组，不要把服务当 skill 抽\n"
+        "   - 只抽取作者明确讲解的 Prompt/Rule 类能力（如\"代码审查 prompt\"、"
+        "\"PRD 生成 skill\"、\"commit 规范\"等可复用的工作流能力）\n"
         "1. 只抽取作者明确讲解过、有实操价值的能力（不要凭空推测）\n"
         "2. name 用英文 kebab-case，简洁唯一\n"
         "3. description 用中文，<=120 字\n"
-        "4. 一篇文章通常产出 5 个 skills，没有就返回空数组\n"
-        "5. 不要把整篇文章当成一个 skill，要拆细\n\n"
+        "4. source 字段：解析文章正文中提到的真实仓库地址（github.com/owner/repo 形式），\n"
+        "   必须是文章中明确出现的 URL，不要编造；找不到就返回空字符串\n"
+        "5. 一篇文章通常产出 5 个 skills，没有就返回空数组\n"
+        "6. 不要把整篇文章当成一个 skill，要拆细\n\n"
         f"文章标题：{title}\n"
         f"文章来源：{source_url}\n"
         f"文章正文：\n{snippet}\n\n"
-        '返回 JSON：{"skills": [{"name": "...", "description": "...", "version": "1.0.0"}, ...]}'
+        '返回 JSON：{"skills": [{"name": "...", "description": "...", "version": "1.0.0", '
+        '"source": "github.com/owner/repo 或空字符串"}, ...]}'
     )
     try:
         text = llm_chat([{"role": "user", "content": prompt}], json_mode=True, timeout=90)
@@ -672,11 +682,18 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         if not nm or nm in seen:
             continue
         seen.add(nm)
+        # source 字段：LLM 解析的真实仓库地址；找不到则用文章 URL 兜底
+        src = str(s.get("source", "")).strip()
+        # 规范化：保留 github.com/owner/repo 格式，去掉 https:// 前缀和尾部 /
+        src = re.sub(r"^https?://", "", src).rstrip("/")
+        if not src or "/" not in src:
+            # LLM 没解析出仓库地址，用文章 URL 兜底
+            src = source_url
         skills.append(DiscoveredSkill(
             name=nm,
             description=str(s.get("description", "")).strip()[:500],
             version=str(s.get("version", "1.0.0")).strip() or "1.0.0",
-            source=source_url,
+            source=src,
         ))
     return skills
 
