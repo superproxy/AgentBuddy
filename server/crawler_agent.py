@@ -22,6 +22,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -646,7 +647,7 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         "1. 只抽取作者明确讲解过、有实操价值的能力（不要凭空推测）\n"
         "2. name 用英文 kebab-case，简洁唯一\n"
         "3. description 用中文，<=120 字\n"
-        "4. 一篇文章通常产出 1-5 个 skills，没有就返回空数组\n"
+        "4. 一篇文章通常产出 5 个 skills，没有就返回空数组\n"
         "5. 不要把整篇文章当成一个 skill，要拆细\n\n"
         f"文章标题：{title}\n"
         f"文章来源：{source_url}\n"
@@ -654,10 +655,11 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         '返回 JSON：{"skills": [{"name": "...", "description": "...", "version": "1.0.0"}, ...]}'
     )
     try:
-        text = llm_chat([{"role": "user", "content": prompt}], json_mode=True)
+        text = llm_chat([{"role": "user", "content": prompt}], json_mode=True, timeout=90)
         data = json.loads(text)
         raw_skills = data.get("skills", [])
-    except Exception:
+    except Exception as e:
+        print(f"  [extract] LLM 调用失败：{type(e).__name__}: {e}")
         return []
 
     skills: list[DiscoveredSkill] = []
@@ -878,14 +880,20 @@ def run_task(
     # 4. 跨运行去重
     seen_state = load_seen_urls()
     results: list[CrawlResult] = []
+    min_rating = int(task_cfg.get("min_rating", 40))
+    # tags 字段已从配置移除（由 LLM 抽 skills 时自动生成），保留空列表兼容 write_spec 签名
+    tags: list[str] = list(task_cfg.get("tags", []) or [])
+    # 并发锁：保护 seen_state 写入
+    state_lock = threading.Lock()
 
-    for hit in all_hits:
+    def _process_one(hit: dict) -> CrawlResult:
+        """处理单篇文章：抓正文 → 评级 → 抽 skills → 写 spec。可并发执行。"""
         url = hit["url"]
         title = hit.get("title", "")
 
-        if url in seen_state:
-            results.append(CrawlResult(url=url, title=title, status="skip", reason="seen"))
-            continue
+        with state_lock:
+            if url in seen_state:
+                return CrawlResult(url=url, title=title, status="skip", reason="seen")
 
         # 5. 抓正文（GitHub 仓库已有 content，跳过抓取）
         source = hit.get("source", "")
@@ -907,9 +915,9 @@ def run_task(
                 try:
                     article = fetch_article(url)
                 except Exception as e:
-                    mark_seen(seen_state, url, title=title, status="fetch_error")
-                    results.append(CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}"))
-                    continue
+                    with state_lock:
+                        mark_seen(seen_state, url, title=title, status="fetch_error")
+                    return CrawlResult(url=url, title=title, status="error", reason=f"fetch: {e}")
                 # fetch 失败但有 snippet → 用 snippet 兜底
                 if not article.get("content"):
                     article["content"] = snippet
@@ -917,10 +925,10 @@ def run_task(
         blocked = bool(article.get("blocked"))
         # 风控且无摘要 → 评级 0 分，跳过
         if blocked and not snippet:
-            mark_seen(seen_state, url, title=title, status="blocked_no_snippet")
-            results.append(CrawlResult(url=url, title=title, status="skip",
-                                       reason="blocked & no snippet", rating=0))
-            continue
+            with state_lock:
+                mark_seen(seen_state, url, title=title, status="blocked_no_snippet")
+            return CrawlResult(url=url, title=title, status="skip",
+                               reason="blocked & no snippet", rating=0)
         # 风控但有摘要 → 用摘要兜底
         if blocked and snippet:
             article["title"] = article.get("title") or title
@@ -939,16 +947,15 @@ def run_task(
             has_snippet_fallback=bool(snippet) if blocked else False,
         )
         rating_score = int(rating.get("score", 0))
-        min_rating = int(task_cfg.get("min_rating", 40))
         if rating_score < min_rating:
-            mark_seen(seen_state, url, title=article_title,
-                      status=f"low_rating_{rating_score}")
-            results.append(CrawlResult(
+            with state_lock:
+                mark_seen(seen_state, url, title=article_title,
+                          status=f"low_rating_{rating_score}")
+            return CrawlResult(
                 url=url, title=article_title, status="skip",
                 reason=f"low rating {rating_score} < {min_rating}",
                 rating=rating_score,
-            ))
-            continue
+            )
         print(f"  [rating] {rating_score}/100 "
               f"(len={rating['breakdown']['content_length']} "
               f"code={rating['breakdown']['code_blocks']} "
@@ -960,16 +967,16 @@ def run_task(
         try:
             skills = extract_skills_from_article(article_title, article_content, url)
         except Exception as e:
-            mark_seen(seen_state, url, title=article_title, status="extract_error")
-            results.append(CrawlResult(url=url, title=article_title, status="error",
-                                       reason=f"extract: {e}", rating=rating_score))
-            continue
+            with state_lock:
+                mark_seen(seen_state, url, title=article_title, status="extract_error")
+            return CrawlResult(url=url, title=article_title, status="error",
+                               reason=f"extract: {e}", rating=rating_score)
 
         if not skills:
-            mark_seen(seen_state, url, title=article_title, status="no_skills")
-            results.append(CrawlResult(url=url, title=article_title, status="skip",
-                                       reason="no skills", rating=rating_score))
-            continue
+            with state_lock:
+                mark_seen(seen_state, url, title=article_title, status="no_skills")
+            return CrawlResult(url=url, title=article_title, status="skip",
+                               reason="no skills", rating=rating_score)
 
         # 8. 写 spec.yaml（带 rating，不构建）
         try:
@@ -982,21 +989,38 @@ def run_task(
                 tags=tags,
                 rating=rating,
             )
+            print(f"  [spec OK] {spec_path} skills={[s.name for s in skills]}")
         except Exception as e:
-            mark_seen(seen_state, url, title=article_title, status="spec_error")
-            results.append(CrawlResult(url=url, title=article_title, status="error",
-                                       reason=f"spec: {e}", rating=rating_score))
-            continue
+            print(f"  [spec ERROR] {type(e).__name__}: {e}")
+            with state_lock:
+                mark_seen(seen_state, url, title=article_title, status="spec_error")
+            return CrawlResult(url=url, title=article_title, status="error",
+                               reason=f"spec: {e}", rating=rating_score)
 
-        mark_seen(seen_state, url, title=article_title, status="spec_written")
-        results.append(CrawlResult(
+        with state_lock:
+            mark_seen(seen_state, url, title=article_title, status="spec_written")
+        return CrawlResult(
             url=url,
             title=article_title,
             status="spec",
             spec_path=str(spec_path),
             skills=[s.name for s in skills],
             rating=rating_score,
-        ))
+        )
+
+    # 并发处理文章：评级 + LLM 抽 skills 是主要耗时点，并发可大幅提速。
+    # 默认 10 线程（平衡 LLM 网关并发限制与速度），可经 task_cfg.workers 覆盖。
+    max_workers = max(1, int(task_cfg.get("workers", 10)))
+    print(f"  [concurrency] workers={max_workers}, articles={len(all_hits)}")
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_process_one, h) for h in all_hits]
+        for fut in as_completed(futures):
+            try:
+                results.append(fut.result())
+            except Exception as e:
+                results.append(CrawlResult(url="", title="", status="error",
+                                           reason=f"worker: {e}"))
 
     save_seen_urls(seen_state)
     return results

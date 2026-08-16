@@ -321,7 +321,7 @@ def cmd_run_build_agent(dry_run: bool = False, max_publish: int = 0):
 # ============================================================
 
 # 默认每日发布配额（env AGENTBUDDY_CRAWL_QUOTA 可覆盖）
-DEFAULT_DAILY_QUOTA = 10
+DEFAULT_DAILY_QUOTA = 50
 STATE_FILE = SERVER_DIR / "data" / "crawler-state.json"
 
 
@@ -383,13 +383,8 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
     results = {"spec_written": 0, "published": 0, "skipped": 0, "error": 0,
                "quota": quota, "already_today": already,
                "stopped_reason": "completed"}
-    if remaining <= 0:
-        info("今日配额已满，跳过")
-        results["stopped_reason"] = "quota_reached"
-        state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        state["last_result"] = results
-        save_state(state)
-        return results
+    # 注意：配额已满时仍跑 CrawlerAgent 生成 spec（每日沉淀知识），
+    # 仅跳过 BuildAgent 发布阶段。
 
     # ── 1. CrawlerAgent：搜索 → 抓取 → 评级 → 抽 skills → 写 spec.yaml ──
     try:
@@ -437,6 +432,13 @@ def run_daily(quota: int | None = None, force: bool = False) -> dict:
         return results
 
     # ── 2. BuildAgent：读 spec（按 rating 降序）→ 构建 → 发布（max_publish 限流）──
+    if remaining <= 0:
+        info("今日发布配额已满，跳过 BuildAgent（spec 已照常生成）")
+        results["stopped_reason"] = "quota_reached"
+        state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        state["last_result"] = results
+        save_state(state)
+        return results
     try:
         info(f"[2/2] 启动 BuildAgent（构建 + 发布，max_publish={remaining}）...")
         publish_fn = None

@@ -18,7 +18,7 @@
 #      串联 CrawlerAgent + BuildAgent，发布满 quota 个即停）。env 可调：
 #        AGENTBUDDY_CRAWL_ENABLED=0   关闭
 #        AGENTBUDDY_CRAWL_HOUR=3      执行时刻（0-23）
-#        AGENTBUDDY_CRAWL_QUOTA=10    每日发布配额
+#        AGENTBUDDY_CRAWL_QUOTA=50    每日发布配额
 #   2. crontab（备用）:
 #      # 凌晨 3 点跑 CrawlerAgent（产出 spec）
 #      0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py --crawler-agent >> /var/log/agentbuddy-crawler-agent.log 2>&1
