@@ -3409,6 +3409,37 @@ def plugin_build():
         # 1. 分析来源
         meta = builder.analyze_source(source, ai=ai_mode)
 
+        # 1.5 AI 会话打磨的完整配置覆盖（config_yaml）：
+        #     AI 构建会话里用户多轮修改后的 plugin.yaml 整体传入，
+        #     后端解析后覆盖分析结果的对应字段（skills 按 name 过滤、
+        #     mcpServers/envVars 整体替换），保真 AI 修改且保留源仓库 skill 下载
+        config_yaml = (data.get("config_yaml") or "").strip() if isinstance(data.get("config_yaml"), str) else ""
+        if config_yaml:
+            try:
+                override = yaml.safe_load(config_yaml)
+            except Exception as e:
+                return jsonify({"ok": False, "error": f"config_yaml 解析失败: {e}"}), 400
+            if not isinstance(override, dict):
+                return jsonify({"ok": False, "error": "config_yaml 必须是 plugin.yaml 对象"}), 400
+            if override.get("name"):
+                meta.name = str(override["name"])
+            if override.get("version"):
+                meta.version = str(override["version"])
+            if override.get("description"):
+                meta.description = str(override["description"])
+            if isinstance(override.get("skills"), list):
+                names = []
+                for x in override["skills"]:
+                    n = x.get("name") if isinstance(x, dict) else x
+                    if n:
+                        names.append(str(n))
+                if names:
+                    meta.skills = [s for s in meta.skills if s.name in names]
+            if isinstance(override.get("mcpServers"), dict) and override["mcpServers"]:
+                meta.mcp_servers = override["mcpServers"]
+            if isinstance(override.get("envVars"), dict) and override["envVars"]:
+                meta.env_vars = override["envVars"]
+
         # 2. 参数覆盖（名称/描述统一清洗 + 截断）
         if data.get("name"):
             meta.name = data["name"]

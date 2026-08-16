@@ -9,6 +9,7 @@ import { usePluginStore } from '../stores/plugin'
 import { useAiGenerateStore } from '../stores/aiGenerate'
 import { useKeysStore } from '../stores/keys'
 import { useUiStore } from '../stores/ui'
+import { useBuildChatStore } from '../stores/buildChat'
 
 type CatKey = 'llm' | 'mcp' | 'skill' | 'key' | 'agent' | 'rule' | 'cmd'
 
@@ -20,6 +21,7 @@ const plugin = usePluginStore()
 const ai = useAiGenerateStore()
 const keys = useKeysStore()
 const ui = useUiStore()
+const chat = useBuildChatStore()
 const { dialogOpen, prompt, level, generating, output, generatedConfig } = storeToRefs(ai)
 
 const {
@@ -387,6 +389,79 @@ function copyYaml() {
   })
 }
 
+// ── 自定义生成（会话工作台）──
+const chatInputEl = ref<HTMLElement | null>(null)
+const starterA = ref(false)
+const starterSource = ref('')
+const starterSkillFilter = ref('')
+const starterSkills = ref<string[]>([])
+
+const starterSkillList = computed(() => {
+  const q = starterSkillFilter.value.trim().toLowerCase()
+  const list = skill.localSkills || []
+  if (!q) return list.slice(0, 60)
+  return list.filter((s: any) =>
+    (s.skill_name || '').toLowerCase().includes(q) ||
+    String(s.description || '').toLowerCase().includes(q)).slice(0, 60)
+})
+
+function onEnterChat() {
+  buildMode.value = 'chat'
+  chat.restore()
+}
+
+function focusChatInput() {
+  starterA.value = false
+  chatInputEl.value?.focus()
+}
+
+function formatAnalysis(contentJson: string): string {
+  try {
+    const d = JSON.parse(contentJson)
+    const lines = [
+      `来源: ${d.source}`,
+      d.name ? `名称: ${d.name}` : '',
+      d.version ? `版本: ${d.version}` : '',
+      d.description ? `描述: ${String(d.description).slice(0, 100)}` : '',
+      (d.skills || []).length ? `Skills(${d.skills.length}): ${d.skills.join(', ')}` : '',
+      (d.mcpServers || []).length ? `MCP(${d.mcpServers.length}): ${d.mcpServers.join(', ')}` : '',
+      (d.envVars || []).length ? `环境变量: ${d.envVars.join(', ')}` : '',
+    ].filter(Boolean)
+    return lines.join('\n')
+  } catch {
+    return contentJson
+  }
+}
+
+function copyChatYaml() {
+  if (!chat.activeYaml) return
+  navigator.clipboard.writeText(chat.activeYaml).then(() => {
+    ui.toast('已复制到剪贴板')
+  }).catch(() => {
+    ui.toast('复制失败', 'err')
+  })
+}
+
+function chatStartFromSource() {
+  const s = starterSource.value.trim()
+  if (!s) { ui.toast('请输入来源地址', 'warn'); return }
+  starterA.value = false
+  starterSource.value = ''
+  chat.startFromSource(s)
+}
+
+function chatStartFromSkills() {
+  if (!starterSkills.value.length) return
+  const names = [...starterSkills.value]
+  const metas = (skill.localSkills || [])
+    .filter((x: any) => names.includes(x.skill_name))
+    .map((x: any) => ({ name: x.skill_name, description: x.description }))
+  starterA.value = false
+  starterSkills.value = []
+  starterSkillFilter.value = ''
+  chat.startFromLocalSkills(names, metas)
+}
+
 onMounted(() => {
   loadLocalSkills()
   loadBuildSources()
@@ -451,20 +526,20 @@ onMounted(() => {
         <button
           type="button"
           role="tab"
-          :class="{ on: buildMode === 'ai' }"
-          :aria-selected="buildMode === 'ai'"
-          @click="buildMode = 'ai'"
-        >
-          AI 生成
-        </button>
-        <button
-          type="button"
-          role="tab"
           :class="{ on: buildMode === 'url' }"
           :aria-selected="buildMode === 'url'"
           @click="buildMode = 'url'"
         >
-          🔗 一键构建
+          ⚡ 快速生成
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :class="{ on: buildMode === 'chat' }"
+          :aria-selected="buildMode === 'chat'"
+          @click="onEnterChat"
+        >
+          🤖 自定义生成
         </button>
       </div>
       <div class="pb-chips" aria-live="polite">
@@ -1131,78 +1206,122 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- AI 生成 -->
-    <div v-show="buildMode === 'ai'" class="pb-ai">
-      <div class="pb-ai-hero">
-        <div class="pb-ai-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg>
-        </div>
-        <div>
-          <h3>用自然语言生成插件</h3>
-          <p>描述你想要的智能体能力，LLM 会自动挑选 LLM / MCP / Skill / Subagent 组合并生成 plugin.yaml。</p>
-        </div>
-      </div>
-
-      <div class="pb-ai-form">
-        <label class="pb-ai-label">需求描述</label>
-        <textarea
-          v-model="prompt"
-          :disabled="generating"
-          rows="4"
-          placeholder="例如：一个 Java 后端开发智能体，精通 Spring Boot / MyBatis / MySQL，需要文件系统和搜索能力"
-          class="pb-ai-textarea"
-        />
-
-        <div class="pb-ai-row">
-          <span class="pb-ai-label">工具集级别</span>
-          <div class="pb-ai-seg">
-            <button
-              v-for="lv in ['basic', 'standard', 'expert']"
-              :key="lv"
-              type="button"
-              :disabled="generating"
-              :class="['pb-ai-lv', level === lv ? 'on' : '']"
-              @click="level === lv ? (level = '') : (level = lv)"
+    <!-- AI 构建（会话工作台：多轮对话 + 来源分析 + 实时预览 + 构建/发布） -->
+    <div v-show="buildMode === 'chat'" class="pb-chat">
+      <div class="pb-chat-body">
+        <!-- 会话列表 -->
+        <aside class="pb-chat-sessions">
+          <button type="button" class="pb-btn pb-btn-primary pb-chat-new" @click="chat.newSession()">＋ 新会话</button>
+          <div class="pb-chat-session-list">
+            <div
+              v-for="s in chat.sessions" :key="s.id"
+              class="pb-chat-session-item" :class="{ on: s.id === chat.activeId }"
+              @click="chat.selectSession(s.id)"
             >
-              {{ lv === 'basic' ? '基础' : lv === 'standard' ? '进阶' : '专家' }}
-            </button>
+              <span class="pb-chat-session-title">{{ s.title }}</span>
+              <button
+                type="button" class="pb-chat-session-del"
+                @click.stop="chat.removeSession(s.id)"
+                title="删除会话"
+              >×</button>
+            </div>
           </div>
-          <span class="pb-ai-hint">不选则自动判断</span>
-        </div>
+        </aside>
 
-        <div class="pb-ai-actions">
-          <button
-            type="button"
-            class="pb-btn pb-btn-primary"
-            :disabled="generating || !prompt.trim()"
-            @click="ai.generate()"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            {{ generating ? '生成中…' : '开始生成' }}
-          </button>
-          <span v-if="generating" class="pb-ai-status">LLM 正在生成 plugin.yaml…</span>
-        </div>
+        <!-- 对话区 -->
+        <section class="pb-chat-main">
+          <div class="pb-chat-messages" ref="chatMsgBox">
+            <div v-if="!chat.active?.messages.length" class="pb-chat-empty">
+              <div class="pb-chat-starters">
+                <button type="button" class="pb-chat-starter" @click="starterA = !starterA">
+                  <span class="pb-chat-starter-icon">📦</span>
+                  <b>基于已有构建</b>
+                  <small>粘贴仓库/URL，或从本地 {{ skill.localSkills.length }} 个 skills 勾选</small>
+                </button>
+                <button type="button" class="pb-chat-starter" @click="focusChatInput()">
+                  <span class="pb-chat-starter-icon">🎯</span>
+                  <b>从目标生成</b>
+                  <small>描述你要的能力，AI 推导 LLM / MCP / Skill 组合</small>
+                </button>
+              </div>
+
+              <div v-if="starterA" class="pb-chat-starter-panel">
+                <div class="pb-chat-starter-row">
+                  <input
+                    v-model="starterSource" type="text" class="pb-url-input"
+                    placeholder="GitHub 仓库（owner/repo）或文章 URL"
+                    @keyup.enter="chatStartFromSource()"
+                  />
+                  <button type="button" class="pb-btn pb-btn-primary" @click="chatStartFromSource()">分析并开始</button>
+                </div>
+                <div class="pb-chat-starter-divider">或从本地 skills 勾选</div>
+                <input v-model="starterSkillFilter" type="text" class="pb-url-input" placeholder="搜索本地 skills…" />
+                <div class="pb-chat-skill-picker">
+                  <label v-for="s in starterSkillList" :key="s.skill_name" class="pb-chat-skill-option">
+                    <input type="checkbox" :value="s.skill_name" v-model="starterSkills" />
+                    <span class="pb-chat-skill-name">{{ s.skill_name }}</span>
+                    <span class="pb-chat-skill-desc">{{ (s.description || '').slice(0, 50) }}</span>
+                  </label>
+                  <div v-if="!starterSkillList.length" class="pb-chat-skill-empty">（无匹配的本地 skill）</div>
+                </div>
+                <button
+                  type="button" class="pb-btn pb-btn-success"
+                  :disabled="!starterSkills.length || chat.sending"
+                  @click="chatStartFromSkills()"
+                >用选中的 {{ starterSkills.length }} 个 skills 开始</button>
+              </div>
+
+              <p v-if="!starterA" class="pb-chat-empty-hint">示例：帮我基于 QwenLM/Qwen-MM-Plugins 做个多模态插件，只要 core 和 search</p>
+            </div>
+            <template v-for="(m, i) in chat.active?.messages || []" :key="i">
+              <!-- 本地分析卡片 -->
+              <div v-if="m.role === 'analysis'" class="pb-chat-card">
+                <div class="pb-chat-card-head">📊 来源分析（本地引擎）</div>
+                <pre class="pb-chat-card-body">{{ formatAnalysis(m.content) }}</pre>
+              </div>
+              <!-- 用户 / 助手气泡 -->
+              <div v-else class="pb-chat-msg" :class="m.role">
+                <div class="pb-chat-bubble">
+                  <pre class="pb-chat-text">{{ m.content }}<span v-if="m.streaming" class="pb-chat-cursor">▍</span></pre>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- 输入区 -->
+          <div class="pb-chat-input-row">
+            <textarea
+              ref="chatInputEl"
+              v-model="chat.input"
+              class="pb-chat-input"
+              rows="2"
+              placeholder="描述需求 / 粘贴 GitHub 仓库或 URL / 修改意见（如：去掉 blender，名称改成 qwen-mm）"
+              :disabled="chat.sending"
+              @keydown.enter.exact.prevent="chat.send()"
+            />
+            <button
+              type="button" class="pb-btn pb-btn-primary"
+              :disabled="chat.sending || !chat.input.trim()"
+              @click="chat.send()"
+            >{{ chat.sending ? '生成中…' : '发送' }}</button>
+          </div>
+        </section>
       </div>
 
-      <div v-if="output" class="pb-ai-out">
-        <div class="pb-ai-out-head">
-          <span>生成输出</span>
-          <em v-if="generating">streaming…</em>
-        </div>
-        <pre class="pb-ai-stream">{{ output }}</pre>
-      </div>
-
-      <div v-if="generatedConfig" class="pb-ai-result">
+      <!-- 右侧：生成效果确认（实时 plugin.yaml 预览 + 构建） -->
+      <div class="pb-chat-side">
         <div class="pb-ai-out-head">
           <span>plugin.yaml 预览</span>
-          <em class="ok">✓ 生成完成</em>
+          <em v-if="chat.active?.version">第 {{ chat.active.version }} 版</em>
         </div>
-        <pre class="pb-ai-yaml">{{ generatedConfig }}</pre>
-        <div class="pb-ai-result-actions">
-          <button type="button" class="pb-btn pb-btn-ghost" @click="ai.closeDialog()">丢弃</button>
-          <button type="button" class="pb-btn pb-btn-success" @click="ai.save()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>
-            保存到插件管理
+        <pre class="pb-ai-yaml pb-chat-yaml">{{ chat.activeYaml || '（尚无生成配置，发送第一条消息后此处实时更新）' }}</pre>
+        <div class="pb-chat-side-actions">
+          <button type="button" class="pb-btn pb-btn-ghost" :disabled="!chat.activeYaml" @click="copyChatYaml">复制</button>
+          <button type="button" class="pb-btn pb-btn-success" :disabled="!chat.activeYaml || chat.building" @click="chat.build(false)">
+            {{ chat.building ? '构建中…' : '📦 构建 ZIP' }}
+          </button>
+          <button type="button" class="pb-btn pb-btn-primary" :disabled="!chat.activeYaml || chat.building" @click="chat.build(true)">
+            🚀 构建并发布
           </button>
         </div>
       </div>
@@ -1215,7 +1334,7 @@ onMounted(() => {
           <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/></svg>
         </div>
         <div>
-          <h3>从来源一键构建插件</h3>
+          <h3>快速生成插件</h3>
           <p>输入 GitHub 仓库（owner/repo）、文章 URL 或本地目录路径，自动分析并打包为插件 zip。</p>
         </div>
       </div>
@@ -1927,4 +2046,51 @@ onMounted(() => {
 .pb-url-mode span { font-weight: 600; font-size: 13px; }
 .pb-url-mode small { font-size: 11px; color: var(--color-ink-500); }
 .pb-url-actions { display: flex; gap: 8px; padding-top: 8px; }
+
+/* ── 自定义生成（会话工作台）── */
+.pb-chat { display: flex; gap: 14px; align-items: stretch; }
+.pb-chat-body { flex: 1 1 auto; min-width: 0; display: flex; gap: 10px; }
+.pb-chat-sessions { width: 150px; flex: none; display: flex; flex-direction: column; gap: 6px; }
+.pb-chat-new { width: 100%; }
+.pb-chat-session-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 420px; }
+.pb-chat-session-item { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 12px; border: 1px solid transparent; }
+.pb-chat-session-item:hover { background: var(--color-ink-100, #f1f5f9); }
+.pb-chat-session-item.on { border-color: var(--border-base); background: var(--color-ink-50, #f8fafc); font-weight: 600; }
+.pb-chat-session-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-chat-session-del { border: 0; background: none; color: var(--color-ink-400, #94a3b8); cursor: pointer; font-size: 13px; padding: 0 2px; }
+.pb-chat-session-del:hover { color: #ef4444; }
+.pb-chat-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-chat-messages { flex: 1; min-height: 260px; max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; border: 1px dashed var(--border-base); border-radius: 10px; }
+.pb-chat-empty { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.pb-chat-starters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pb-chat-starter { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border: 1px solid var(--border-base); border-radius: 10px; background: var(--color-ink-50, #f8fafc); cursor: pointer; text-align: left; }
+.pb-chat-starter:hover { border-color: var(--brand-500, #6366f1); }
+.pb-chat-starter-icon { font-size: 20px; }
+.pb-chat-starter b { font-size: 13px; }
+.pb-chat-starter small { color: var(--color-ink-500); font-size: 11.5px; line-height: 1.4; }
+.pb-chat-starter-panel { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border-base); border-radius: 10px; }
+.pb-chat-starter-row { display: flex; gap: 8px; }
+.pb-chat-starter-divider { font-size: 11px; color: var(--color-ink-400); text-align: center; }
+.pb-chat-skill-picker { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--border-base); border-radius: 8px; padding: 6px; }
+.pb-chat-skill-option { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 4px; cursor: pointer; }
+.pb-chat-skill-name { font-weight: 600; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-chat-skill-desc { color: var(--color-ink-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-chat-skill-empty { font-size: 11.5px; color: var(--color-ink-400); padding: 6px; text-align: center; }
+.pb-chat-empty-hint { font-size: 11.5px; color: var(--color-ink-400); text-align: center; margin: 0; }
+.pb-chat-msg { display: flex; }
+.pb-chat-msg.user { justify-content: flex-end; }
+.pb-chat-bubble { max-width: 86%; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.55; }
+.pb-chat-msg.user .pb-chat-bubble { background: var(--brand-500, #6366f1); color: #fff; border-bottom-right-radius: 4px; }
+.pb-chat-msg.assistant .pb-chat-bubble { background: var(--color-ink-100, #f1f5f9); border-bottom-left-radius: 4px; }
+.pb-chat-text { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+.pb-chat-cursor { animation: pb-chat-blink 1s step-start infinite; }
+@keyframes pb-chat-blink { 50% { opacity: 0; } }
+.pb-chat-card { border: 1px solid var(--border-base); border-radius: 10px; overflow: hidden; max-width: 92%; }
+.pb-chat-card-head { padding: 6px 10px; background: var(--color-ink-100, #f1f5f9); font-size: 11.5px; font-weight: 600; }
+.pb-chat-card-body { margin: 0; padding: 8px 10px; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow-y: auto; }
+.pb-chat-input-row { display: flex; gap: 8px; align-items: flex-end; }
+.pb-chat-input { flex: 1; padding: 8px 12px; font-size: 12.5px; border: 1px solid var(--border-base); border-radius: 8px; resize: vertical; font-family: inherit; }
+.pb-chat-side { width: 320px; flex: none; display: flex; flex-direction: column; gap: 8px; }
+.pb-chat-yaml { flex: 1; max-height: 420px; overflow-y: auto; min-height: 200px; }
+.pb-chat-side-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 </style>
