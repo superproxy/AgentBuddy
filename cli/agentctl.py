@@ -469,7 +469,15 @@ def cmd_plugin_build(args):
     """从来源构建插件 zip（analyze → download → generate → package → 可选 publish）。"""
     from agentctl.lib import plugin_builder as pb
 
-    builder = pb.PluginBuilder(PROJECT_ROOT)
+    # AI 分析模式需要 server_url；从已保存的市场认证读取（未登录时为 None，AI 降级简单分析）
+    server_url = None
+    try:
+        from agentctl.lib import market_auth
+        server_url = market_auth.get_server_url()
+    except Exception:
+        pass
+
+    builder = pb.PluginBuilder(PROJECT_ROOT, server_url=server_url)
 
     # 1. 分析来源
     header(f"Building plugin from: {args.source}")

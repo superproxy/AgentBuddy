@@ -104,8 +104,11 @@ class PluginBuilder:
         Path("template/skills"),
     ]
 
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, server_url: str | None = None):
         self.project_root = project_root
+        # 可选：AI 分析模式调用 server 端 /api/ai/generate（SSE）。
+        # 未配置时 _analyze_url_with_ai 降级到简单分析，避免反向依赖 server 包。
+        self.server_url = (server_url or "").strip().rstrip("/") or None
 
     # ----------------------------------------------------------
     # 1. 分析来源
@@ -306,17 +309,62 @@ class PluginBuilder:
         return meta
 
     def _analyze_url_with_ai(self, url: str) -> PluginMeta:
-        """AI 模式：抓取 URL 内容后用 AI 分析。"""
+        """AI 模式：抓取 URL 内容后用 AI 分析。
+
+        通过 HTTP 调用 server 端 /api/ai/generate（SSE），不再直接 import server 包。
+        未配置 server_url 或调用失败时，降级到简单分析结果。
+        """
         meta = self._analyze_url_simple(url)
 
-        # 尝试调用 AI 生成器（如果可用）
+        if not self.server_url:
+            hint("未配置 server_url，AI 分析不可用，使用简单分析结果")
+            return meta
+
+        import requests
+
+        prompt = f"分析以下网页内容，生成一个插件配置。URL: {url}\n\n内容摘要: {meta.description[:1000]}"
         try:
-            from server.ai_generator.generator import generate_plugin
-            prompt = f"分析以下网页内容，生成一个插件配置。URL: {url}\n\n内容摘要: {meta.description[:1000]}"
-            for chunk in generate_plugin(prompt, self.project_root):
-                pass  # 流式获取，最后一个 chunk 含 YAML
-        except ImportError:
-            hint("AI 生成器不可用，使用简单分析结果")
+            # SSE 流式获取，最后一个 data 行含生成的 YAML
+            resp = requests.get(
+                f"{self.server_url}/api/ai/generate",
+                params={"prompt": prompt},
+                stream=True,
+                timeout=120,
+                headers={"Accept": "text/event-stream"},
+            )
+            if resp.status_code != 200:
+                warn(f"AI 分析 HTTP {resp.status_code}，使用简单分析结果")
+                return meta
+
+            last_data = ""
+            for line in resp.iter_lines(decode_unicode=True):
+                if line and line.startswith("data: "):
+                    last_data = line[6:]
+            # 尝试从最后一个 data 行解析 YAML 并回填 meta
+            if last_data and not last_data.startswith("[ERROR]"):
+                yaml_text = _extract_yaml_from_text(last_data)
+                if yaml_text:
+                    parsed = yaml.safe_load(yaml_text)
+                    if isinstance(parsed, dict):
+                        if parsed.get("name"):
+                            meta.name = sanitize_name(str(parsed["name"]))
+                        if parsed.get("description"):
+                            meta.description = truncate_description(str(parsed["description"]))
+                        if parsed.get("skills"):
+                            meta.skills = [
+                                SkillInfo(
+                                    name=sanitize_name(str(s.get("name", ""))),
+                                    description=str(s.get("description", ""))[:500],
+                                )
+                                for s in parsed["skills"]
+                                if isinstance(s, dict) and s.get("name")
+                            ]
+                        if parsed.get("mcp_servers"):
+                            meta.mcp_servers = parsed["mcp_servers"]
+                        if parsed.get("env_vars"):
+                            meta.env_vars = parsed["env_vars"]
+        except requests.RequestException as e:
+            warn(f"AI 分析请求失败: {e}，使用简单分析结果")
         except Exception as e:
             warn(f"AI 分析失败: {e}，使用简单分析结果")
 
@@ -785,6 +833,31 @@ def _slugify(s: str) -> str:
     s = re.sub(r"[^a-z0-9-]", "", s)
     s = re.sub(r"-+", "-", s).strip("-")
     return s or "plugin"
+
+
+def _extract_yaml_from_text(text: str) -> str:
+    """从 LLM 输出文本中提取 YAML 配置。
+
+    与 server/ai_generator/generator.py 的 _extract_yaml 保持一致行为。
+    """
+    # 1. 优先提取 ```yaml ... ``` 代码块
+    match = re.search(r'```ya?ml?\n([\s\S]*?)```', text)
+    if match:
+        return match.group(1).strip()
+    # 2. 找 name: 开头的 YAML
+    lines = text.split("\n")
+    filtered = [l for l in lines if not l.startswith("[") and not l.startswith("#")]
+    for i, line in enumerate(filtered):
+        if line.strip().startswith("name:"):
+            end = len(filtered)
+            for j in range(i + 1, len(filtered)):
+                trimmed = filtered[j].strip()
+                if trimmed and not filtered[j].startswith(" ") and not filtered[j].startswith("\t") and not filtered[j].startswith("-"):
+                    if not re.match(r'^[a-zA-Z_]+:', trimmed):
+                        end = j
+                        break
+            return "\n".join(filtered[i:end]).strip()
+    return ""
 
 
 # ============================================================

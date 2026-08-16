@@ -3345,7 +3345,15 @@ def plugin_analyze():
         from agentctl.lib.plugin_builder import (
             PluginBuilder, sanitize_name, truncate_description,
         )
-        builder = PluginBuilder(PROJECT_ROOT)
+        # AI 模式需要 server_url 调用 server 端 /api/ai/generate
+        server_url = None
+        if ai_mode:
+            try:
+                from agentctl.lib import auth as market_auth
+                server_url = (data.get("server_url") or "").strip() or market_auth.get_server_url()
+            except Exception:
+                pass
+        builder = PluginBuilder(PROJECT_ROOT, server_url=server_url)
         meta = builder.analyze_source(source, ai=ai_mode)
 
         result = {
@@ -3418,7 +3426,15 @@ def plugin_build():
         from agentctl.lib.plugin_builder import (
             PluginBuilder, sanitize_name, truncate_description,
         )
-        builder = PluginBuilder(PROJECT_ROOT)
+        # AI 模式需要 server_url 调用 server 端 /api/ai/generate
+        server_url = None
+        if ai_mode:
+            try:
+                from agentctl.lib import auth as market_auth
+                server_url = (data.get("server_url") or "").strip() or market_auth.get_server_url()
+            except Exception:
+                pass
+        builder = PluginBuilder(PROJECT_ROOT, server_url=server_url)
 
         # 1. 分析来源
         meta = builder.analyze_source(source, ai=ai_mode)
