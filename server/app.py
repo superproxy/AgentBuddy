@@ -137,7 +137,7 @@ def create_app() -> Flask:
     @require_auth
     def crawler_status():
         """捞取调度状态：今日进度 + 源列表 + 上次运行结果。"""
-        import crawler as crawler_mod
+        import PluginMarketWorker as crawler_mod
         import yaml as _yaml
         from pathlib import Path as _P
         sources_file = _P(__file__).resolve().parent / "config" / "plugin-sources.yaml"
@@ -169,7 +169,7 @@ def create_app() -> Flask:
         if (_g.current_user or {}).get("role") != "admin":
             return jsonify({"ok": False, "error": "仅管理员可手动触发捞取"}), 403
         body = _req.get_json(silent=True) or {}
-        import crawler as crawler_mod
+        import PluginMarketWorker as crawler_mod
         quota = body.get("quota")
         force = bool(body.get("force", False))
         result = crawler_mod.run_daily(
@@ -182,7 +182,7 @@ def create_app() -> Flask:
         """内置每日调度线程：到点执行 run_daily（状态文件保证重启不重复）。"""
         import threading
         import time as _time
-        import crawler as crawler_mod
+        import PluginMarketWorker as crawler_mod
 
         def _loop():
             hour = int(os.environ.get("AGENTBUDDY_CRAWL_HOUR", "3"))

@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import crawler  # noqa: E402
+import PluginMarketWorker as crawler  # noqa: E402
 from plugin_build import (  # noqa: E402
     PluginMeta,
     SkillInfo,

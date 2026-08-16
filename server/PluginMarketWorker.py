@@ -4,15 +4,22 @@
 独立运行，不依赖 Flask 进程。用系统 crontab 调度：
 
     # 每天凌晨 3 点执行
-    0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py >> /var/log/agentbuddy-crawler.log 2>&1
+    0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py >> /var/log/agentbuddy-crawler.log 2>&1
 
     # 手动触发
-    python crawler.py                       # 执行所有启用的源
-    python crawler.py --source qwen-mm       # 只执行指定源
-    python crawler.py --dry-run              # 只分析+构建，不发布
-    python crawler.py --list                 # 列出所有源及状态
-    python crawler.py --add <url>            # 添加新源
-    python crawler.py --remove <name>        # 移除源
+    python PluginMarketWorker.py                       # 执行所有启用的源（已知 URL 抓取）
+    python PluginMarketWorker.py --source qwen-mm       # 只执行指定源
+    python PluginMarketWorker.py --dry-run              # 只分析+构建，不发布
+    python PluginMarketWorker.py --list                 # 列出所有源及状态
+    python PluginMarketWorker.py --add <url>            # 添加新源
+    python PluginMarketWorker.py --remove <name>        # 移除源
+
+    # CrawlerAgent（搜索智能体）+ BuildAgent（构建智能体）双智能体架构
+    python PluginMarketWorker.py --crawler-agent            # 跑全部 CrawlerAgent 任务（产出 spec.yaml）
+    python PluginMarketWorker.py --crawler-agent <name>     # 跑指定任务
+    python PluginMarketWorker.py --build-agent              # 读 spec 构建 + 发布
+    python PluginMarketWorker.py --build-agent --dry-run    # 读 spec 只构建不发布
+    python PluginMarketWorker.py --list-discovery           # 列出 CrawlerAgent 任务
 
 读取 config/plugin-sources.yaml 中的源列表，逐个：
   1. 去重检查（已发布的同名同版本跳过）
@@ -155,7 +162,7 @@ MIN_QUALITY_SCORE = 30  # 最低质量分（满分 100）
 # ============================================================
 
 def load_sources() -> list[dict]:
-    """从 config/plugin-sources.yaml 加载源列表。"""
+    """从 config/plugin-sources.yaml 加载源列表（已知 URL 源）。"""
     if not SOURCES_FILE.exists():
         return []
     with open(SOURCES_FILE, "r", encoding="utf-8") as f:
@@ -163,13 +170,34 @@ def load_sources() -> list[dict]:
     return data.get("sources", [])
 
 
+def load_discovery_tasks() -> list[dict]:
+    """从 config/plugin-sources.yaml 加载 discovery 任务列表（搜索发现源）。
+
+    discovery 与 sources 并列：sources 是已知 URL 抓取，discovery 是 Tavily 搜索发现。
+    """
+    if not SOURCES_FILE.exists():
+        return []
+    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return data.get("discovery", []) or []
+
+
 def save_sources(sources: list[dict]) -> None:
     SOURCES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    # 保留已有的 discovery 段
+    existing_discovery: list[dict] = []
+    if SOURCES_FILE.exists():
+        try:
+            with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+                existing = yaml.safe_load(f) or {}
+            existing_discovery = list(existing.get("discovery", []) or [])
+        except Exception:
+            pass
+    payload: dict = {"sources": sources}
+    if existing_discovery:
+        payload["discovery"] = existing_discovery
     with open(SOURCES_FILE, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"sources": sources}, f,
-            allow_unicode=True, default_flow_style=False, sort_keys=False,
-        )
+        yaml.dump(payload, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
 
 # ============================================================
@@ -435,6 +463,133 @@ def _plugin_config_for_meta(meta) -> dict:
 
 
 # ============================================================
+# CrawlerAgent + BuildAgent（双智能体架构，独立应用）
+# ============================================================
+#
+# CrawlerAgent（server/crawler_agent.py）：topic + 固定 channels → Tavily 搜索
+#                                        → 抓正文 → LLM 抽 skills → 写 spec.yaml
+# BuildAgent  （server/build_agent.py）  ：读 spec.yaml → build_plugin 打 zip → publish_local 发布
+#
+# 两个智能体串联使用，独立 cron 调度：
+#   python PluginMarketWorker.py --crawler-agent            # 跑全部 CrawlerAgent 任务（产出 spec）
+#   python PluginMarketWorker.py --crawler-agent <name>     # 跑指定任务
+#   python PluginMarketWorker.py --build-agent              # 读 spec 构建 + 发布
+#   python PluginMarketWorker.py --build-agent --dry-run    # 读 spec 只构建不发布
+#   python PluginMarketWorker.py --list-discovery           # 列出 CrawlerAgent 任务
+#
+# 环境变量（独立应用，不读 config/llm/llm.yaml 与 config/mcp/mcp.yaml）：
+#   OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL / TAVILY_API_KEY
+
+
+def load_channels() -> list[dict]:
+    """从 plugin-sources.yaml 加载固定渠道池。"""
+    if not SOURCES_FILE.exists():
+        return []
+    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return list(data.get("channels", []) or [])
+
+
+def cmd_run_crawler_agent(task_name: str | None = None):
+    """执行 CrawlerAgent 任务：搜索 → 抓取 → 抽 skills → 写 spec.yaml（不构建不发布）。"""
+    from crawler_agent import run_task, require_env
+
+    # 启动检查：缺失环境变量直接退出
+    require_env()
+
+    tasks = load_discovery_tasks()
+    if not tasks:
+        warn("无 CrawlerAgent 任务配置。在 plugin-sources.yaml 增加 discovery 段。")
+        return
+
+    if task_name:
+        tasks = [t for t in tasks if task_name.lower() in t.get("name", "").lower()]
+        if not tasks:
+            warn(f"未匹配到 CrawlerAgent 任务: {task_name}")
+            return
+
+    channels = load_channels()
+    if not channels:
+        warn("plugin-sources.yaml 未配置 channels 池，CrawlerAgent 无法运行。")
+        return
+
+    header(f"CrawlerAgent Run (tasks={sum(1 for t in tasks if t.get('enabled', True))})")
+    spec_count = 0
+    skip_count = 0
+    err_count = 0
+    for task in tasks:
+        if not task.get("enabled", True):
+            continue
+        name = str(task.get("name", "")).strip()
+        header(f"CrawlerAgent: {name}")
+        info(f"  Topic: {task.get('topic', name)}")
+        try:
+            results = run_task(task, channels)
+        except Exception as e:
+            error(f"  CrawlerAgent 异常: {name}: {e}")
+            err_count += 1
+            time.sleep(5)
+            continue
+
+        for r in results:
+            if r.status == "spec":
+                info(f"  [SPEC] {r.title[:60]} skills={r.skills}")
+                spec_count += 1
+            elif r.status == "skip":
+                print(f"  {COLOR_DARKGRAY}[SKIP] {r.title[:60]}: {r.reason}{COLOR_RESET}")
+                skip_count += 1
+            elif r.status == "error":
+                error(f"  [ERR]  {r.title[:60]}: {r.reason}")
+                err_count += 1
+
+        time.sleep(5)
+
+    header("CrawlerAgent Summary")
+    info(f"  Specs written: {spec_count}")
+    print(f"  {COLOR_DARKGRAY}Skipped: {skip_count}{COLOR_RESET}")
+    if err_count:
+        error(f"  Errors: {err_count}")
+    if spec_count:
+        hint(f"  下一步：python PluginMarketWorker.py --build-agent  （读 spec 构建并发布）")
+
+
+def cmd_run_build_agent(dry_run: bool = False):
+    """执行 BuildAgent：读 spec.yaml → build_plugin → 发布。"""
+    from build_agent import run as build_run
+
+    header(f"BuildAgent Run ({'dry-run' if dry_run else 'live'})")
+
+    publish_fn = None
+    already_published_fn = None
+    if not dry_run:
+        try:
+            require_server_direct_mode()
+        except Exception as e:
+            error(f"  服务端直连模式不可用，仅构建不发布: {e}")
+            dry_run = True
+        else:
+            publish_fn = publish_local
+            already_published_fn = already_published_local
+
+    results = build_run(
+        dry_run=dry_run,
+        publish_fn=publish_fn,
+        already_published_fn=already_published_fn,
+    )
+
+    built = sum(1 for r in results if r.status == "built")
+    published = sum(1 for r in results if r.status == "published")
+    skipped = sum(1 for r in results if r.status == "skipped")
+    errors = sum(1 for r in results if r.status == "error")
+    header("BuildAgent Summary")
+    info(f"  Published: {published}")
+    print(f"  {COLOR_DARKGRAY}Built (not published): {built}{COLOR_RESET}")
+    print(f"  {COLOR_DARKGRAY}Skipped: {skipped}{COLOR_RESET}")
+    if errors:
+        error(f"  Errors: {errors}")
+
+
+# ============================================================
 # 每日配额调度（服务端内置定时捞取）
 # ============================================================
 
@@ -561,17 +716,78 @@ def _accumulate_crawl_result(results: dict, result: dict) -> None:
 
 def cmd_list():
     sources = load_sources()
-    if not sources:
-        warn("无源配置。使用 --add <url> 添加源。")
+    discovery_tasks = load_discovery_tasks()
+    if not sources and not discovery_tasks:
+        warn("无源配置。使用 --add <url> 添加源，或在 plugin-sources.yaml 配置 discovery 段。")
         return
-    header("插件抓取源列表")
-    for i, s in enumerate(sources):
-        status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if s.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
-        schedule = s.get("schedule", "daily")
-        print(f"  {i+1}. {status} {s.get('name', '?')} ({schedule})")
-        print(f"     URL: {s.get('url', '-')}")
-        print(f"     Tags: {', '.join(s.get('tags', [])) or '-'}")
-        print()
+
+    if sources:
+        header("插件抓取源列表（已知 URL）")
+        for i, s in enumerate(sources):
+            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if s.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
+            schedule = s.get("schedule", "daily")
+            print(f"  {i+1}. {status} {s.get('name', '?')} ({schedule})")
+            print(f"     URL: {s.get('url', '-')}")
+            print(f"     Tags: {', '.join(s.get('tags', [])) or '-'}")
+            print()
+
+    if discovery_tasks:
+        header("CrawlerAgent 任务列表（搜索发现：Tavily + LLM）")
+        channels = load_channels()
+        ch_map = {str(c.get("id", "")).lower(): c for c in channels}
+        for i, d in enumerate(discovery_tasks):
+            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if d.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
+            schedule = d.get("schedule", "daily")
+            print(f"  {i+1}. {status} {d.get('name', '?')} ({schedule})")
+            print(f"     Topic: {d.get('topic', '-')}")
+            task_ch_ids = d.get("channels") or []
+            if task_ch_ids:
+                domains = [ch_map[str(cid).lower()].get("domain", "?")
+                           for cid in task_ch_ids if str(cid).lower() in ch_map]
+                ch_text = ", ".join(domains) if domains else "(无匹配渠道)"
+            else:
+                ch_text = "(全部渠道)"
+            print(f"     Channels: {ch_text}")
+            print(f"     Tags: {', '.join(d.get('tags', [])) or '-'}")
+            print()
+
+
+def cmd_list_discovery():
+    """列出 CrawlerAgent 任务（基于固定 channels 池 + topic 配置）。"""
+    channels = load_channels()
+    discovery_tasks = load_discovery_tasks()
+    if not channels and not discovery_tasks:
+        warn("无 channels/discovery 配置。在 plugin-sources.yaml 增加 channels 池与 discovery 段。")
+        return
+
+    if channels:
+        header("固定渠道池（channels）")
+        for c in channels:
+            print(f"  - {c.get('id', '?'):12s} {c.get('domain', '-'):24s} {c.get('name', '')}")
+
+    if discovery_tasks:
+        header("CrawlerAgent 任务列表（搜索发现：Tavily + LLM）")
+        # 构造 id → domain 映射，用于解析每个任务的 channels 引用
+        ch_map = {str(c.get("id", "")).lower(): c for c in channels}
+        for i, d in enumerate(discovery_tasks):
+            status = f"{COLOR_GREEN}[enabled]{COLOR_RESET}" if d.get("enabled", True) else f"{COLOR_DARKGRAY}[disabled]{COLOR_RESET}"
+            schedule = d.get("schedule", "daily")
+            print(f"  {i+1}. {status} {d.get('name', '?')} ({schedule})")
+            print(f"     Topic: {d.get('topic', '-')}")
+            # 解析 channels 引用 → domain 列表
+            task_ch_ids = d.get("channels") or []
+            if task_ch_ids:
+                domains = [ch_map[str(cid).lower()].get("domain", "?")
+                           for cid in task_ch_ids if str(cid).lower() in ch_map]
+                ch_text = ", ".join(domains) if domains else "(无匹配渠道)"
+            else:
+                ch_text = "(全部渠道)"
+            auto = "是" if d.get("auto_discover_topics", False) else "否"
+            print(f"     Channels: {ch_text}")
+            print(f"     Auto-discover topics: {auto}" +
+                  (f" (max={d.get('max_topics', 5)})" if d.get("auto_discover_topics", False) else ""))
+            print(f"     Tags: {', '.join(d.get('tags', [])) or '-'}")
+            print()
 
 
 def cmd_add(url: str, name: str = None, tags: str = None):
@@ -658,13 +874,26 @@ def main():
     parser.add_argument("--remove", metavar="NAME",
                         help="移除源")
     parser.add_argument("--daily", action="store_true",
-                        help="每日定时模式：按配额发布（env AGENTBUDDY_CRAWL_QUOTA，默认 10）")
+                        help="每日定时模式（仅 sources）：按配额发布（env AGENTBUDDY_CRAWL_QUOTA，默认 10）")
     parser.add_argument("--quota", type=int, default=None,
                         help="本次配额（--daily 时生效）")
     parser.add_argument("--force", action="store_true",
                         help="忽略今日已发布计数（--daily 时生效）")
+    parser.add_argument("--crawler-agent", default=None, const="__all__", nargs="?", metavar="NAME",
+                        help="执行 CrawlerAgent 任务（搜索智能体）：topic + 固定 channels → Tavily 搜索 → "
+                             "抓正文 → LLM 抽 skills → 写 spec.yaml（不构建不发布）。"
+                             "不传 NAME 执行全部；传 NAME 模糊匹配任务名。"
+                             "环境变量：OPENAI_API_KEY / TAVILY_API_KEY 必填")
+    parser.add_argument("--build-agent", action="store_true",
+                        help="执行 BuildAgent（构建智能体）：读 spec.yaml → build_plugin → 发布。"
+                             "可配合 --dry-run 只构建不发布")
+    parser.add_argument("--list-discovery", action="store_true",
+                        help="列出所有 CrawlerAgent 任务及状态（基于固定 channels 池 + topic）")
     args = parser.parse_args()
 
+    if args.list_discovery:
+        cmd_list_discovery()
+        return
     if args.list:
         cmd_list()
         return
@@ -676,6 +905,13 @@ def main():
         return
     if args.daily:
         run_daily(quota=args.quota, force=args.force)
+        return
+    if args.crawler_agent is not None:
+        task_name = None if args.crawler_agent == "__all__" else args.crawler_agent
+        cmd_run_crawler_agent(task_name=task_name)
+        return
+    if args.build_agent:
+        cmd_run_build_agent(dry_run=args.dry_run)
         return
     cmd_run(source_name=args.source, dry_run=args.dry_run)
 

@@ -29,7 +29,7 @@
    ┌────┴────┐     ┌─────┴─────┐      ┌──────┴──────┐
    │ 场景一   │     │  场景二    │      │   场景三    │
    │ CLI     │     │  UI 界面   │      │  定时任务   │
-   │ agentctl│     │  PluginBuildView │  crawler.py │
+   │ agentctl│     │  PluginBuildView │ PluginMarketWorker.py │
    └─────────┘     └───────────┘      └─────────────┘
 ```
 
@@ -39,7 +39,7 @@
 |------|--------|---------|-----------|-----------|
 | **A. UI 一键构建并发布** | `buildFromSource(true)` | `POST /api/plugin/build` 后端构建 | 后端 `PluginBuilder.publish()` 直接 HTTP POST | 请求头 `Authorization`（浏览器 localStorage） |
 | **B. UI 已有发布** | `marketplace.publish()` | `GET /api/plugin/export` 导出 zip | 浏览器 `fetch(serverApi('/api/marketplace/publish'))` | 浏览器 localStorage `getAuthToken()` |
-| **C. CLI / Crawler** | `agentctl plugin build --publish` / `crawler.py` | `PluginBuilder.package()` | `PluginBuilder.publish()` 直接 HTTP POST | `~/.agentbuddy/auth.json`（CLI auth 模块） |
+| **C. CLI / Crawler** | `agentctl plugin build --publish` / `PluginMarketWorker.py` | `PluginBuilder.package()` | `PluginBuilder.publish()` 直接 HTTP POST | `~/.agentbuddy/auth.json`（CLI auth 模块） |
 
 ---
 
@@ -224,7 +224,7 @@ agentctl plugin publish ./qwen-mm-plugins-plugin.zip \
 
 ## 场景三：定时任务（Crawler）
 
-独立 worker 脚本 `server/crawler.py`，用系统 crontab 调度，不依赖 Flask 进程。
+独立 worker 脚本 `server/PluginMarketWorker.py`，用系统 crontab 调度，不依赖 Flask 进程。
 
 ### 工作流
 
@@ -246,29 +246,29 @@ agentctl plugin publish ./qwen-mm-plugins-plugin.zip \
 cd server
 
 # 执行所有启用的源
-python crawler.py
+python PluginMarketWorker.py
 
 # 只执行指定源（名称模糊匹配）
-python crawler.py --source qwen-mm
+python PluginMarketWorker.py --source qwen-mm
 
 # 只分析+构建，不发布
-python crawler.py --dry-run
+python PluginMarketWorker.py --dry-run
 
 # 列出所有源及状态
-python crawler.py --list
+python PluginMarketWorker.py --list
 
 # 添加新源
-python crawler.py --add https://github.com/owner/repo --add-name my-plugin --add-tags ai,mcp
+python PluginMarketWorker.py --add https://github.com/owner/repo --add-name my-plugin --add-tags ai,mcp
 
 # 移除源
-python crawler.py --remove my-plugin
+python PluginMarketWorker.py --remove my-plugin
 ```
 
 ### crontab 配置
 
 ```bash
 # 每天凌晨 3 点执行
-0 3 * * * cd /path/to/AgentBuddy/server && python crawler.py >> /var/log/agentbuddy-crawler.log 2>&1
+0 3 * * * cd /path/to/AgentBuddy/server && python PluginMarketWorker.py >> /var/log/agentbuddy-crawler.log 2>&1
 ```
 
 ### 环境变量
@@ -425,6 +425,6 @@ GitHub 分析支持 `GITHUB_TOKEN` 环境变量提高 API 速率限制。
 | `desktop/config_server.py` | `/api/plugin/analyze`、`/api/plugin/build` 路由 + `_extract_bearer_token` |
 | `desktop/frontend/src/stores/pluginBuild.ts` | `analyzeSource()`、`buildFromSource()` 前端状态和方法 |
 | `desktop/frontend/src/views/PluginBuildView.vue` | 「🔗 一键构建」标签页 UI |
-| `server/crawler.py` | 独立 worker 脚本（cron 调度） |
+| `server/PluginMarketWorker.py` | 独立 worker 脚本（cron 调度） |
 | `server/config/plugin-sources.yaml` | 抓取源配置 |
 | `template/plugins/plugin.schema.yaml` | 插件 YAML Schema 定义 |

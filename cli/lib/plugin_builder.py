@@ -2,7 +2,7 @@
 
 场景一: agentctl plugin build/publish (命令行)
 场景二: 桌面端 /api/plugin/analyze + 一键构建 UI
-场景三: server/crawler.py 定时抓取 worker
+场景三: server/PluginMarketWorker.py 定时抓取 worker
 
 核心流程: analyze_source → download_skills → generate_yaml → package → publish
 """
