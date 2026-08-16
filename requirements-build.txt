@@ -1,6 +1,7 @@
 # 构建期依赖（打包与自动测试）
 pyinstaller>=6.0
 pytest>=8.0
+bcrypt>=4.0.0  # 测试引入 server/auth（crawler 直连模式测试），非打包依赖
 
 # 运行时依赖（会被打包进产物）
 flask>=3.0
