@@ -23,6 +23,18 @@
 #     crawler 会扫描这些仓库并聚合发现的 skills。
 #     skills 为可选白名单；配置时必须使用 SKILL.md frontmatter 里的权威全名
 #     （如 qwen-mm-plugins-core，不是 core），否则过滤会落空。
+#
+# LLM 兜底（文章/URL 抓不到真实 SKILL.md 时用 AI 生成候选 skills）：
+#   - ai: true 开启 LLM 分析；需要在同一 source 下配置 llm 直配项。
+#   - llm 配置直接写 OpenAI-compatible 的 base_url / api_key / model，
+#     crawler 不会去读 config/llm/llm.yaml，只认这里写的值。
+#     llm:
+#       base_url: https://api.example.com/v1
+#       api_key: sk-xxxxxxxx
+#       model: gpt-4o-mini
+#   - 微信公众号文章建议加 ai: true，因为公众号正文常被风控拦截，
+#     只有标题/摘要能稳定抓到，需要 LLM 按摘要推断候选 skills。
+#
 # 发布：crawler 必须与 app.py 同机部署，自动走"服务端直连"（免登录直写库和
 #     packages/，首跑自动创建 crawler 服务账号）。
 
@@ -59,3 +71,15 @@ sources:
   #   type: rss
   #   enabled: false
   #   schedule: weekly
+
+  # 示例：微信公众号文章源（正文常被风控拦截，用 LLM 按摘要生成候选 skills）
+  # - name: codex-game-top10
+  #   url: https://mp.weixin.qq.com/s/PqkrlotuYwjApDn3VZ5DZw
+  #   ai: true
+  #   llm:
+  #     base_url: https://api.openai.com/v1
+  #     api_key: sk-xxxxxxxx
+  #     model: gpt-4o-mini
+  #   tags: [codex, game, skills]
+  #   enabled: false
+  #   schedule: daily

@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import html
 import io
 import re
 import zipfile
@@ -140,7 +141,12 @@ def meta_from_config(data: dict, source_type: str = "", source_url: str = "") ->
     return meta
 
 
-def analyze_source(project_root: Path, source: str, ai: bool = False) -> PluginMeta:
+def analyze_source(
+    project_root: Path,
+    source: str,
+    ai: bool = False,
+    llm_config: dict[str, Any] | None = None,
+) -> PluginMeta:
     source = (source or "").strip()
     if not source:
         raise ValueError("来源不能为空")
@@ -150,7 +156,7 @@ def analyze_source(project_root: Path, source: str, ai: bool = False) -> PluginM
         base_meta = analyze_url_simple(source)
     else:
         raise ValueError("服务端只支持 GitHub 仓库或 URL 来源；本地目录请走本地组装")
-    return analyze_with_ai(project_root, source, base_meta) if ai else base_meta
+    return analyze_with_ai(project_root, source, base_meta, llm_config=llm_config) if ai else base_meta
 
 
 def analyze_github(source: str) -> PluginMeta:
@@ -223,16 +229,35 @@ def _github_tree(owner_repo: str, branch: str) -> list[dict]:
 def analyze_url_simple(url: str) -> PluginMeta:
     meta = PluginMeta(source_type="url", source_url=url, homepage=url)
     text = _http_get_text(url, timeout=20)
+    if _looks_like_wechat_block_page(text):
+        mobile_text = _http_get_text(url, timeout=20, headers=_wechat_headers())
+        if mobile_text:
+            text = mobile_text
     if text:
-        title = _extract_meta_content(text, "og:title") or _extract_meta_content(text, "twitter:title")
+        wechat_title, wechat_description = _extract_wechat_cgi_data(text)
+        title = (
+            _extract_meta_content(text, "og:title")
+            or _extract_meta_content(text, "twitter:title")
+            or wechat_title
+            or _extract_js_string(text, "title")
+            or _extract_window_assignment(text, "msg_title")
+        )
         if not title:
             title_match = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
             title = _strip_html(title_match.group(1)) if title_match else ""
+        title = _decode_web_text(title)
         if title:
             meta.name = _slugify(title[:60])
 
-        description = _extract_meta_content(text, "og:description") or _extract_meta_content(text, "description") or _strip_html(text)
-        meta.description = truncate_description(description)
+        description = (
+            _extract_meta_content(text, "og:description")
+            or _extract_meta_content(text, "twitter:description")
+            or _extract_meta_content(text, "description")
+            or wechat_description
+            or _extract_js_string(text, "desc")
+            or _strip_html(text)
+        )
+        meta.description = truncate_description(_decode_web_text(description))
         repos = _extract_github_repos(text)
         if repos:
             meta.repository = f"https://github.com/{repos[0]}"
@@ -243,27 +268,46 @@ def analyze_url_simple(url: str) -> PluginMeta:
     return meta
 
 
-def analyze_with_ai(project_root: Path, source: str, base_meta: PluginMeta) -> PluginMeta:
+def analyze_with_ai(
+    project_root: Path,
+    source: str,
+    base_meta: PluginMeta,
+    llm_config: dict[str, Any] | None = None,
+) -> PluginMeta:
     prompt = (
         "请根据以下来源生成完整 plugin.yaml。\n"
-        "要求：名称使用 kebab-case；描述不超过 500 字；只输出 plugin.yaml。\n\n"
+        "你是在 AgentBuddy 服务端 crawler 中分析文章/网页并生成可安装插件。\n"
+        "如果基础分析已经发现真实 skills，请保留它们；如果没有发现 SKILL.md 或 GitHub 仓库链接，"
+        "可以根据文章标题和摘要生成候选 skills。\n"
+        "要求：\n"
+        "- name 使用 kebab-case，description 不超过 500 字。\n"
+        "- skills 至少 1 个，最多 10 个；每个 skill 必须有 name、description、version。\n"
+        "- 对根据文章摘要推断出的 skill，source 写 ai-extracted:<来源 URL>。\n"
+        "- 不要编造 GitHub repository URL；没有可靠仓库时 repository 留空。\n"
+        "- 只输出 plugin.yaml，不要解释。\n\n"
         f"来源: {source}\n"
         f"基础分析名称: {base_meta.name}\n"
-        f"基础描述摘要: {base_meta.description[:1200]}\n"
+        f"基础描述摘要: {base_meta.description[:2000]}\n"
+        f"已发现 skills: {[s.name for s in base_meta.skills]}\n"
     )
-    from ai_generator.generator import generate_plugin
 
-    chunks: list[str] = []
-    errors: list[str] = []
-    for chunk in generate_plugin(prompt, project_root):
-        if chunk.startswith("[ERROR]"):
-            errors.append(chunk.replace("[ERROR]", "", 1).strip())
-        if chunk != "[DONE]":
-            chunks.append(chunk)
-    if errors:
-        raise ValueError(errors[-1] or "AI 生成失败")
+    if llm_config:
+        ai_text = generate_plugin_with_direct_llm(prompt, llm_config)
+    else:
+        from ai_generator.generator import generate_plugin
 
-    yaml_text = extract_yaml_from_ai("\n".join(chunks))
+        chunks: list[str] = []
+        errors: list[str] = []
+        for chunk in generate_plugin(prompt, project_root):
+            if chunk.startswith("[ERROR]"):
+                errors.append(chunk.replace("[ERROR]", "", 1).strip())
+            if chunk != "[DONE]":
+                chunks.append(chunk)
+        if errors:
+            raise ValueError(errors[-1] or "AI 生成失败")
+        ai_text = "\n".join(chunks)
+
+    yaml_text = extract_yaml_from_ai(ai_text)
     if not yaml_text:
         raise ValueError("AI 未生成有效 plugin.yaml")
     meta = meta_from_config(yaml.safe_load(yaml_text), base_meta.source_type, source)
@@ -274,6 +318,41 @@ def analyze_with_ai(project_root: Path, source: str, base_meta: PluginMeta) -> P
     if not meta.repository:
         meta.repository = base_meta.repository
     return meta
+
+
+def generate_plugin_with_direct_llm(prompt: str, llm_config: dict[str, Any]) -> str:
+    """crawler 直配 LLM 调用：不读 config/llm/llm.yaml，直接用源的 base_url/api_key/model。
+
+    llm_config 约定（来自 plugin-sources.yaml 的 source.llm）:
+      - base_url / url: OpenAI-compatible 接口地址
+      - api_key / key:  密钥
+      - model:          模型名
+    """
+    base_url = str(llm_config.get("base_url") or llm_config.get("url") or "").strip()
+    api_key = str(llm_config.get("api_key") or llm_config.get("key") or "").strip()
+    model = str(llm_config.get("model") or "").strip()
+    if not base_url or not api_key or not model:
+        raise ValueError("crawler AI 需要在源配置中设置 llm.base_url、llm.api_key、llm.model")
+
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ValueError("openai SDK 未安装，请先安装 openai") from exc
+
+    system_prompt = (
+        "你是 AgentBuddy 服务端 crawler 的插件分析器。"
+        "只输出可被 yaml.safe_load 解析的 plugin.yaml，不要输出解释、Markdown 或代码围栏。"
+    )
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.3,
+    )
+    return response.choices[0].message.content or ""
 
 
 def apply_config_override(meta: PluginMeta, config_yaml: str) -> PluginMeta:
@@ -305,7 +384,12 @@ def build_plugin(project_root: Path, data: dict[str, Any]) -> tuple[Path, dict[s
         raise ValueError("来源不能为空")
 
     if source:
-        meta = analyze_source(project_root, source, ai=bool(data.get("ai", False)))
+        meta = analyze_source(
+            project_root,
+            source,
+            ai=bool(data.get("ai", False)),
+            llm_config=data.get("llm") if isinstance(data.get("llm"), dict) else None,
+        )
     else:
         meta = meta_from_config(yaml.safe_load(config_yaml), source_type="generated", source_url="")
     if config_yaml:
@@ -535,8 +619,85 @@ def _extract_meta_content(html: str, name: str) -> str:
     for pattern in patterns:
         match = re.search(pattern, html, re.I | re.S)
         if match:
-            return _strip_html(match.group(1))
+            return _decode_web_text(match.group(1))
     return ""
+
+
+def _wechat_headers() -> dict[str, str]:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.50 "
+            "NetType/WIFI Language/zh_CN"
+        ),
+        "Referer": "https://mp.weixin.qq.com/",
+    }
+
+
+def _looks_like_wechat_block_page(text: str) -> bool:
+    body = str(text or "")
+    markers = (
+        "环境异常",
+        "完成验证后即可继续访问",
+        "微信扫一扫可打开此内容",
+        "Scan with Weixin",
+        "WeChat verification page",
+    )
+    return any(marker in body for marker in markers)
+
+
+def _extract_js_string(text: str, name: str) -> str:
+    patterns = [
+        rf"(?:var|let|const)\s+{re.escape(name)}\s*=\s*(['\"])((?:\\.|(?!\1).)*)\1",
+        rf"(?:window\.)?{re.escape(name)}\s*=\s*(['\"])((?:\\.|(?!\1).)*)\1",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.S)
+        if match:
+            return _decode_web_text(match.group(2))
+    return ""
+
+
+def _extract_window_assignment(text: str, name: str) -> str:
+    pattern = rf"(?:window\.)?{re.escape(name)}\s*=\s*(?:window\.[A-Za-z_][A-Za-z0-9_]*\s*=\s*)?(['\"])((?:\\.|(?!\1).)*)\1"
+    match = re.search(pattern, text, re.S)
+    if match:
+        return _decode_web_text(match.group(2))
+    return ""
+
+
+def _extract_wechat_cgi_data(text: str) -> tuple[str, str]:
+    match = re.search(
+        r"window\.cgiDataNew\s*=\s*\{[\s\S]*?title:\s*'((?:\\.|[^'])*)'[\s\S]*?desc:\s*'((?:\\.|[^'])*)'",
+        text,
+        re.S,
+    )
+    if match:
+        return _decode_web_text(match.group(1)), _decode_web_text(match.group(2))
+    return "", ""
+
+
+def _decode_web_text(text: str) -> str:
+    if not text:
+        return ""
+    value = html.unescape(str(text))
+
+    def _replace_hex(match):
+        try:
+            return bytes([int(match.group(1), 16)]).decode("utf-8", errors="replace")
+        except Exception:
+            return match.group(0)
+
+    def _replace_unicode(match):
+        try:
+            return chr(int(match.group(1), 16))
+        except Exception:
+            return match.group(0)
+
+    value = re.sub(r"\\x([0-9a-fA-F]{2})", _replace_hex, value)
+    value = re.sub(r"\\u([0-9a-fA-F]{4})", _replace_unicode, value)
+    value = value.replace("\\n", "\n").replace("\\t", "\t").replace("\\'", "'").replace('\\"', '"')
+    return _strip_html(value)
 
 
 def _github_headers() -> dict[str, str]:
@@ -544,16 +705,17 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
-def _http_get_text(url: str, timeout: int = 20) -> str:
+def _http_get_text(url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> str:
+    request_headers = headers or _github_headers()
     try:
         import requests
-        resp = requests.get(url, timeout=timeout, headers=_github_headers())
+        resp = requests.get(url, timeout=timeout, headers=request_headers)
         return resp.text if resp.ok else ""
     except Exception:
         pass
     try:
         from urllib.request import Request, urlopen
-        req = Request(url, headers=_github_headers())
+        req = Request(url, headers=request_headers)
         with urlopen(req, timeout=timeout) as resp:
             charset = resp.headers.get_content_charset() or "utf-8"
             return resp.read().decode(charset, errors="replace")

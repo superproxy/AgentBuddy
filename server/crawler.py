@@ -263,7 +263,13 @@ def crawl_and_publish(source: dict, dry_run: bool = False, remaining_quota: int 
     info(f"  URL: {url}")
 
     try:
-        source_meta = analyze_source(SERVER_DIR, url, ai=bool(source.get("ai", False)))
+        llm_cfg = source.get("llm") if isinstance(source.get("llm"), dict) else None
+        source_meta = analyze_source(
+            PROJECT_ROOT,
+            url,
+            ai=bool(source.get("ai", False)),
+            llm_config=llm_cfg,
+        )
     except Exception as e:
         error(f"  分析失败: {e}")
         return {"status": "error", "reason": str(e), "published": 0, "skipped": 0, "error": 1, "items": []}
