@@ -61,9 +61,10 @@ def ensure_mysql_tables(mysql_conn):
     """确保 MySQL 表结构存在（调用 auth.models 建表）。"""
     from auth.models import _DDL
     statements = [s.strip() for s in _DDL.split(";") if s.strip()]
-    for stmt in statements:
-        if stmt:
-            mysql_conn.execute(stmt)
+    with mysql_conn.cursor() as cur:
+        for stmt in statements:
+            if stmt:
+                cur.execute(stmt)
     mysql_conn.commit()
 
 
@@ -81,13 +82,14 @@ def migrate_table(sqlite_conn, mysql_conn, table: str, columns: list[str],
     rows = sqlite_conn.execute(f"SELECT {col_list} FROM {table}").fetchall()
     migrated = 0
     skipped = 0
-    for r in rows:
-        values = [r[c] for c in columns]
-        try:
-            mysql_conn.execute(sql, values)
-            migrated += 1
-        except pymysql.err.IntegrityError:
-            skipped += 1
+    with mysql_conn.cursor() as cur:
+        for r in rows:
+            values = [r[c] for c in columns]
+            try:
+                cur.execute(sql, values)
+                migrated += 1
+            except pymysql.err.IntegrityError:
+                skipped += 1
     mysql_conn.commit()
     return migrated, skipped
 
