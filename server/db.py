@@ -198,6 +198,53 @@ class _SQLiteCompat:
         self._conn.close()
 
 
+class _MySQLCompat:
+    """对 pymysql.Connection 的薄包装，提供与 _SQLiteCompat 一致的接口。
+
+    pymysql.Connection 没有 execute/executescript 方法，必须通过 cursor 调用。
+    本类把 execute 翻译 SQL 后转发给 cursor，并管理 cursor 的创建与关闭。
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql: str, params: Iterable | None = None):
+        cur = self._conn.cursor()
+        try:
+            cur.execute(translate(sql), params or ())
+            return cur
+        except Exception:
+            cur.close()
+            raise
+
+    def executescript(self, sql: str):
+        # MySQL：逐句拆分（按 ;) 并翻译，每句用独立 cursor 执行
+        statements = [s.strip() for s in sql.split(";") if s.strip()]
+        for stmt in statements:
+            if stmt:
+                cur = self._conn.cursor()
+                try:
+                    cur.execute(translate_sql_for_mysql(stmt))
+                finally:
+                    cur.close()
+        return self._conn
+
+    def commit(self):
+        return self._conn.commit()
+
+    def close(self):
+        return self._conn.close()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._conn.close()
+
+
 def _new_sqlite_conn():
     if _DB_PATH is None:
         raise RuntimeError("SQLite 路径未设置，请先调用 set_sqlite_path()")
@@ -243,7 +290,7 @@ def _new_mysql_conn():
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=False,
     )
-    return conn
+    return _MySQLCompat(conn)
 
 
 def get_db():
