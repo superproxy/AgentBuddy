@@ -29,9 +29,7 @@ const {
   selectedSubagents, selectedRules, selectedCommands, selectedKeys, hooksEnabled, memoryEnabled,
   availableSubagents, availableRules, availableCommands,
   ideImport, ideImportStats, importedIdeMcp, wizardStep, buildMode, mcpFilterText, importing,
-  urlSource, urlAnalyzing, urlMeta, urlBuilding, urlPackMode, urlSelectedSkills, urlNameValid, urlYamlPreview,
 } = storeToRefs(pb)
-const { URL_NAME_MAX, URL_DESC_MAX } = pb
 const { mcpTemplate } = storeToRefs(mcp)
 const { skillCategories, filteredLocalSkills, skillFilter } = storeToRefs(skill)
 const { plugins, selectedPluginFile } = storeToRefs(plugin)
@@ -42,7 +40,6 @@ const {
   llmKey, wizardNext, wizardPrev, wizardGoto, newPlugin, loadBuildSources,
   importFromIde, applyImportedMcp, applyImportedSkills, applyImportedLlm,
   loadExistingPlugin, previewPlugin, savePluginFile, installPluginFile,
-  analyzeSource, toggleUrlSkill, buildFromSource,
 } = pb
 const { loadLocalSkills } = skill
 const { refreshPluginList } = plugin
@@ -380,15 +377,6 @@ function onClear() {
   newPlugin()
 }
 
-function copyYaml() {
-  if (!urlYamlPreview.value) return
-  navigator.clipboard.writeText(urlYamlPreview.value).then(() => {
-    ui.toast('已复制到剪贴板')
-  }).catch(() => {
-    ui.toast('复制失败', 'err')
-  })
-}
-
 // ── 自定义生成（会话工作台）──
 const chatInputEl = ref<HTMLElement | null>(null)
 // starterType 三选一：'source' | 'local' | ''（点击切换，互斥展开）
@@ -527,20 +515,11 @@ onMounted(() => {
         <button
           type="button"
           role="tab"
-          :class="{ on: buildMode === 'url' }"
-          :aria-selected="buildMode === 'url'"
-          @click="buildMode = 'url'"
-        >
-          ⚡ 快速生成
-        </button>
-        <button
-          type="button"
-          role="tab"
           :class="{ on: buildMode === 'chat' }"
           :aria-selected="buildMode === 'chat'"
           @click="onEnterChat"
         >
-          🤖 自定义生成
+          🤖 交互创建
         </button>
       </div>
       <div class="pb-chips" aria-live="polite">
@@ -1349,178 +1328,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 一键构建（URL 模式） -->
-    <div v-show="buildMode === 'url'" class="pb-url">
-      <div class="pb-url-hero">
-        <div class="pb-ai-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/></svg>
-        </div>
-        <div>
-          <h3>快速生成插件</h3>
-          <p>输入 GitHub 仓库或文章 URL，由服务端提炼插件草稿并完成构建发布。</p>
-        </div>
-      </div>
-
-      <div class="pb-url-form">
-        <label class="pb-ai-label">来源地址</label>
-        <div class="pb-url-input-row">
-          <input
-            v-model="urlSource"
-            type="text"
-            class="pb-url-input"
-            placeholder="QwenLM/Qwen-MM-Plugins  或  https://github.com/owner/repo  或  文章 URL"
-            @keyup.enter="analyzeSource()"
-          />
-          <button
-            type="button"
-            class="pb-btn pb-btn-primary"
-            :disabled="urlAnalyzing"
-            @click="analyzeSource()"
-          >
-            {{ urlAnalyzing ? '分析中...' : '分析' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 分析结果 -->
-      <div v-if="urlMeta" class="pb-url-result">
-        <div class="pb-url-section">
-          <div class="pb-url-label-row">
-            <label class="pb-ai-label">插件名</label>
-            <span
-              class="pb-url-count"
-              :class="{ near: (urlMeta.name || '').length > URL_NAME_MAX * 0.8, over: (urlMeta.name || '').length > URL_NAME_MAX }"
-            >{{ (urlMeta.name || '').length }}/{{ URL_NAME_MAX }}</span>
-          </div>
-          <input
-            v-model="urlMeta.name"
-            type="text"
-            class="pb-url-input"
-            :maxlength="URL_NAME_MAX"
-            placeholder="kebab-case，如 my-plugin"
-          />
-          <small v-if="!urlNameValid" class="pb-url-field-err">
-            名称只允许小写字母、数字和连字符，且以字母或数字开头（如 my-plugin）
-          </small>
-        </div>
-        <div class="pb-url-row2">
-          <div class="pb-url-section">
-            <label class="pb-ai-label">版本</label>
-            <input v-model="urlMeta.version" type="text" class="pb-url-input" placeholder="1.0.0" />
-          </div>
-          <div class="pb-url-section" style="flex:1">
-            <label class="pb-ai-label">作者</label>
-            <input v-model="urlMeta.author" type="text" class="pb-url-input" />
-          </div>
-        </div>
-        <div class="pb-url-section">
-          <div class="pb-url-label-row">
-            <label class="pb-ai-label">描述</label>
-            <span
-              class="pb-url-count"
-              :class="{ near: (urlMeta.description || '').length > URL_DESC_MAX * 0.8, over: (urlMeta.description || '').length > URL_DESC_MAX }"
-            >{{ (urlMeta.description || '').length }}/{{ URL_DESC_MAX }}</span>
-          </div>
-          <textarea
-            v-model="urlMeta.description"
-            class="pb-url-textarea"
-            rows="3"
-            :maxlength="URL_DESC_MAX"
-            placeholder="插件功能描述（展示在市场列表中）"
-          ></textarea>
-        </div>
-
-        <!-- Skills 列表 -->
-        <div v-if="urlMeta.skills?.length" class="pb-url-section">
-          <label class="pb-ai-label">Skills（勾选要打包的技能）</label>
-          <div class="pb-url-skills">
-            <label
-              v-for="s in urlMeta.skills"
-              :key="s.name"
-              class="pb-url-skill-item"
-              :class="{ on: urlSelectedSkills.includes(s.name) }"
-            >
-              <input
-                type="checkbox"
-                :checked="urlSelectedSkills.includes(s.name)"
-                @change="toggleUrlSkill(s.name)"
-              />
-              <span class="pb-url-skill-name">{{ s.name }}</span>
-              <span v-if="s.description" class="pb-url-skill-desc">{{ s.description }}</span>
-            </label>
-          </div>
-        </div>
-
-        <!-- MCP Servers -->
-        <div v-if="urlMeta.mcpServers && Object.keys(urlMeta.mcpServers).length" class="pb-url-section">
-          <label class="pb-ai-label">MCP Servers（{{ Object.keys(urlMeta.mcpServers).length }} 个）</label>
-          <div class="pb-url-mcp-list">
-            <div v-for="(cfg, name) in urlMeta.mcpServers" :key="name" class="pb-url-mcp-item">
-              <span class="pb-url-mcp-name">{{ name }}</span>
-              <span class="pb-url-mcp-cmd">{{ cfg.command }} {{ (cfg.args || []).join(' ') }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 环境变量 -->
-        <div v-if="urlMeta.envVars && Object.keys(urlMeta.envVars).length" class="pb-url-section">
-          <label class="pb-ai-label">环境变量（{{ Object.keys(urlMeta.envVars).length }} 个）</label>
-          <div class="pb-url-env-list">
-            <div v-for="(spec, key) in urlMeta.envVars" :key="key" class="pb-url-env-item">
-              <code>{{ key }}</code>
-              <span class="pb-url-env-desc">{{ spec.description }}</span>
-              <span v-if="spec.required" class="pb-url-env-req">必填</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 打包模式 -->
-        <div class="pb-url-section">
-          <label class="pb-ai-label">打包模式</label>
-          <div class="pb-url-modes">
-            <label class="pb-url-mode" :class="{ on: urlPackMode === 'inline' }">
-              <input type="radio" value="inline" v-model="urlPackMode" />
-              <span>内联模式</span>
-              <small>MCP + envVars 内联在 plugin.yaml，一个文件搞定</small>
-            </label>
-            <label class="pb-url-mode" :class="{ on: urlPackMode === 'split' }">
-              <input type="radio" value="split" v-model="urlPackMode" />
-              <span>拆分模式</span>
-              <small>plugin.yaml + mcp.yaml + keys.yaml 独立文件</small>
-            </label>
-          </div>
-        </div>
-
-        <!-- plugin.yaml 预览（与 AI 生成模式一致） -->
-        <div v-if="urlMeta" class="pb-url-section">
-          <div class="pb-url-label-row">
-            <label class="pb-ai-label">plugin.yaml 预览</label>
-            <button type="button" class="pb-btn pb-btn-ghost pb-url-copy-btn" @click="copyYaml">复制</button>
-          </div>
-          <pre class="pb-ai-yaml">{{ urlYamlPreview }}</pre>
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="pb-url-actions">
-          <button
-            type="button"
-            class="pb-btn pb-btn-primary"
-            :disabled="urlBuilding || !urlNameValid"
-            @click="buildFromSource(false)"
-          >
-            {{ urlBuilding ? '构建中...' : '构建 ZIP' }}
-          </button>
-          <button
-            type="button"
-            class="pb-btn pb-btn-success"
-            :disabled="urlBuilding || !urlNameValid"
-            @click="buildFromSource(true)"
-          >
-            {{ urlBuilding ? '构建中...' : '构建并发布' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

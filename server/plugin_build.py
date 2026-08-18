@@ -27,6 +27,7 @@ class SkillInfo:
     source: str = ""
     version: str = "1.0.0"
     requires_key: bool = False
+    body: str = ""  # 技能操作说明（生成 skills/<name>/SKILL.md 正文）
 
 
 @dataclass
@@ -135,6 +136,7 @@ def meta_from_config(data: dict, source_type: str = "", source_url: str = "") ->
                 source=str(item.get("source") or item.get("url") or ""),
                 version=str(item.get("version") or "1.0.0"),
                 requires_key=bool(item.get("requires_key") or item.get("requiresKey")),
+                body=str(item.get("body") or ""),
             ))
         elif isinstance(item, str) and item.strip():
             meta.skills.append(SkillInfo(name=item.strip()))
@@ -445,6 +447,7 @@ def generate_config(meta: PluginMeta) -> dict[str, Any]:
                 "description": s.description,
                 "version": s.version,
                 **({"source": s.source} if s.source else {}),
+                **({"body": s.body} if s.body else {}),
             }
             for s in meta.skills if s.name
         ]
@@ -477,6 +480,22 @@ def package_config(cfg: dict[str, Any], mode: str, output_dir: Path) -> Path:
                 split_cfg["keys_file"] = "keys.yaml"
                 zf.writestr("keys.yaml", yaml.dump({"mcp": env_vars}, allow_unicode=True, sort_keys=False))
             zf.writestr("plugin.yaml", yaml.dump(split_cfg, allow_unicode=True, sort_keys=False))
+
+        # 将含 body 的技能生成 skills/<name>/SKILL.md 并打包，保证可安装为真实 skill
+        for skill in cfg.get("skills", []) or []:
+            name = str(skill.get("name") or "").strip()
+            body = str(skill.get("body") or "").strip()
+            if not name or not body:
+                continue
+            desc = str(skill.get("description") or "").strip()
+            source = str(skill.get("source") or "").strip()
+            lines = [f"# {name}"]
+            if desc:
+                lines += ["", desc]
+            if source:
+                lines += ["", f"> 来源：{source}"]
+            lines += ["", body]
+            zf.writestr(f"skills/{name}/SKILL.md", "\n".join(lines))
     return zip_path
 
 

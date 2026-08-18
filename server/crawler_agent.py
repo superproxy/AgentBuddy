@@ -632,11 +632,18 @@ class DiscoveredSkill:
     description: str = ""
     version: str = "1.0.0"
     source: str = ""
+    body: str = ""
 
 
-def extract_skills_from_article(title: str, content: str, source_url: str) -> list[DiscoveredSkill]:
+def extract_skills_from_article(title: str, content: str, source_url: str) -> tuple[list[DiscoveredSkill], str]:
+    """从文章抽取 skills + 提炼插件名。
+
+    Returns:
+        (skills, plugin_name)：plugin_name 为 LLM 从文章内容提炼的插件名
+        （ASCII kebab-case，无任务名/平台名等通用前缀）；LLM 未给出时为空字符串。
+    """
     if not content or len(content) < 100:
-        return []
+        return [], ""
 
     snippet = content[:8000]
     prompt = (
@@ -644,7 +651,8 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         "skill 定义：一段可复用的 Prompt 类能力描述（不是 MCP server、不是 CLI 工具、"
         "不是 API 服务），包含 name（短小、kebab-case、唯一）、"
         "description（一句话说明这个 skill 能做什么）、version（默认 1.0.0）、"
-        "source（该 skill 对应的开源仓库或包地址）。\n\n"
+        "source（该 skill 对应的开源仓库或包地址）、"
+        "body（该 skill 的具体操作说明，供生成 SKILL.md 正文，用中文写 3-6 句实操步骤）。\n\n"
         "抽取规则：\n"
         "0. 类型判断：先判断文章主要讲解的是 skill/Prompt 能力，还是 MCP server/工具/API 服务。\n"
         "   - 如果是 MCP server、工具服务、API 服务类文章（如\"多模态 RAG\"、\"Jupyter 控制\"、"
@@ -664,7 +672,13 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         "   d) 上述三类都没有才返回空字符串\n"
         "   必须是文章中明确出现的来源，不要编造；找不到就返回空字符串（系统会兜底）\n"
         "5. 一篇文章通常产出 5 个 skills，没有就返回空数组\n"
-        "6. 不要把整篇文章当成一个 skill，要拆细\n\n"
+        "6. 不要把整篇文章当成一个 skill，要拆细\n"
+        "7. body 字段：用中文写该 skill 的使用说明，包含触发场景与操作步骤（3-6 句），"
+        "可直接作为 SKILL.md 的正文内容\n"
+        "8. name 字段：给整个插件提炼一个简洁的英文名（ASCII kebab-case，全小写，"
+        "只含字母/数字/连字符，10-40 字符），从文章内容主题提炼（如 claude-code-skills-comparison、"
+        "code-review-essentials），不要包含任务名、平台名、\"skills\" 等通用前缀，"
+        "也不要机械拼接文章标题\n\n"
         "source 字段示例：\n"
         '  - 仓库：github.com/owner/repo\n'
         '  - npm 包：npm:create-vite、npm:code-reviewer@2.0.0\n'
@@ -672,16 +686,24 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         f"文章标题：{title}\n"
         f"文章来源：{source_url}\n"
         f"文章正文：\n{snippet}\n\n"
-        '返回 JSON：{"skills": [{"name": "...", "description": "...", "version": "1.0.0", '
-        '"source": "github.com/owner/repo 或 npm:pkg 或 pip:pkg 或空字符串"}, ...]}'
+        '返回 JSON：{"name": "插件英文名", "skills": [{"name": "...", "description": "...", '
+        '"version": "1.0.0", '
+        '"source": "github.com/owner/repo 或 npm:pkg 或 pip:pkg 或空字符串", '
+        '"body": "该 skill 的操作说明"}, ...]}'
     )
     try:
         text = llm_chat([{"role": "user", "content": prompt}], json_mode=True, timeout=90)
+        # 容忍 LLM 用 ```json / ``` 代码围栏包裹 JSON（否则 json.loads 直解失败返回空）
+        text = re.sub(r"^```[a-zA-Z]*\s*|\s*```$", "", text.strip())
         data = json.loads(text)
-        raw_skills = data.get("skills", [])
+        raw_skills = data.get("skills", []) if isinstance(data, dict) else []
+        # 插件名：LLM 从内容提炼，清洗为 ASCII kebab-case
+        plugin_name = str(data.get("name", "")).strip().lower() if isinstance(data, dict) else ""
+        plugin_name = re.sub(r"[^a-z0-9-]", "-", plugin_name)
+        plugin_name = re.sub(r"-{2,}", "-", plugin_name).strip("-")
     except Exception as e:
         print(f"  [extract] LLM 调用失败：{type(e).__name__}: {e}")
-        return []
+        return [], ""
 
     skills: list[DiscoveredSkill] = []
     seen: set[str] = set()
@@ -689,7 +711,8 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         if not isinstance(s, dict):
             continue
         nm = str(s.get("name", "")).strip().lower()
-        nm = re.sub(r"[^a-z0-9-]", "-", nm).strip("-")
+        nm = re.sub(r"[^a-z0-9-]", "-", nm)
+        nm = re.sub(r"-{2,}", "-", nm).strip("-")
         if not nm or nm in seen:
             continue
         seen.add(nm)
@@ -702,18 +725,19 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> li
         # 仓库地址校验：含 / 且非包名前缀形式
         is_repo = (not is_package) and bool(src) and "/" in src and "." in src.split("/")[0]
         if not src:
-            # LLM 没解析出任何来源，用文章 URL 兜底
-            src = source_url
+            # LLM 没解析出任何来源 → 标记为 ai-extracted（AI 从文章推断，非真实安装源）
+            src = f"ai-extracted:{source_url}"
         elif not is_package and not is_repo:
-            # 既不是包名前缀形式，也不像仓库地址（如单段字符串）→ 标记为未知，兜底文章 URL
-            src = source_url
+            # 既不是包名前缀形式，也不像仓库地址（如单段字符串）→ 标记为 ai-extracted
+            src = f"ai-extracted:{source_url}"
         skills.append(DiscoveredSkill(
             name=nm,
             description=str(s.get("description", "")).strip()[:500],
             version=str(s.get("version", "1.0.0")).strip() or "1.0.0",
             source=src,
+            body=str(s.get("body", "")).strip()[:2000],
         ))
-    return skills
+    return skills, plugin_name
 
 
 # ============================================================
@@ -761,6 +785,7 @@ def write_spec(
     skills: list[DiscoveredSkill],
     tags: list[str],
     rating: dict | None = None,
+    plugin_name: str = "",
 ) -> Path:
     """写一个 spec.yaml 文件，返回路径。
 
@@ -773,6 +798,9 @@ def write_spec(
 
     rating 为 rate_article() 的返回值，写入 source_article.rating 与顶层 rating 字段，
     BuildAgent 按顶层 rating 降序构建（高分优先）。
+
+    plugin_name 为 LLM 从文章内容提炼的插件名（ASCII kebab-case）；为空时
+    兜底用文章标题 slug（不再拼 task_name 前缀，避免 `skills-daily-...` 这类名字）。
     """
     slug = _slugify(article_title) or "article"
     if len(slug) > 60:
@@ -782,8 +810,15 @@ def write_spec(
     spec_dir.mkdir(parents=True, exist_ok=True)
     spec_path = spec_dir / f"{slug}.yaml"
 
-    # plugin 名：task_slug + article_slug
-    plugin_name = f"{_slugify(task_name)}-{slug}"
+    # plugin 名：优先 LLM 提炼的简洁名；兜底用标题 slug（不再拼 task 前缀）。
+    # 必须为 ASCII kebab-case（对齐 plugin.schema.yaml 的 ^[a-z0-9][a-z0-9-]*$），
+    # 否则 build_plugin 的 sanitize_name 会再清一遍导致名字变化/截断。
+    if plugin_name:
+        plugin_name = _slugify(plugin_name) or ""
+    if not plugin_name:
+        plugin_name = _slugify(article_title) or "article"
+        plugin_name = re.sub(r"[^a-z0-9-]", "-", plugin_name)
+        plugin_name = re.sub(r"-{2,}", "-", plugin_name).strip("-")
     if len(plugin_name) > 60:
         plugin_name = plugin_name[:60].rstrip("-")
 
@@ -818,6 +853,7 @@ def write_spec(
                 "description": s.description,
                 "version": s.version,
                 **({"source": s.source} if s.source else {}),
+                **({"body": s.body} if s.body else {}),
             }
             for s in skills
         ],
@@ -998,9 +1034,9 @@ def run_task(
               f"ch={rating['breakdown']['channel']} "
               f"pen={rating['breakdown']['penalty']})")
 
-        # 7. LLM 抽 skills
+        # 7. LLM 抽 skills + 提炼插件名
         try:
-            skills = extract_skills_from_article(article_title, article_content, url)
+            skills, plugin_name = extract_skills_from_article(article_title, article_content, url)
         except Exception as e:
             with state_lock:
                 mark_seen(seen_state, url, title=article_title, status="extract_error")
@@ -1023,6 +1059,7 @@ def run_task(
                 skills=skills,
                 tags=tags,
                 rating=rating,
+                plugin_name=plugin_name,
             )
             print(f"  [spec OK] {spec_path} skills={[s.name for s in skills]}")
         except Exception as e:
