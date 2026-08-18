@@ -6,7 +6,7 @@ GitHub：https://github.com/earendil-works/pi
 
 配置目录：~/.pi/
 - rules → ~/.pi/agent/（AGENTS.md 项目指令）
-- mcp → ~/.pi/mcp.json
+- mcp → ~/.pi/agent/mcp.json（Pi 全局 MCP 覆盖文件；home 下 ~/.pi/mcp.json 非标准加载路径）
 - skills → ~/.pi/skills/
 - llm → ~/.pi/agent/models.json（官方路径，docs/models.md + docs/custom-provider.md）
 """
@@ -160,11 +160,15 @@ class PiTarget(IdeTarget):
             print(f"{COLOR_YELLOW}[!] Source rules/ not found, skipping{COLOR_RESET}")
 
     def init_mcp(self, source_mcp_file: Path):
-        """同步 MCP 配置到 ~/.pi/mcp.json。"""
-        pi_dir = Path.home() / ".pi"
-        pi_dir.mkdir(parents=True, exist_ok=True)
-        copy_file_safe(source_mcp_file, pi_dir / "mcp.json",
-                       "~/.pi/mcp.json", self.force)
+        """同步 MCP 配置到 ~/.pi/agent/mcp.json（Pi 全局 MCP 覆盖文件）。
+
+        Pi 官方全局 MCP 路径是 ~/.pi/agent/mcp.json（AGENT_DIR 下），
+        home 下 ~/.pi/mcp.json 不是标准加载路径（项目级覆盖是 <cwd>/.pi/mcp.json）。
+        """
+        pi_agent_dir = Path.home() / ".pi" / "agent"
+        pi_agent_dir.mkdir(parents=True, exist_ok=True)
+        copy_file_safe(source_mcp_file, pi_agent_dir / "mcp.json",
+                       "~/.pi/agent/mcp.json", self.force)
 
     def init_llm(self, source_rules_dir: Path):
         # 生成 ~/.pi/agent/models.json（Pi 的 LLM 提供商/模型列表）
