@@ -790,7 +790,9 @@ def install_ide(ide_key: str, mode: str = "cli") -> dict:
         else:
             # 用绝对路径执行（GUI 进程 PATH 可能找不到 npm），
             # 并把 npm 所在目录注入子进程 PATH（npm 脚本内部需找到 node）
-            npm_dir = str(Path(npm_path).parent)
+            # 用 os.path.dirname 而非 Path().parent：后者在 Windows 会把
+            # POSIX 风格路径（如 /opt/...）反斜杠化，导致注入的 PATH 目录不一致
+            npm_dir = os.path.dirname(npm_path)
             npm_flags = install_meta.get("npm_flags", "")
             if npm_flags:
                 cmd = [npm_path, "install", "-g", package] + npm_flags.split()
@@ -1132,7 +1134,9 @@ def uninstall_ide(ide_key: str, mode: str = "cli", force: bool = False) -> dict:
                 return {"ok": False, "ide": ide_key, "mode": mode, "method": "npm",
                         "message": "未安装 npm", "cmd": "", "stdout": "", "stderr": ""}
             cmd = [npm_path, "uninstall", "-g", package]
-            r = _run_cmd(cmd, timeout=300, extra_path=[str(Path(npm_path).parent)])
+            # 用 os.path.dirname 而非 Path().parent：后者在 Windows 会把
+            # POSIX 风格路径（如 /opt/...）反斜杠化，导致注入的 PATH 目录不一致
+            r = _run_cmd(cmd, timeout=300, extra_path=[os.path.dirname(npm_path)])
             if r["ok"]:
                 # npm uninstall 返回成功，但可能没真正删掉（多 npm 环境如 nvm vs homebrew）
                 # 检查二进制是否还在，在则 fallback uninstall_cmd

@@ -223,3 +223,84 @@ def test_openworker_default_state_dir_is_platform_specific(platform, env, expect
         state_dir = openworker_state_dir()
 
     assert state_dir == expected
+
+
+# ---------------------------------------------------------------- Pi IDE ---
+
+def _pi_gateway_env():
+    return {
+        "llm": {},
+        "proxy": {"gateway": {
+            "enabled": True,
+            "base_url": "https://api.llmgateway.io/v1",
+            "api_key": "llmgtwy_xxx",
+            "routes": [
+                {"enabled": True, "gateway_model": "gpt-5.5"},
+                {"enabled": True, "gateway_model": "claude-opus-4-7"},
+                {"enabled": False, "gateway_model": "disabled-model"},
+            ],
+        }},
+    }
+
+
+def _pi_direct_env():
+    return {
+        "llm": {
+            "_active_provider": "deepseek",
+            "deepseek": {
+                "_enabled": True,
+                "openaiv1": {
+                    "base_url": "https://api.deepseek.com/v1",
+                    "api_key": "sk-ds",
+                    "models": {
+                        "deepseek-v4": {"name": "DeepSeek V4"},
+                        "disabled": {"_enabled": False},
+                    },
+                },
+            },
+            "disabled_p": {
+                "_enabled": False,
+                "openaiv1": {
+                    "base_url": "https://disabled.example/v1",
+                    "api_key": "sk-x",
+                    "models": {"m": {}},
+                },
+            },
+        },
+        "proxy": {"gateway": {"enabled": False}},
+    }
+
+
+def test_pi_build_providers_gateway_mode_generates_gateway_provider():
+    from agentctl.lib.ide.pi import _build_pi_providers
+
+    providers = _build_pi_providers(_pi_gateway_env())
+    assert set(providers) == {"agentbuddy-gateway"}
+    gateway = providers["agentbuddy-gateway"]
+    assert gateway["baseUrl"] == "https://api.llmgateway.io/v1"
+    assert gateway["api"] == "openai-completions"
+    assert gateway["apiKey"] == "llmgtwy_xxx"
+    assert [m["id"] for m in gateway["models"]] == ["gpt-5.5", "claude-opus-4-7"]
+
+
+def test_pi_build_providers_direct_mode_iterates_enabled_providers():
+    from agentctl.lib.ide.pi import _build_pi_providers
+
+    providers = _build_pi_providers(_pi_direct_env())
+    assert set(providers) == {"deepseek"}
+    assert providers["deepseek"]["api"] == "openai-completions"
+    assert providers["deepseek"]["baseUrl"] == "https://api.deepseek.com/v1"
+    assert [m["id"] for m in providers["deepseek"]["models"]] == ["deepseek-v4"]
+
+
+def test_pi_generate_models_writes_valid_json_with_providers(tmp_path):
+    from agentctl.lib.ide.pi import generate_pi_models
+
+    target = tmp_path / "models.json"
+    generate_pi_models(_pi_gateway_env(), target, force=True)
+    assert target.exists()
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert "providers" in data
+    assert "agentbuddy-gateway" in data["providers"]
+    assert data["providers"]["agentbuddy-gateway"]["models"][0]["id"] == "gpt-5.5"
+
