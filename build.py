@@ -725,6 +725,25 @@ def _step_timer(step_name: str):
     return _timer()
 
 
+def resolve_default_version() -> str:
+    """未传 --version 时用最近的 git tag。
+
+    硬编码 1.0.0 会把已发布的 v3.x 安装包打小，升级检查会把新包装成旧版。
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=str(PROJECT_ROOT),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (subprocess.CalledProcessError, OSError):
+        return "1.0.0"
+    if out[:1] in ("v", "V"):
+        out = out[1:]
+    return out or "1.0.0"
+
+
 def main():
     import time
     total_t0 = time.perf_counter()
@@ -743,8 +762,10 @@ def main():
                     help="仅构建 agentctl CLI，跳过桌面应用（快速迭代 CLI 用）")
     ap.add_argument("--cli-sdk", action="store_true",
                     help="构建 agentctl Python SDK wheel（pip install 用，可 import agentctl.lib）")
-    ap.add_argument("--version", default="1.0.0", help="安装包版本号（默认 1.0.0）")
+    ap.add_argument("--version", default="", help="安装包版本号（默认取最近的 git tag）")
     args = ap.parse_args()
+    if not args.version:
+        args.version = resolve_default_version()
 
     build_cli = args.cli or args.cli_only
     want_cli_sdk = args.cli_sdk
