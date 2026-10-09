@@ -3680,6 +3680,45 @@ def list_plugins():
     return jsonify({"ok": True, "data": plugins})
 
 
+@app.route("/api/marketplace/inspect", methods=["GET"])
+def marketplace_inspect():
+    """从远程市场下载 zip，解析说明、原文地址和技能正文。
+
+    市场服务还没带这些字段时，桌面端用这个接口补上。
+    """
+    import importlib.util
+
+    plugin_id = (request.args.get("id") or "").strip()
+    if not plugin_id or not re.fullmatch(r"[\w.\- ]{1,160}", plugin_id):
+        return jsonify({"ok": False, "error": "缺少或非法 id"}), 400
+    server = (request.args.get("server") or "").strip().rstrip("/")
+    if not server.startswith(("http://", "https://")) or "\n" in server or "\r" in server:
+        return jsonify({"ok": False, "error": "缺少 Server 地址"}), 400
+    url = server + "/api/marketplace/download?id=" + requests.utils.quote(plugin_id)
+    try:
+        resp = requests.get(url, timeout=30)
+    except requests.RequestException as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+    if resp.status_code != 200 or not resp.content:
+        return jsonify({"ok": False, "error": f"下载失败 HTTP {resp.status_code}"}), 502
+    viewer_path = PROJECT_ROOT / "server" / "marketplace" / "package_view.py"
+    spec = importlib.util.spec_from_file_location("market_package_view", viewer_path)
+    if spec is None or spec.loader is None:
+        return jsonify({"ok": False, "error": "无法读取插件包"}), 500
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    viewed = mod.inspect_zip_bytes(resp.content)
+    return jsonify({
+        "ok": True,
+        "plugin": {
+            "id": plugin_id,
+            "description": viewed["description"],
+            "homepage": viewed["homepage"],
+        },
+        "skills": viewed["skills"],
+    })
+
+
 @app.route("/api/plugin/skills", methods=["GET"])
 def plugin_skills():
     """单个插件里的技能明细，含 SKILL.md 正文，供抽屉的详情和原文页签。"""

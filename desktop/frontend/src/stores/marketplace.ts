@@ -5,6 +5,11 @@ import { useUiStore } from './ui'
 import { useSkillStore } from './skill'
 import { usePluginStore } from './plugin'
 
+export interface MarketSkill {
+  name: string
+  description?: string
+}
+
 export interface MarketItem {
   id: string
   name: string
@@ -22,6 +27,8 @@ export interface MarketItem {
   author_id?: number
   scope?: string
   team_id?: number | null
+  homepage?: string
+  skills?: MarketSkill[]
 }
 
 /** 虚拟插件：当本地市场无数据时填充，演示用 */

@@ -22,6 +22,7 @@ from auth.models import (
     get_db, now_iso, is_team_member,
 )
 from auth.middleware import require_auth, get_current_user
+from marketplace.package_view import inspect_zip_file
 
 
 def create_marketplace_bp(marketplace_dir: Path):
@@ -53,7 +54,48 @@ def create_marketplace_bp(marketplace_dir: Path):
                 return jsonify({"ok": False, "error": "无权访问该团队空间"}), 403
 
         items = plugin_list(q=q, scope=scope, team_id=team_id, user_id=user["id"] if user else None)
+        for item in items:
+            _attach_package_view(item, marketplace_dir)
         return jsonify({"ok": True, "data": items, "total": len(items)})
+
+    def _attach_package_view(item: dict, root: Path) -> None:
+        """列表带上原文地址和技能名，正文留给详情接口。"""
+        rel = str(item.get("file") or "")
+        if not rel or ".." in rel.replace("\\", "/").split("/"):
+            return
+        viewed = inspect_zip_file(root / rel)
+        if viewed["homepage"]:
+            item["homepage"] = viewed["homepage"]
+        if viewed["description"] and len(viewed["description"]) > len(str(item.get("description") or "")):
+            item["description"] = viewed["description"]
+        item["skills"] = [
+            {"name": s["name"], "description": s["description"]}
+            for s in viewed["skills"]
+        ]
+
+    @bp.route("/detail", methods=["GET"])
+    def marketplace_detail():
+        """插件详情：完整说明、原文地址、技能步骤和 SKILL.md 原文。"""
+        item_id = (request.args.get("id") or "").strip()
+        if not item_id:
+            return jsonify({"ok": False, "error": "缺少 id 参数"}), 400
+        entry = plugin_get(item_id)
+        if not entry:
+            return jsonify({"ok": False, "error": "插件不存在"}), 404
+        rel = str(entry.get("file") or "")
+        pkg_path = marketplace_dir / rel if rel and ".." not in rel.replace("\\", "/") else None
+        viewed = inspect_zip_file(pkg_path) if pkg_path else {"description": "", "homepage": "", "skills": []}
+        return jsonify({
+            "ok": True,
+            "plugin": {
+                "id": entry.get("id") or item_id,
+                "name": entry.get("name") or "",
+                "version": entry.get("version") or "",
+                "description": viewed["description"] or entry.get("description") or "",
+                "homepage": viewed["homepage"],
+            },
+            "skills": viewed["skills"],
+        })
 
     @bp.route("/publish", methods=["POST"])
     @require_auth
@@ -172,6 +214,8 @@ def create_marketplace_bp(marketplace_dir: Path):
                 it["liked"] = it["id"] in liked_ids
                 it["favorited"] = it["id"] in fav_ids
         conn.close()
+        for item in items:
+            _attach_package_view(item, marketplace_dir)
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/download", methods=["GET"])
@@ -284,6 +328,8 @@ def create_marketplace_bp(marketplace_dir: Path):
         """我收藏的插件列表。"""
         user = g.current_user
         items = get_favorited_plugins(user["id"])
+        for item in items:
+            _attach_package_view(item, marketplace_dir)
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     @bp.route("/liked", methods=["GET"])
@@ -292,6 +338,8 @@ def create_marketplace_bp(marketplace_dir: Path):
         """我点赞的插件列表。"""
         user = g.current_user
         items = get_liked_plugins(user["id"])
+        for item in items:
+            _attach_package_view(item, marketplace_dir)
         return jsonify({"ok": True, "data": items, "total": len(items)})
 
     return bp

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useMarketplaceStore } from '../stores/marketplace'
 import { usePluginStore } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
-import { serverApi, api, getAuthToken } from '../api/client'
+import { serverApi, api, getAuthToken, getServerUrl } from '../api/client'
 import { downloadFile } from '../api/download'
 
 const mkt = useMarketplaceStore()
@@ -88,6 +88,158 @@ async function toggleFavorite(p: any) {
 }
 
 // 下载插件 zip（pywebview 桌面模式走原生保存对话框，浏览器模式回退 a 标签下载）
+interface MarketSkillDetail {
+  name: string
+  description: string
+  version: string
+  source: string
+  source_url: string
+  body: string
+}
+
+const packageById = ref<Record<string, { homepage: string; description: string; skills: MarketSkillDetail[] }>>({})
+let detailSupported: boolean | null = null
+const inspectingIds = new Set<string>()
+let inspectActive = 0
+const inspectQueue: any[] = []
+
+function skillSteps(body: string): string {
+  const text = (body || '').trim()
+  if (!text.startsWith('---')) return text
+  const end = text.indexOf('\n---', 3)
+  return end === -1 ? text : text.slice(end + 4).trim()
+}
+
+function applyPackage(item: any, packed: { homepage: string; description: string; skills: MarketSkillDetail[] }) {
+  if (!item) return
+  if (packed.homepage) item.homepage = packed.homepage
+  if (packed.description && packed.description.length > (item.description || '').length) {
+    item.description = packed.description
+  }
+  if (packed.skills.length) {
+    item.skills = packed.skills.map((s) => ({ name: s.name, description: s.description }))
+  }
+  const current = items.value.find((row) => row.id === item.id)
+  if (current && current !== item) applyPackage(current, packed)
+}
+
+async function ensurePackage(item: any) {
+  if (!item?.id || isMock.value) return null
+  const cached = packageById.value[item.id]
+  if (cached) {
+    applyPackage(item, cached)
+    return cached
+  }
+  const server = getServerUrl()
+  if (!server) return null
+  let packed: { homepage: string; description: string; skills: MarketSkillDetail[] } | null = null
+  const remote = detailSupported === false ? '' : serverApi('/api/marketplace/detail?id=' + encodeURIComponent(item.id))
+  if (remote) {
+    try {
+      const r = await api<{ ok: boolean; plugin?: any; skills?: MarketSkillDetail[] }>(remote)
+      if (r.ok) {
+        detailSupported = true
+        packed = {
+          homepage: r.plugin?.homepage || '',
+          description: r.plugin?.description || '',
+          skills: r.skills || [],
+        }
+      } else {
+        detailSupported = false
+      }
+    } catch {
+      detailSupported = false
+    }
+  }
+  if (!packed?.homepage && !(packed?.skills || []).length) {
+    try {
+      const r = await api<{ ok: boolean; plugin?: any; skills?: MarketSkillDetail[] }>(
+        '/api/marketplace/inspect?id=' + encodeURIComponent(item.id) + '&server=' + encodeURIComponent(server),
+      )
+      if (r.ok) {
+        packed = {
+          homepage: r.plugin?.homepage || packed?.homepage || '',
+          description: r.plugin?.description || packed?.description || '',
+          skills: r.skills?.length ? r.skills : (packed?.skills || []),
+        }
+      }
+    } catch { /* 包解析失败时仍展示列表里的说明 */ }
+  }
+  if (!packed) return null
+  packageById.value = { ...packageById.value, [item.id]: packed }
+  applyPackage(item, packed)
+  return packed
+}
+
+function queueInspect(item: any) {
+  if (!item?.id || isMock.value || item.homepage) return
+  const cached = packageById.value[item.id]
+  if (cached) {
+    applyPackage(item, cached)
+    return
+  }
+  if (inspectingIds.has(item.id)) return
+  inspectingIds.add(item.id)
+  inspectQueue.push(item)
+  pumpInspect()
+}
+
+function pumpInspect() {
+  while (inspectActive < 3 && inspectQueue.length) {
+    const item = inspectQueue.shift()
+    inspectActive += 1
+    ensurePackage(item).finally(() => {
+      inspectActive -= 1
+      pumpInspect()
+    })
+  }
+}
+
+const drawerOpen = ref(false)
+const drawerItem = ref<any>(null)
+const drawerLoading = ref(false)
+const drawerTab = ref<'detail' | 'source'>('detail')
+const drawerSkillName = ref('')
+
+const drawerSkills = computed(() => packageById.value[drawerItem.value?.id]?.skills || [])
+const activeMarketSkill = computed(() =>
+  drawerSkills.value.find((s) => s.name === drawerSkillName.value) || drawerSkills.value[0] || null,
+)
+
+async function openMarketDetail(item: any, skillName?: string) {
+  drawerOpen.value = true
+  drawerItem.value = item
+  drawerTab.value = 'detail'
+  if (skillName) drawerSkillName.value = skillName
+  drawerLoading.value = !packageById.value[item.id]
+  await ensurePackage(item)
+  drawerLoading.value = false
+  if (!drawerSkillName.value && drawerSkills.value[0]) drawerSkillName.value = drawerSkills.value[0].name
+}
+
+function closeMarketDetail() {
+  drawerOpen.value = false
+}
+
+function onMarketDrawerKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && drawerOpen.value) closeMarketDetail()
+}
+
+watch(items, (list) => {
+  if (isMock.value) return
+  // 热门推荐不在「最新」前 24 里，也要补原文地址。其余只补首屏，避免一次拉几百个包。
+  const featured = list
+    .slice()
+    .sort((a, b) => ((b.downloads || 0) + (b.likes || 0)) - ((a.downloads || 0) + (a.likes || 0)))
+    .slice(0, 4)
+  const seen = new Set<string>()
+  for (const item of [...featured, ...list.slice(0, 24)]) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    queueInspect(item)
+  }
+})
+
 async function downloadPlugin(p: any) {
   const url = serverApi('/api/marketplace/download?id=' + encodeURIComponent(p.id))
   if (!url) { ui.toast('请先配置 Server 地址', 'err'); return }
@@ -443,12 +595,14 @@ function applySuggest(tag: string) {
 }
 
 onMounted(() => {
+  document.addEventListener('keydown', onMarketDrawerKey)
   mkt.browse()
   refreshPluginList()
   if (auth.isLoggedIn) loadTeams()
   // 从独立菜单（我的发布）进入时，初始 Tab 为 mine，需主动加载
   if (activeTab.value === 'mine') { loadMyPlugins(); loadFavorites(); loadLiked() }
 })
+onUnmounted(() => document.removeEventListener('keydown', onMarketDrawerKey))
 </script>
 
 <template>
@@ -543,7 +697,8 @@ onMounted(() => {
           </div>
           <div class="mkt-featured-body">
             <h3>{{ p.name }}<span class="mkt-ver">v{{ p.version }}</span></h3>
-            <p class="mkt-featured-desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
+            <p class="mkt-featured-desc">{{ p.description || '暂无描述' }}</p>
+            <a v-if="p.homepage" class="mkt-origin" :href="p.homepage" target="_blank" rel="noopener noreferrer">原文地址</a>
           </div>
           <div class="mkt-featured-meta">
             <span class="mkt-chip brand">⬇ {{ p.downloads || 0 }}</span>
@@ -559,6 +714,7 @@ onMounted(() => {
               {{ mkt.installing === p.id ? '安装中…' : '安装' }}
             </button>
             <div class="mkt-featured-ops">
+              <button type="button" class="mkt-btn mkt-btn-ghost" @click="openMarketDetail(p)">详情</button>
               <a class="mkt-btn mkt-btn-ghost" @click="downloadPlugin(p)" href="javascript:void(0)">下载</a>
             </div>
           </div>
@@ -644,6 +800,7 @@ onMounted(() => {
                   <span class="mkt-ver">v{{ item.version }}</span>
                 </h3>
                 <p class="mkt-desc">{{ item.description || '无描述' }}</p>
+                <a v-if="item.homepage" class="mkt-origin" :href="item.homepage" target="_blank" rel="noopener noreferrer">原文地址</a>
               </div>
             </div>
 
@@ -685,6 +842,7 @@ onMounted(() => {
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg>
                 {{ installing === item.id ? '安装中…' : '安装' }}
               </button>
+              <button type="button" class="mkt-btn mkt-btn-ghost" :disabled="isMock" @click="openMarketDetail(item)">详情</button>
               <a
                 v-if="!isMock"
                 class="mkt-btn mkt-btn-ghost"
@@ -1105,6 +1263,78 @@ onMounted(() => {
         </div>
       </Transition>
     </Teleport>
+
+    <Teleport to="body">
+      <Transition name="upgrade-modal">
+        <div v-if="drawerOpen" class="mkt-drawer-root">
+          <div class="mkt-drawer-mask" @click="closeMarketDetail" />
+          <aside class="mkt-drawer" role="dialog" aria-modal="true" aria-labelledby="mkt-drawer-title">
+            <header class="mkt-drawer-head">
+              <div>
+                <div class="mkt-drawer-kicker">插件详情</div>
+                <h2 id="mkt-drawer-title">{{ drawerItem?.name }}</h2>
+              </div>
+              <button type="button" class="upgrade-close" aria-label="关闭" @click="closeMarketDetail">×</button>
+            </header>
+            <div v-if="drawerLoading" class="mkt-drawer-state">正在读取插件包…</div>
+            <div v-else class="mkt-drawer-body">
+              <section class="mkt-drawer-summary">
+                <p>{{ packageById[drawerItem?.id]?.description || drawerItem?.description || '暂无描述' }}</p>
+                <a
+                  v-if="drawerItem?.homepage"
+                  class="mkt-origin"
+                  :href="drawerItem.homepage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >原文地址</a>
+                <span v-else class="mkt-drawer-state">这个包里没有原文地址</span>
+              </section>
+              <div v-if="!drawerSkills.length" class="mkt-drawer-state">这个插件里没有技能说明</div>
+              <div v-else class="mkt-drawer-skills">
+                <nav class="mkt-drawer-nav" aria-label="技能列表">
+                  <button
+                    v-for="s in drawerSkills"
+                    :key="s.name"
+                    type="button"
+                    class="mkt-skill-nav"
+                    :class="{ on: activeMarketSkill?.name === s.name }"
+                    @click="drawerSkillName = s.name"
+                  >
+                    <b>{{ s.name }}</b>
+                    <span>{{ s.description || '暂无描述' }}</span>
+                  </button>
+                </nav>
+                <section v-if="activeMarketSkill" class="mkt-drawer-main">
+                  <div class="mkt-skill-tabs" role="tablist">
+                    <button type="button" :class="{ on: drawerTab === 'detail' }" @click="drawerTab = 'detail'">详情</button>
+                    <button type="button" :class="{ on: drawerTab === 'source' }" @click="drawerTab = 'source'">原文</button>
+                  </div>
+                  <div v-if="drawerTab === 'detail'" class="mkt-skill-pane">
+                    <h3>{{ activeMarketSkill.name }}</h3>
+                    <p>{{ activeMarketSkill.description || '暂无描述' }}</p>
+                    <p v-if="activeMarketSkill.source" class="mkt-skill-source">来源 {{ activeMarketSkill.source }}</p>
+                    <h4>步骤</h4>
+                    <pre>{{ skillSteps(activeMarketSkill.body) || '暂无步骤说明' }}</pre>
+                  </div>
+                  <div v-else class="mkt-skill-pane">
+                    <div class="mkt-skill-sourcebar">
+                      <span>SKILL.md</span>
+                      <a
+                        v-if="activeMarketSkill.source_url"
+                        :href="activeMarketSkill.source_url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >打开来源</a>
+                    </div>
+                    <pre>{{ activeMarketSkill.body || '暂无原文' }}</pre>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -1513,9 +1743,8 @@ onMounted(() => {
 .mkt-featured-body h3 { margin: 0; font-size: 14px; font-weight: 700; color: #1f2329; }
 .mkt-ver { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px; color: #86909c; margin-left: 6px; font-weight: 500; }
 .mkt-featured-desc {
-  margin: 4px 0 0; font-size: 12.5px; color: #86909c; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; min-height: 2.9em;
+  margin: 4px 0 0; font-size: 12.5px; color: #4e5969; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
 }
 .mkt-featured-meta { display: flex; flex-wrap: wrap; gap: 6px; }
 .mkt-chip { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: #f7f8fa; color: #4e5969; }
@@ -1909,7 +2138,7 @@ onMounted(() => {
   min-width: 200px;
 }
 .mkt-grid.view-list .mkt-desc {
-  -webkit-line-clamp: 1;
+  white-space: pre-wrap;
 }
 .mkt-grid.view-list .mkt-actions {
   margin-top: 0;
@@ -1953,10 +2182,59 @@ onMounted(() => {
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--color-ink-700, #4e5969);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.mkt-origin {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-brand-600, #0e42d2);
+}
+.mkt-drawer-root { position: fixed; inset: 0; z-index: 80; }
+.mkt-drawer-mask { position: absolute; inset: 0; background: rgba(31, 35, 41, .4); }
+.mkt-drawer {
+  position: absolute; top: 0; right: 0; height: 100%; width: min(880px, 100%);
+  background: var(--bg-elevated, #fff); box-shadow: -8px 0 32px rgba(0, 0, 0, .12);
+  display: flex; flex-direction: column;
+}
+.mkt-drawer-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 18px; border-bottom: 1px solid var(--border-base, #e5e6eb);
+}
+.mkt-drawer-kicker { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: #86909c; }
+.mkt-drawer-head h2 { margin: 2px 0 0; font-size: 16px; }
+.mkt-drawer-state { padding: 12px 18px; color: #86909c; font-size: 13px; }
+.mkt-drawer-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.mkt-drawer-summary { padding: 14px 18px; border-bottom: 1px solid var(--border-base, #e5e6eb); }
+.mkt-drawer-summary p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.mkt-drawer-skills { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px 1fr; }
+.mkt-drawer-nav { overflow: auto; border-right: 1px solid var(--border-base, #e5e6eb); padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.mkt-skill-nav {
+  text-align: left; border: none; background: transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.mkt-skill-nav b { font-size: 12.5px; }
+.mkt-skill-nav span { font-size: 11px; color: #86909c; }
+.mkt-skill-nav.on, .mkt-skill-nav:hover { background: #eef4ff; }
+.mkt-drawer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.mkt-skill-tabs { display: flex; gap: 4px; padding: 10px 16px 0; }
+.mkt-skill-tabs button {
+  height: 30px; padding: 0 12px; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; font-weight: 700; color: #86909c; border-radius: 8px 8px 0 0;
+}
+.mkt-skill-tabs button.on { color: #0e42d2; background: #f7f8fa; }
+.mkt-skill-pane { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 20px; background: #f7f8fa; }
+.mkt-skill-pane h3 { margin: 0; font-size: 15px; }
+.mkt-skill-pane h4 { margin: 14px 0 6px; font-size: 12px; color: #86909c; }
+.mkt-skill-pane p { margin: 8px 0 0; font-size: 13px; line-height: 1.5; }
+.mkt-skill-source, .mkt-skill-sourcebar { font-size: 12px; color: #86909c; }
+.mkt-skill-sourcebar { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+.mkt-skill-sourcebar a { color: #0e42d2; }
+.mkt-skill-pane pre {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: Consolas, monospace; font-size: 12px; line-height: 1.55;
 }
 .mkt-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .mkt-tag {
