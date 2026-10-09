@@ -136,12 +136,10 @@ def _script_run_shell_cmd(script_name: str, args: list) -> str:
     return " ".join(f'"{p}"' if (" " in p or '"' in p) else p for p in parts)
 
 
-def _sync_llm_to_all_ides() -> None:
-    """保存 LLM 后同步到所有 IDE；失败时抛错，禁止返回虚假成功。"""
+def _run_agentctl(args: list[str]) -> None:
+    """运行 agentctl。失败时抛错，禁止保存接口返回虚假成功。"""
     result = subprocess.run(
-        _script_run_cmd("agentctl", [
-            "sync", "--ide", "All", "--force", "--scope", "llm,mcp",
-        ]),
+        _script_run_cmd("agentctl", args),
         cwd=str(PROJECT_ROOT),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -155,6 +153,35 @@ def _sync_llm_to_all_ides() -> None:
         lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
         detail = lines[-1] if lines else f"returncode={result.returncode}"
         raise RuntimeError(f"LLM 配置已保存，但同步失败: {detail}")
+
+
+def _selected_sync_ides() -> list[str]:
+    """同步栏勾选的 IDE。只接受注册表里的名字，All 则只同步全部一次。"""
+    from agentctl.lib.ide import IDE_REGISTRY
+
+    raw = _load_ui_state().get("ideSyncTargets") or []
+    if not isinstance(raw, list):
+        return []
+    names: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if name == "All":
+            return ["All"]
+        if name in IDE_REGISTRY and name not in names:
+            names.append(name)
+    return names
+
+
+def _sync_llm_after_save() -> None:
+    """保存 LLM 后只同步勾选的 IDE。没勾选时只 generate，不写入其它 IDE 目录。"""
+    targets = _selected_sync_ides()
+    if not targets:
+        _run_agentctl(["generate"])
+        return
+    for ide in targets:
+        _run_agentctl(["sync", "--ide", ide, "--force", "--scope", "llm,mcp"])
 
 
 try:
@@ -1085,7 +1112,7 @@ def save_llm():
                 }), 400
         # 保存后必须 generate + sync，不能依赖前端再发第二个请求。
         save_env_config_file(path, data)
-        _sync_llm_to_all_ides()
+        _sync_llm_after_save()
         return jsonify({"ok": True, "path": str(path.relative_to(PROJECT_ROOT)), "synced": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

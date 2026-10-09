@@ -128,6 +128,22 @@ def _append_codex_candidate_providers(config_path, env_config, active_provider):
 # 子命令实现
 # ============================================================
 
+# 这些 IDE 会把 generate 产物复制到自己的目录。其它 IDE 直接读 llm.yaml。
+_GENERATE_TEMPLATE_GROUPS = {
+    "OpenCode": "opencode",
+    "Codex": "codex",
+    "Claude": "claude",
+}
+
+
+def _template_groups_for_ide(ide_name: str | None) -> set[str] | None:
+    """指定 IDE 时只生成它会复制的模板。None 表示全部（generate / sync All）。"""
+    if not ide_name or ide_name == "All":
+        return None
+    group = _GENERATE_TEMPLATE_GROUPS.get(ide_name)
+    return {group} if group else set()
+
+
 def cmd_generate(args):
     """生成运行态配置：mcp.json + 各 IDE 模板配置（opencode/codex/claude/proxy）。"""
     env_config = llm.load_split_env_config(PROJECT_ROOT)
@@ -167,10 +183,15 @@ def cmd_generate(args):
     mcp.invoke_mcp_generate_step(flat_config, mcp_yaml_file, mcp_output,
                                   plugins_dir=plugins_dir, installed_names=installed)
 
+    template_groups = _template_groups_for_ide(getattr(args, "ide", None))
+
+    def _want(group: str) -> bool:
+        return template_groups is None or group in template_groups
+
     # 2. 生成 opencode.json（从模板 + 注入模型）→ config/ide/opencode/
     opencode_template = PROJECT_ROOT / "template" / "ide" / "opencode" / "opencode.template.json"
     opencode_output = PROJECT_ROOT / "config" / "ide" / "opencode" / "opencode.json"
-    if opencode_template.exists():
+    if _want("opencode") and opencode_template.exists():
         opencode_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, opencode_template, opencode_output)
         mcp._inject_opencode_models(opencode_output, env_config)
@@ -182,27 +203,28 @@ def cmd_generate(args):
 
     # 3. 生成 codex auth.json + config.toml（从模板）→ config/ide/codex/
     # Codex 使用 responses 协议，需要专用 flat_config
-    codex_protocols = get_ide_protocols("Codex")
-    codex_flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols,
-                                               ide_protocols=codex_protocols)
-    codex_auth_template = PROJECT_ROOT / "template" / "ide" / "codex" / "auth.template.json"
-    codex_auth_output = PROJECT_ROOT / "config" / "ide" / "codex" / "auth.json"
-    if codex_auth_template.exists():
-        codex_auth_output.parent.mkdir(parents=True, exist_ok=True)
-        mcp.invoke_generate_step(codex_flat_config, codex_auth_template, codex_auth_output)
+    if _want("codex"):
+        codex_protocols = get_ide_protocols("Codex")
+        codex_flat_config = llm.flatten_env_config(env_config, active_provider, active_protocols,
+                                                   ide_protocols=codex_protocols)
+        codex_auth_template = PROJECT_ROOT / "template" / "ide" / "codex" / "auth.template.json"
+        codex_auth_output = PROJECT_ROOT / "config" / "ide" / "codex" / "auth.json"
+        if codex_auth_template.exists():
+            codex_auth_output.parent.mkdir(parents=True, exist_ok=True)
+            mcp.invoke_generate_step(codex_flat_config, codex_auth_template, codex_auth_output)
 
-    codex_config_template = PROJECT_ROOT / "template" / "ide" / "codex" / "config.template.toml"
-    codex_config_output = PROJECT_ROOT / "config" / "ide" / "codex" / "config.toml"
-    if codex_config_template.exists():
-        codex_config_output.parent.mkdir(parents=True, exist_ok=True)
-        mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
-        # 追加其他启用的 provider 作为候选 model_providers
-        _append_codex_candidate_providers(codex_config_output, env_config, active_provider)
+        codex_config_template = PROJECT_ROOT / "template" / "ide" / "codex" / "config.template.toml"
+        codex_config_output = PROJECT_ROOT / "config" / "ide" / "codex" / "config.toml"
+        if codex_config_template.exists():
+            codex_config_output.parent.mkdir(parents=True, exist_ok=True)
+            mcp.invoke_generate_step(codex_flat_config, codex_config_template, codex_config_output)
+            # 追加其他启用的 provider 作为候选 model_providers
+            _append_codex_candidate_providers(codex_config_output, env_config, active_provider)
 
     # 4. 生成 claude settings.json（从模板）→ config/ide/claude/
     claude_template = PROJECT_ROOT / "template" / "ide" / "claude" / "settings.template.json"
     claude_output = PROJECT_ROOT / "config" / "ide" / "claude" / "settings.json"
-    if claude_template.exists():
+    if _want("claude") and claude_template.exists():
         claude_output.parent.mkdir(parents=True, exist_ok=True)
         mcp.invoke_generate_step(flat_config, claude_template, claude_output)
 
@@ -336,10 +358,10 @@ def cmd_sync(args):
                 pass
         mcp.refresh_mcp_json(mcp_yaml_file, source_mcp, plugins_dir, installed, flat_config)
 
-    # 始终通过唯一的 generate 入口刷新所有 LLM 产物。维护一份 IDE 列表可避免
-    # OpenCode、OpenWorker 等目标在 sync 时继续复制历史配置。
+    # 只刷新本次目标会复制的模板，避免同步 Pi 时把 Codex/Claude 产物也重写一遍。
+    # sync All 仍生成全部模板。
     if "llm" in scope and llm_yaml_file.exists():
-        cmd_generate(argparse.Namespace(provider=None, protocol=None))
+        cmd_generate(argparse.Namespace(provider=None, protocol=None, ide=ide_name))
 
     # skill 源（三源并集）:
     #   1. template/skills/   - 内置预置技能（只读）

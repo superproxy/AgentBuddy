@@ -40,7 +40,46 @@ def test_sync_regenerates_all_ide_outputs_before_copying(tmp_path):
 
     assert result is True
     generate.assert_called_once()
+    assert generate.call_args.args[0].ide == "OpenCode"
     assert target.run.call_count >= 1
+
+
+def test_template_groups_for_pi_exclude_codex():
+    assert agentctl._template_groups_for_ide("Pi") == set()
+    assert agentctl._template_groups_for_ide("Codex") == {"codex"}
+    assert agentctl._template_groups_for_ide("All") is None
+    assert agentctl._template_groups_for_ide(None) is None
+
+
+def test_generate_for_pi_does_not_render_codex_templates(tmp_path, monkeypatch):
+    for rel in (
+        "template/ide/opencode/opencode.template.json",
+        "template/ide/codex/auth.template.json",
+        "template/ide/codex/config.template.toml",
+        "template/ide/claude/settings.template.json",
+        "template/proxy/config.template.yaml",
+    ):
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+    rendered = []
+
+    def fake_step(_flat, template, output, prune=True):
+        rendered.append(Path(template).name)
+
+    monkeypatch.setattr(agentctl, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(agentctl.llm, "load_split_env_config", lambda *_a, **_k: {"llm": {}})
+    monkeypatch.setattr(agentctl.llm, "get_active_provider", lambda _c: "")
+    monkeypatch.setattr(agentctl.llm, "get_active_protocols", lambda _c: [])
+    monkeypatch.setattr(agentctl.llm, "flatten_env_config", lambda *_a, **_k: {})
+    monkeypatch.setattr(agentctl.mcp, "invoke_generate_step", fake_step)
+    monkeypatch.setattr(agentctl.mcp, "invoke_mcp_generate_step", lambda *_a, **_k: None)
+    monkeypatch.setattr(agentctl.plugins, "read_installed_plugins", lambda *_a, **_k: [])
+
+    agentctl.cmd_generate(argparse.Namespace(provider=None, protocol=None, ide="Pi"))
+
+    assert rendered == ["config.template.yaml"]
 
 
 def test_sync_returns_false_when_any_ide_fails(tmp_path):

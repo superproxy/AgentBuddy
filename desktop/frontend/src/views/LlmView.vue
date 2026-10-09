@@ -4,7 +4,6 @@ import { storeToRefs } from 'pinia'
 import * as yaml from 'js-yaml'
 import { useEnvStore } from '../stores/env'
 import { useUiStore } from '../stores/ui'
-import { api } from '../api/client'
 import SmartProviderPicker from '../components/SmartProviderPicker.vue'
 
 const env = useEnvStore()
@@ -111,8 +110,6 @@ async function toggleProxyRun() {
   envData.value.proxy.gateway.enabled = true
   const sr = await saveEnv(true)
   if (!sr) { ui.toast('保存失败', 'err'); return }
-  const r = await api<{ ok: boolean; stdout?: string; stderr?: string }>('/api/sync', { method: 'POST' })
-  if (!r.ok) { ui.toast('生成配置失败', 'err'); return }
   proxyRunning.value = true
   ui.toast('LLM 网关已启动，配置已生成')
   await startProxyServer()
@@ -279,13 +276,8 @@ let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
 function autoSave() {
   if (autoSaveTimer) clearTimeout(autoSaveTimer)
   autoSaveTimer = setTimeout(async () => {
-    const ok = await saveEnv(true)
-    if (ok) {
-      // 保存后自动重新生成 IDE 配置（codex config.toml / auth.json 等）
-      try {
-        await api('/api/sync', { method: 'POST' })
-      } catch { /* 静默失败，不影响保存 */ }
-    }
+    // 保存接口会按同步栏勾选的 IDE 同步，不再额外 POST /api/sync（那会同步全部 IDE）
+    await saveEnv(true)
   }, 500)
 }
 watch(activeSource, () => autoSave())
