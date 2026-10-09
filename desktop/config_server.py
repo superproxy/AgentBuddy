@@ -2853,6 +2853,71 @@ def _plugin_search_dirs() -> list[Path]:
     return dirs
 
 
+_SKILL_SOURCE_REPO_RE = re.compile(r"^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)(?:@.+)?$")
+
+
+def _skill_source_url(source: str, fallback: str = "") -> str:
+    """把 skill.source / 插件主页收成可打开的原文链接。"""
+    text = (source or "").strip()
+    if text.startswith("ai-extracted:"):
+        text = text.split(":", 1)[1].strip()
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    match = _SKILL_SOURCE_REPO_RE.match(text)
+    if match:
+        return f"https://github.com/{match.group(1)}/{match.group(2)}"
+    fb = (fallback or "").strip()
+    if fb.startswith("http://") or fb.startswith("https://"):
+        return fb
+    return ""
+
+
+def _read_installed_skill_md(name: str) -> str:
+    """已安装技能目录里的 SKILL.md。插件 yaml 没带正文时用它当原文。"""
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        return ""
+    for base in (PROJECT_SKILLS_DIR, DOT_AGENTS_SKILLS, AGENTS_SKILLS_CACHE):
+        cand = base / name / "SKILL.md"
+        if cand.is_file():
+            try:
+                return cand.read_text(encoding="utf-8")
+            except OSError:
+                return ""
+    return ""
+
+
+def _plugin_skill_entries(cfg: dict) -> list[dict]:
+    """插件配置里的技能明细：名称、描述、正文和原文链接。"""
+    homepage = str(cfg.get("homepage") or "")
+    repo = cfg.get("repository") or ""
+    if isinstance(repo, dict):
+        repo = repo.get("url") or ""
+    fallback = homepage if homepage.startswith("http") else (str(repo) if str(repo).startswith("http") else "")
+    entries: list[dict] = []
+    for item in cfg.get("skills") or []:
+        if isinstance(item, dict):
+            name = str(item.get("name") or item.get("skill") or "").strip()
+            description = str(item.get("description") or "").strip()
+            version = str(item.get("version") or "").strip()
+            source = str(item.get("source") or "").strip()
+            body = str(item.get("body") or "").strip() or _read_installed_skill_md(name)
+        else:
+            name = str(item).strip()
+            description = version = source = ""
+            body = _read_installed_skill_md(name)
+        if not name:
+            continue
+        entries.append({
+            "name": name,
+            "description": description,
+            "version": version,
+            "source": source,
+            "source_url": _skill_source_url(source, fallback),
+            "body": body,
+        })
+    return entries
+
+
 def _resolve_plugin_path(fname: str) -> Path | None:
     """在 config/plugins/ 和 template/plugins/ 中查找插件文件。
 
@@ -3558,6 +3623,16 @@ def list_plugins():
             try:
                 cfg = load_env_config_file(f)
                 if isinstance(cfg, dict) and "name" in cfg:
+                    skill_summaries = []
+                    for item in cfg.get("skills") or []:
+                        if isinstance(item, dict):
+                            skill_name = str(item.get("name") or item.get("skill") or "").strip()
+                            skill_desc = str(item.get("description") or "").strip()
+                        else:
+                            skill_name = str(item).strip()
+                            skill_desc = ""
+                        if skill_name:
+                            skill_summaries.append({"name": skill_name, "description": skill_desc})
                     plugins.append({
                         "file": f.name,
                         "name": cfg.get("name"),
@@ -3568,13 +3643,41 @@ def list_plugins():
                         "keywords": cfg.get("keywords") or [],
                         "categories": cfg.get("categories") or [],
                         "homepage": cfg.get("homepage", ""),
-                        "skills_count": len(cfg.get("skills") or []),
+                        "skills": skill_summaries,
+                        "skills_count": len(skill_summaries),
                         "mcp_count": len(cfg.get("mcpServers") or {}),
                         "installed": cfg.get("name") in installed_names,
                     })
             except Exception:
                 continue
     return jsonify({"ok": True, "data": plugins})
+
+
+@app.route("/api/plugin/skills", methods=["GET"])
+def plugin_skills():
+    """单个插件里的技能明细，含 SKILL.md 正文，供抽屉的详情和原文页签。"""
+    fname = (request.args.get("file") or "").strip()
+    if not fname or "/" in fname or "\\" in fname or fname.startswith("."):
+        return jsonify({"ok": False, "error": "非法插件文件"}), 400
+    path = _resolve_plugin_path(fname)
+    if not path:
+        return jsonify({"ok": False, "error": "插件不存在"}), 404
+    try:
+        cfg = load_env_config_file(path)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    if not isinstance(cfg, dict):
+        return jsonify({"ok": False, "error": "插件配置无效"}), 400
+    return jsonify({
+        "ok": True,
+        "plugin": {
+            "file": fname,
+            "name": cfg.get("name") or "",
+            "description": cfg.get("description") or "",
+            "homepage": cfg.get("homepage") or "",
+        },
+        "skills": _plugin_skill_entries(cfg),
+    })
 
 
 @app.route("/api/plugin/save", methods=["POST"])

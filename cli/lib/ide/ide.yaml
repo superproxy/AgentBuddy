@@ -594,7 +594,7 @@ install_meta:
     category: code
     forms: [cli]
 
-  HermesAgent:
+  Hermes:
     # Hermes Agent（Nous Research 开源自进化 AI Agent）
     # 官网：https://hermes-agent.nousresearch.com/
     # 文档：https://hermes-agent.nousresearch.com/docs
@@ -1300,12 +1300,13 @@ detect_meta:
     is_tui: true
     protocols: [openaiv1]
 
-  HermesAgent:
+  Hermes:
     # Hermes Agent（Nous Research 开源自进化 AI Agent）
     label: Hermes Agent
     cli_names: [hermes]
     macos_apps: ["/Applications/Hermes.app"]
     windows_apps:
+      - "{LOCALAPPDATA}/hermes/bin/hermes.exe"
       - "{LOCALAPPDATA}/Programs/hermes/Hermes.exe"
       - "{ProgramFiles}/hermes/Hermes.exe"
     config_dirs: [".hermes", ".ade-hermes"]

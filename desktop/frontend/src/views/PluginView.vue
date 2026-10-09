@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { usePluginStore } from '../stores/plugin'
+import { usePluginStore, type PluginItem } from '../stores/plugin'
 import { useUiStore } from '../stores/ui'
 import { useAuthStore } from '../stores/auth'
 import { api, serverApi } from '../api/client'
@@ -91,7 +91,10 @@ const filteredPlugins = computed(() => {
     if (listFilter.value === 'on' && !p.installed) return false
     if (listFilter.value === 'off' && p.installed) return false
     if (!q) return true
-    return p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
+    const skillHit = (p.skills || []).some((s) =>
+      (s.name || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q),
+    )
+    return skillHit || p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
   })
 })
 
@@ -160,6 +163,79 @@ async function onImportDrop(e: DragEvent) {
   const file = e.dataTransfer?.files?.[0]
   if (file) doImportFile(file)
 }
+interface SkillDetail {
+  name: string
+  description: string
+  version: string
+  source: string
+  source_url: string
+  body: string
+}
+
+const drawerOpen = ref(false)
+const drawerFile = ref('')
+const drawerPluginName = ref('')
+const drawerLoading = ref(false)
+const drawerError = ref('')
+const drawerSkills = ref<SkillDetail[]>([])
+const drawerSkillName = ref('')
+const drawerTab = ref<'detail' | 'source'>('detail')
+
+const activeSkill = computed(() =>
+  drawerSkills.value.find((s) => s.name === drawerSkillName.value) || drawerSkills.value[0] || null,
+)
+
+function skillSteps(body: string): string {
+  const text = (body || '').trim()
+  if (!text.startsWith('---')) return text
+  const end = text.indexOf('\n---', 3)
+  return end === -1 ? text : text.slice(end + 4).trim()
+}
+
+function onDrawerKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && drawerOpen.value) closeSkillDrawer()
+}
+
+async function openSkillDrawer(p: PluginItem, skillName?: string) {
+  const samePlugin = drawerOpen.value && drawerFile.value === p.file && drawerSkills.value.length && !drawerLoading.value
+  drawerOpen.value = true
+  drawerFile.value = p.file
+  drawerPluginName.value = p.name
+  if (skillName) drawerSkillName.value = skillName
+  if (samePlugin) return
+  drawerTab.value = 'detail'
+  drawerError.value = ''
+  drawerLoading.value = true
+  drawerSkills.value = []
+  try {
+    const r = await api<{ ok: boolean; skills?: SkillDetail[]; error?: string }>(
+      '/api/plugin/skills?file=' + encodeURIComponent(p.file),
+    )
+    if (!drawerOpen.value || drawerFile.value !== p.file) return
+    if (!r.ok) {
+      drawerError.value = r.error || '读取失败'
+      return
+    }
+    drawerSkills.value = r.skills || []
+    const names = new Set(drawerSkills.value.map((s) => s.name))
+    if (!drawerSkillName.value || !names.has(drawerSkillName.value)) {
+      drawerSkillName.value = drawerSkills.value[0]?.name || ''
+    }
+  } catch (e: any) {
+    if (drawerFile.value === p.file) drawerError.value = e?.message || '读取失败'
+  } finally {
+    if (drawerFile.value === p.file) drawerLoading.value = false
+  }
+}
+
+function closeSkillDrawer() {
+  drawerOpen.value = false
+}
+
+function selectDrawerSkill(name: string) {
+  drawerSkillName.value = name
+}
+
 async function doImportFile(file: File) {
   const ok = /\.(ya?ml|zip)$/i.test(file.name)
   if (!ok) {
@@ -323,8 +399,12 @@ async function onDrop(e: DragEvent) {
 onMounted(() => {
   refreshPluginList()
   document.addEventListener('click', onDocClick)
+  window.addEventListener('keydown', onDrawerKey)
 })
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('keydown', onDrawerKey)
+})
 </script>
 
 <template>
@@ -461,9 +541,33 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
               </td>
               <td>
                 <div class="name">{{ p.name }}<span class="ver">v{{ p.version }}</span></div>
+                <div v-if="p.skills?.length" class="skill-chips">
+                  <button
+                    v-for="s in p.skills.slice(0, 4)"
+                    :key="s.name"
+                    type="button"
+                    class="skill-chip"
+                    :title="s.description || s.name"
+                    @click="openSkillDrawer(p, s.name)"
+                  >{{ s.name }}</button>
+                  <button
+                    v-if="p.skills.length > 4"
+                    type="button"
+                    class="skill-chip more"
+                    @click="openSkillDrawer(p, p.skills[4].name)"
+                  >+{{ p.skills.length - 4 }}</button>
+                </div>
               </td>
               <td><div class="desc" :title="p.description">{{ p.description || '—' }}</div></td>
-              <td><span class="num-cell">{{ p.skills_count || 0 }}</span></td>
+              <td>
+                <button
+                  v-if="p.skills_count"
+                  type="button"
+                  class="num-btn"
+                  @click="openSkillDrawer(p, p.skills?.[0]?.name)"
+                >{{ p.skills_count }}</button>
+                <span v-else class="num-cell">0</span>
+              </td>
               <td><span class="num-cell">{{ p.mcp_count || 0 }}</span></td>
               <td>
                 <span class="status" :class="p.installed ? 'on' : 'off'"><i />{{ p.installed ? '已安装' : '未安装' }}</span>
@@ -533,8 +637,29 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
             <h3 :title="p.name">{{ p.name }}<span class="ver">v{{ p.version }}</span></h3>
             <p class="card-desc" :title="p.description">{{ p.description || '暂无描述' }}</p>
           </div>
+          <div v-if="p.skills?.length" class="skill-chips">
+            <button
+              v-for="s in p.skills.slice(0, 4)"
+              :key="s.name"
+              type="button"
+              class="skill-chip"
+              :title="s.description || s.name"
+              @click="openSkillDrawer(p, s.name)"
+            >{{ s.name }}</button>
+            <button
+              v-if="p.skills.length > 4"
+              type="button"
+              class="skill-chip more"
+              @click="openSkillDrawer(p, p.skills[4].name)"
+            >+{{ p.skills.length - 4 }}</button>
+          </div>
           <div class="card-meta">
-            <span class="mkt-chip brand">{{ p.skills_count || 0 }} skills</span>
+            <button
+              type="button"
+              class="mkt-chip brand skill-count-btn"
+              :disabled="!p.skills_count"
+              @click="openSkillDrawer(p, p.skills?.[0]?.name)"
+            >{{ p.skills_count || 0 }} skills</button>
             <span class="mkt-chip">{{ p.mcp_count || 0 }} mcp</span>
           </div>
           <div class="card-foot">
@@ -739,6 +864,78 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
         </div>
       </Transition>
     </Teleport>
+
+    <Teleport to="body">
+      <Transition name="drawer-fade">
+        <div v-if="drawerOpen" class="skill-drawer-root">
+          <div class="skill-drawer-mask" @click="closeSkillDrawer" />
+          <aside class="skill-drawer" role="dialog" aria-modal="true" aria-labelledby="skill-drawer-title">
+            <header class="skill-drawer-head">
+              <div>
+                <div class="skill-drawer-kicker">插件技能</div>
+                <h2 id="skill-drawer-title">{{ drawerPluginName }}</h2>
+              </div>
+              <button type="button" class="modal-close" aria-label="关闭" @click="closeSkillDrawer">×</button>
+            </header>
+            <div v-if="drawerLoading" class="skill-drawer-state">正在读取技能…</div>
+            <div v-else-if="drawerError" class="skill-drawer-state">{{ drawerError }}</div>
+            <div v-else-if="!drawerSkills.length" class="skill-drawer-state">这个插件里没有技能</div>
+            <div v-else class="skill-drawer-body">
+              <nav class="skill-drawer-nav" aria-label="技能列表">
+                <button
+                  v-for="s in drawerSkills"
+                  :key="s.name"
+                  type="button"
+                  class="skill-nav-item"
+                  :class="{ on: activeSkill?.name === s.name }"
+                  @click="selectDrawerSkill(s.name)"
+                >
+                  <b>{{ s.name }}</b>
+                  <span>{{ s.description || '暂无描述' }}</span>
+                </button>
+              </nav>
+              <section v-if="activeSkill" class="skill-drawer-main">
+                <div class="skill-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="drawerTab === 'detail'"
+                    :class="{ on: drawerTab === 'detail' }"
+                    @click="drawerTab = 'detail'"
+                  >详情</button>
+                  <button
+                    type="button"
+                    role="tab"
+                    :aria-selected="drawerTab === 'source'"
+                    :class="{ on: drawerTab === 'source' }"
+                    @click="drawerTab = 'source'"
+                  >原文</button>
+                </div>
+                <div v-if="drawerTab === 'detail'" class="skill-pane" role="tabpanel">
+                  <h3>{{ activeSkill.name }}<span v-if="activeSkill.version" class="ver">v{{ activeSkill.version }}</span></h3>
+                  <p class="skill-desc">{{ activeSkill.description || '暂无描述' }}</p>
+                  <p v-if="activeSkill.source" class="skill-source">来源 {{ activeSkill.source }}</p>
+                  <h4>步骤</h4>
+                  <pre class="skill-text">{{ skillSteps(activeSkill.body) || '暂无步骤说明' }}</pre>
+                </div>
+                <div v-else class="skill-pane" role="tabpanel">
+                  <div class="skill-source-bar">
+                    <span>SKILL.md</span>
+                    <a
+                      v-if="activeSkill.source_url"
+                      :href="activeSkill.source_url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >打开来源</a>
+                  </div>
+                  <pre class="skill-text">{{ activeSkill.body || '暂无原文' }}</pre>
+                </div>
+              </section>
+            </div>
+          </aside>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -910,6 +1107,73 @@ th.sortable.active .sort-ic.desc { transform: rotate(180deg); }
 .num-cell {
   font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text-secondary);
 }
+.num-btn {
+  border: none; background: transparent; padding: 0; cursor: pointer;
+  font-variant-numeric: tabular-nums; font-weight: 700; color: var(--primary);
+}
+.num-btn:hover { text-decoration: underline; }
+.skill-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.skill-chip {
+  max-width: 140px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-base);
+  background: var(--bg-base); color: var(--text-secondary); font-size: 11px; font-weight: 600;
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.skill-chip:hover, .skill-chip.more { border-color: var(--primary); color: var(--primary-hover); background: var(--primary-container); }
+.skill-count-btn { border: none; cursor: pointer; font: inherit; }
+.skill-count-btn:disabled { cursor: default; opacity: .7; }
+
+.skill-drawer-root { position: fixed; inset: 0; z-index: 80; }
+.skill-drawer-mask { position: absolute; inset: 0; background: rgba(31, 35, 41, .4); }
+.skill-drawer {
+  position: absolute; top: 0; right: 0; height: 100%; width: min(880px, 100%);
+  background: var(--bg-elevated); box-shadow: -8px 0 32px rgba(0, 0, 0, .12);
+  display: flex; flex-direction: column;
+}
+.skill-drawer-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 18px; border-bottom: 1px solid var(--border-base);
+}
+.skill-drawer-kicker { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--text-tertiary); }
+.skill-drawer-head h2 { margin: 2px 0 0; font-size: 16px; }
+.skill-drawer-state { padding: 28px 18px; color: var(--text-tertiary); font-size: 13px; }
+.skill-drawer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px 1fr; }
+.skill-drawer-nav {
+  overflow: auto; border-right: 1px solid var(--border-base); padding: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.skill-nav-item {
+  text-align: left; border: none; background: transparent; border-radius: 8px;
+  padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+}
+.skill-nav-item b { font-size: 12.5px; color: var(--text-primary); }
+.skill-nav-item span {
+  font-size: 11px; color: var(--text-tertiary); line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.skill-nav-item.on, .skill-nav-item:hover { background: var(--primary-container); }
+.skill-drawer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.skill-tabs { display: flex; gap: 4px; padding: 10px 16px 0; }
+.skill-tabs button {
+  height: 30px; padding: 0 12px; border-radius: 8px 8px 0 0; border: none; background: transparent;
+  font-size: 12px; font-weight: 700; color: var(--text-tertiary); cursor: pointer;
+}
+.skill-tabs button.on { color: var(--primary-hover); background: var(--bg-base); }
+.skill-pane { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px 20px; background: var(--bg-base); }
+.skill-pane h3 { margin: 0; font-size: 15px; }
+.skill-pane h4 { margin: 14px 0 6px; font-size: 12px; color: var(--text-tertiary); }
+.skill-desc { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.skill-source { margin: 6px 0 0; font-size: 12px; color: var(--text-tertiary); }
+.skill-source-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; font-weight: 700; }
+.skill-source-bar a { color: var(--primary); font-weight: 600; }
+.skill-text {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; line-height: 1.55;
+  color: var(--text-primary);
+}
+.drawer-fade-enter-active, .drawer-fade-leave-active { transition: opacity .18s ease; }
+.drawer-fade-enter-active .skill-drawer, .drawer-fade-leave-active .skill-drawer { transition: transform .18s ease; }
+.drawer-fade-enter-from, .drawer-fade-leave-to { opacity: 0; }
+.drawer-fade-enter-from .skill-drawer, .drawer-fade-leave-to .skill-drawer { transform: translateX(24px); }
 .status {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
@@ -1092,6 +1356,8 @@ th.sortable.active .sort-ic.desc { transform: rotate(180deg); }
   .kpis { grid-template-columns: 1fr; }
   .desc-col { width: 140px; }
   td:nth-child(3) { width: 140px; }
+  .skill-drawer-body { grid-template-columns: 1fr; }
+  .skill-drawer-nav { max-height: 180px; border-right: none; border-bottom: 1px solid var(--border-base); }
 }
 @media (prefers-reduced-motion: reduce) {
   .btn, .float-bar { transition: none !important; }

@@ -7,12 +7,18 @@ import { useSyncStore } from './sync'
 import { useSkillStore } from './skill'
 import { useMarketplaceStore } from './marketplace'
 
+export interface PluginSkillSummary {
+  name: string
+  description?: string
+}
+
 export interface PluginItem {
   file: string
   name: string
   version: string
   description: string
   installed: boolean
+  skills?: PluginSkillSummary[]
   skills_count: number
   mcp_count: number
 }
