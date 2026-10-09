@@ -735,7 +735,7 @@ def extract_skills_from_article(title: str, content: str, source_url: str) -> tu
             description=str(s.get("description", "")).strip()[:500],
             version=str(s.get("version", "1.0.0")).strip() or "1.0.0",
             source=src,
-            body=str(s.get("body", "")).strip()[:2000],
+            body=str(s.get("body") or s.get("content") or s.get("instructions") or "").strip()[:2000],
         ))
     return skills, plugin_name
 

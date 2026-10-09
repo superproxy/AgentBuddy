@@ -54,7 +54,7 @@ APP_VERSION = os.environ.get("AGENTBUDDY_VERSION", "1.0.0")
 # 这些是运行态文件（含真实 API Key），由脚本从 *.template.* 生成
 SENSITIVE = {
     'mcp.yaml', 'llm.yaml', 'mcp.json', 'skill.yaml',
-    'env.yaml', 'env.local.yaml', '.DS_Store',
+    'env.yaml', 'env.local.yaml', '.env', '.env.local', '.DS_Store',
     # IDE 运行态配置（含真实密钥，需从对应 *.template.* 生成）
     'opencode.json',          # 模板: opencode.template.json
     'settings.json',          # claude: settings.template.json

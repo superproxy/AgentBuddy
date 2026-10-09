@@ -450,13 +450,26 @@ class TestPackageSkillMd(unittest.TestCase):
             self.assertIn("先读 diff，再按规范逐条检查。", md)
             self.assertIn("github.com/acme/repo", md)
 
-    def test_no_body_skill_skips_skill_md(self):
+    def test_no_body_skill_writes_skill_md_from_description(self):
+        """没有正文时仍用 description 生成 SKILL.md，避免 skill 包是空目录。"""
         with self._package([
             {"name": "plain-skill", "description": "无 body 的 skill",
              "version": "1.0.0", "source": "github.com/acme/repo"},
         ]) as zf:
             names = set(zf.namelist())
-            self.assertNotIn("skills/plain-skill/SKILL.md", names)
+            self.assertIn("skills/plain-skill/SKILL.md", names)
+            md = zf.read("skills/plain-skill/SKILL.md").decode("utf-8")
+            self.assertIn("# plain-skill", md)
+            self.assertIn("无 body 的 skill", md)
+
+    def test_full_skill_md_body_is_stored_verbatim(self):
+        raw = "---\nname: fetched-skill\ndescription: 已抓取\n---\n\n# 步骤\n先读仓库。\n"
+        with self._package([
+            {"name": "fetched-skill", "description": "已抓取",
+             "version": "1.0.0", "source": "acme/repo@fetched-skill", "body": raw},
+        ]) as zf:
+            md = zf.read("skills/fetched-skill/SKILL.md").decode("utf-8")
+            self.assertEqual(md, raw if raw.endswith("\n") else raw + "\n")
 
     def test_config_preserves_body_for_install(self):
         """plugin.yaml 中 skills 保留 body 字段，供安装方生成 SKILL.md。"""

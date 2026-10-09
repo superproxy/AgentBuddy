@@ -47,8 +47,8 @@ const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'TraeSoloCN', label: 'Trae Work CN', desc: '.trae-solo-cn/rules' },
   { key: 'WorkBuddy', label: 'WorkBuddy CN', desc: '.workbuddy/rules + models.json' },
   { key: 'ZCode', label: 'ZCode', desc: '.zcode/zcode.json' },
-  { key: 'Hermes', label: 'Hermes', desc: '.ade-hermes/rules + mcp' },
-  { key: 'Pi', label: 'Pi', desc: '~/.pi/agent + mcp.json' },
+  { key: 'Hermes', label: 'Hermes', desc: '~/.hermes/config.yaml + .ade-hermes/mcp' },
+  { key: 'Pi', label: 'Pi', desc: '~/.pi/agent/models.json + settings.json' },
   { key: 'CommandCode', label: 'Command Code', desc: '~/.commandcode/rules + mcp' },
 ]
 

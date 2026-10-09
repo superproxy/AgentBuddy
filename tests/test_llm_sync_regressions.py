@@ -304,3 +304,111 @@ def test_pi_generate_models_writes_valid_json_with_providers(tmp_path):
     assert "agentbuddy-gateway" in data["providers"]
     assert data["providers"]["agentbuddy-gateway"]["models"][0]["id"] == "gpt-5.5"
 
+
+def test_pi_resolves_placeholder_api_key_from_keys_yaml():
+    from agentctl.lib.ide.pi import _build_pi_providers
+
+    env = {
+        "llm": {
+            "_active_provider": "volcengine",
+            "_active_model": "deepseek-v4",
+            "volcengine": {
+                "_enabled": True,
+                "openai": {
+                    "base_url": "https://ark.example/api/v3",
+                    "api_key": "${ARK_API_KEY}",
+                    "models": {"deepseek-v4": {"name": "DeepSeek V4"}},
+                },
+            },
+            "disabled_p": {
+                "_enabled": False,
+                "openai": {
+                    "base_url": "http://localhost:18080/v1",
+                    "api_key": "sk-old",
+                    "models": {"auto": {}},
+                },
+            },
+        },
+        "mcp": {"ARK_API_KEY": "sk-resolved"},
+        "proxy": {"gateway": {"enabled": False}},
+    }
+    providers = _build_pi_providers(env, ["openaiv1"])
+    assert set(providers) == {"volcengine"}
+    assert providers["volcengine"]["apiKey"] == "sk-resolved"
+    assert providers["volcengine"]["baseUrl"] == "https://ark.example/api/v3"
+
+
+def test_pi_skips_unresolved_placeholder_api_key():
+    from agentctl.lib.ide.pi import _build_pi_providers
+
+    env = {
+        "llm": {
+            "volcengine": {
+                "_enabled": True,
+                "openai": {
+                    "base_url": "https://ark.example/api/v3",
+                    "api_key": "${MISSING_KEY}",
+                    "models": {"m": {}},
+                },
+            },
+        },
+        "mcp": {},
+        "proxy": {"gateway": {"enabled": False}},
+    }
+    assert _build_pi_providers(env, ["openaiv1"]) == {}
+
+
+def test_pi_generate_updates_settings_default_and_keeps_other_fields(tmp_path):
+    from agentctl.lib.ide.pi import generate_pi_models
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({
+        "theme": "dark",
+        "defaultProvider": "my",
+        "defaultModel": "old-model",
+        "packages": ["npm:pi-plan"],
+    }), encoding="utf-8")
+    env = _pi_direct_env()
+    generate_pi_models(env, tmp_path / "models.json", force=True, ide_protocols=["openaiv1"])
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    assert data["theme"] == "dark"
+    assert data["packages"] == ["npm:pi-plan"]
+    assert data["defaultProvider"] == "deepseek"
+    assert data["defaultModel"] == "deepseek-v4"
+
+
+def test_hermes_generate_llm_merges_model_and_keeps_other_config(tmp_path):
+    import yaml
+    from agentctl.lib.ide.hermes import generate_hermes_llm
+
+    config = tmp_path / "config.yaml"
+    config.write_text("terminal:\n  backend: local\nmodel: old-string\n", encoding="utf-8")
+    env = {
+        "llm": {
+            "_active_provider": "volcengine",
+            "_active_model": "deepseek-v4",
+            "volcengine": {
+                "_enabled": True,
+                "openai": {
+                    "base_url": "https://ark.example/api/v3",
+                    "api_key": "${ARK_API_KEY}",
+                    "models": {
+                        "deepseek-v4": {"name": "DeepSeek V4"},
+                        "other": {"name": "Other"},
+                    },
+                },
+            },
+        },
+        "mcp": {"ARK_API_KEY": "sk-resolved"},
+        "proxy": {"gateway": {"enabled": False}},
+    }
+    generate_hermes_llm(env, config, force=True, ide_protocols=["openaiv1"])
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    assert data["terminal"]["backend"] == "local"
+    assert data["model"]["provider"] == "custom"
+    assert data["model"]["default"] == "deepseek-v4"
+    assert data["model"]["base_url"] == "https://ark.example/api/v3"
+    assert data["model"]["api_key"] == "sk-resolved"
+    assert data["model"]["api_mode"] == "chat_completions"
+    assert data["providers"]["volcengine"]["models"] == ["deepseek-v4", "other"]
+

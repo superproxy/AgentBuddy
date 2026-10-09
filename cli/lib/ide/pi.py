@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..logging import COLOR_CYAN, COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
 from ..mcp import copy_dir_safe, copy_file_safe
-from ..llm import load_split_env_config
+from ..llm import load_split_env_config, resolve_config_secret
 from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
@@ -33,6 +33,66 @@ _PI_PROTO_PRIORITY = {"openaiv1": 0, "openai": 0, "responses": 1, "anthropic": 2
 _GATEWAY_ROUTE = "agentbuddy-gateway"
 
 
+def _usable_secret(value, env_config: dict | None) -> str:
+    """解析 ${VAR}。仍是占位符或空串时返回空，表示该字段不可用。"""
+    resolved = resolve_config_secret(str(value or ""), env_config)
+    if not resolved or resolved.startswith("${"):
+        return ""
+    return resolved
+
+
+def _enabled_models(models_dict) -> list[dict]:
+    if not isinstance(models_dict, dict):
+        return []
+    models = []
+    for model_id, meta in models_dict.items():
+        if str(model_id).startswith("~"):
+            continue
+        if isinstance(meta, dict) and meta.get("_enabled", True) is False:
+            continue
+        name = str(meta.get("name", "")).strip() if isinstance(meta, dict) else str(meta).strip()
+        models.append({"id": model_id, "name": name or model_id})
+    return models
+
+
+def _pick_default(providers: dict, env_config: dict | None) -> tuple[str, str]:
+    """选出写入 settings.json 的 provider 与 model。"""
+    llm = env_config.get("llm", {}) if isinstance(env_config, dict) else {}
+    if not isinstance(llm, dict):
+        llm = {}
+    active_provider = str(llm.get("_active_provider") or "").strip().lower()
+    active_model = str(llm.get("_active_model") or "").strip()
+
+    if _GATEWAY_ROUTE in providers:
+        name = _GATEWAY_ROUTE
+    elif active_provider in providers:
+        name = active_provider
+    else:
+        name = next(iter(providers))
+    model_ids = [m["id"] for m in providers[name].get("models", [])]
+    model = active_model if active_model in model_ids else (model_ids[0] if model_ids else "")
+    return name, model
+
+
+def _write_pi_settings(settings_file: Path, provider: str, model: str) -> None:
+    """合并 defaultProvider / defaultModel，保留 theme、packages 等已有字段。"""
+    existing = {}
+    if settings_file.exists():
+        try:
+            loaded = json.loads(settings_file.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    existing["defaultProvider"] = provider
+    existing["defaultModel"] = model
+    settings_file.parent.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _build_pi_providers(env_config: dict | None,
                         ide_protocols: list[str] | None = None) -> dict:
     """从 llm.yaml / proxy.gateway 构建 Pi models.json 的 providers 段。
@@ -46,8 +106,14 @@ def _build_pi_providers(env_config: dict | None,
     # --- LLM 网关模式 ---
     gateway = env_config.get("proxy", {}).get("gateway", {})
     if isinstance(gateway, dict) and gateway.get("enabled"):
-        base_url = str(gateway.get("base_url", "http://127.0.0.1:4000/v1")).strip()
-        api_key = str(gateway.get("api_key", "")).strip() or "sk-agentbuddy-gateway"
+        base_url = _usable_secret(
+            gateway.get("base_url", "http://127.0.0.1:4000/v1"), env_config,
+        ) or "http://127.0.0.1:4000/v1"
+        raw_key = str(gateway.get("api_key", "") or "").strip()
+        api_key = _usable_secret(raw_key, env_config) if raw_key else ""
+        if raw_key.startswith("${") and not api_key:
+            return {}
+        api_key = api_key or "sk-agentbuddy-gateway"
         models = []
         for route in gateway.get("routes", []):
             if not isinstance(route, dict) or not route.get("enabled", True):
@@ -88,23 +154,14 @@ def _build_pi_providers(env_config: dict | None,
             proto_check = "openaiv1" if protocol_name == "openai" else protocol_name
             if ide_protocols is not None and proto_check not in ide_protocols:
                 continue
-            base_url = str(protocol_value.get("base_url", "")).strip()
-            api_key = str(protocol_value.get("api_key", "")).strip()
-            if not base_url or not api_key or api_key.startswith("${"):
+            base_url = _usable_secret(protocol_value.get("base_url", ""), env_config)
+            api_key = _usable_secret(protocol_value.get("api_key", ""), env_config)
+            if not base_url or not api_key:
                 continue
             pi_api = _PI_PROTO_MAP.get(proto_check)
             if not pi_api:
                 continue
-            models_dict = protocol_value.get("models", {})
-            if not isinstance(models_dict, dict) or not models_dict:
-                continue
-            models = [
-                {"id": model_id, "name": str(meta.get("name", "")).strip() or model_id}
-                if isinstance(meta, dict) else {"id": model_id, "name": str(meta).strip() or model_id}
-                for model_id, meta in models_dict.items()
-                if not model_id.startswith("~")
-                and (not isinstance(meta, dict) or meta.get("_enabled", True) is not False)
-            ]
+            models = _enabled_models(protocol_value.get("models", {}))
             if not models:
                 continue
             providers[provider_name.lower()] = {
@@ -120,10 +177,11 @@ def _build_pi_providers(env_config: dict | None,
 
 def generate_pi_models(env_config: dict | None, target_file: Path, force: bool,
                        ide_protocols: list[str] | None = None) -> None:
-    """生成 ~/.pi/models.json（Pi 模型/提供商列表）。
+    """生成 ~/.pi/agent/models.json，并更新同目录 settings.json 的默认模型。
 
     格式：{"providers": {"<name>": {"baseUrl", "api", "apiKey", "models": [{"id","name"}]}}}
     - 文件已存在且未 --force 时跳过（保留用户手动配置）
+    - settings.json 只改 defaultProvider / defaultModel，其余字段保留
     """
     if not env_config:
         print(f"{COLOR_YELLOW}[!] llm.yaml not found, skip models.json{COLOR_RESET}")
@@ -142,8 +200,11 @@ def generate_pi_models(env_config: dict | None, target_file: Path, force: bool,
     with open(target_file, "w", encoding="utf-8") as f:
         json.dump({"providers": providers}, f, indent=2, ensure_ascii=False)
         f.write("\n")
+    provider, model = _pick_default(providers, env_config)
+    _write_pi_settings(target_file.parent / "settings.json", provider, model)
     for name, cfg in providers.items():
         print(f"{COLOR_CYAN}  → {name}: {cfg['api']} ({len(cfg['models'])} models){COLOR_RESET}")
+    print(f"{COLOR_CYAN}  → default {provider}/{model}{COLOR_RESET}")
     print(f"{COLOR_GREEN}[OK] {target_file}{COLOR_RESET}")
 
 

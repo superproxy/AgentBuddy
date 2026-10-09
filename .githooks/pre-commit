@@ -4,12 +4,20 @@ set -e
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 
-if [ -x ".venv/bin/python" ]; then
-  PYTHON=".venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON="python3"
-else
-  PYTHON="python"
+# 优先选用能 import pytest 的解释器。Windows 上 python3 常指向商店版 3.13，没有项目依赖。
+PYTHON=""
+for candidate in .venv/bin/python .venv/Scripts/python.exe python python3; do
+  if [ -x "$candidate" ] || command -v "$candidate" >/dev/null 2>&1; then
+    if "$candidate" -c "import pytest" >/dev/null 2>&1; then
+      PYTHON="$candidate"
+      break
+    fi
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  echo "[pre-commit] 找不到带 pytest 的 Python，提交已中止" >&2
+  exit 1
 fi
 
 echo "[pre-commit] Running AgentBuddy tests..."

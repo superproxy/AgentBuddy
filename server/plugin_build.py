@@ -216,6 +216,7 @@ def discover_github_skills(owner_repo: str, default_branch: str = "main", repo_d
             version=version,
             description=truncate_description(description, 180),
             source=f"{owner_repo}@{name}",
+            body=text.strip(),
         ))
     return skills
 
@@ -319,6 +320,14 @@ def analyze_with_ai(
         meta.homepage = base_meta.homepage
     if not meta.repository:
         meta.repository = base_meta.repository
+    # AI 重写 plugin.yaml 时常丢掉已抓到的 SKILL.md 正文，按名称补回
+    fetched = {s.name: s for s in base_meta.skills if s.body}
+    for skill in meta.skills:
+        prev = fetched.get(skill.name)
+        if prev and not skill.body.strip():
+            skill.body = prev.body
+    if not meta.skills and base_meta.skills:
+        meta.skills = list(base_meta.skills)
     return meta
 
 
@@ -456,6 +465,28 @@ def generate_config(meta: PluginMeta) -> dict[str, Any]:
     return cfg
 
 
+def _skill_markdown(skill: dict) -> str:
+    """生成写入 zip 的 SKILL.md。完整文档原样保留，否则用 description 补一份。"""
+    name = str(skill.get("name") or "").strip()
+    body = str(skill.get("body") or "").strip()
+    desc = str(skill.get("description") or "").strip()
+    source = str(skill.get("source") or "").strip()
+    if not name:
+        return ""
+    if body.startswith("---") or body.startswith("#"):
+        return body if body.endswith("\n") else body + "\n"
+    content = body or desc
+    if not content:
+        return ""
+    lines = [f"# {name}"]
+    if desc and content != desc:
+        lines += ["", desc]
+    if source:
+        lines += ["", f"> 来源：{source}"]
+    lines += ["", content, ""]
+    return "\n".join(lines)
+
+
 def package_config(cfg: dict[str, Any], mode: str, output_dir: Path) -> Path:
     if mode not in ("inline", "split"):
         raise ValueError(f"不支持的打包模式: {mode}")
@@ -481,21 +512,15 @@ def package_config(cfg: dict[str, Any], mode: str, output_dir: Path) -> Path:
                 zf.writestr("keys.yaml", yaml.dump({"mcp": env_vars}, allow_unicode=True, sort_keys=False))
             zf.writestr("plugin.yaml", yaml.dump(split_cfg, allow_unicode=True, sort_keys=False))
 
-        # 将含 body 的技能生成 skills/<name>/SKILL.md 并打包，保证可安装为真实 skill
+        # 每个 skill 都写入 skills/<name>/SKILL.md。
+        # 已抓到的完整 SKILL.md（frontmatter 或一级标题）原样落入包内；
+        # 只有 description 时也生成一份，避免 crawler 包里 skills 目录为空。
         for skill in cfg.get("skills", []) or []:
             name = str(skill.get("name") or "").strip()
-            body = str(skill.get("body") or "").strip()
-            if not name or not body:
+            markdown = _skill_markdown(skill)
+            if not name or not markdown:
                 continue
-            desc = str(skill.get("description") or "").strip()
-            source = str(skill.get("source") or "").strip()
-            lines = [f"# {name}"]
-            if desc:
-                lines += ["", desc]
-            if source:
-                lines += ["", f"> 来源：{source}"]
-            lines += ["", body]
-            zf.writestr(f"skills/{name}/SKILL.md", "\n".join(lines))
+            zf.writestr(f"skills/{name}/SKILL.md", markdown)
     return zip_path
 
 

@@ -71,6 +71,38 @@ def normalize_provider_enabled(llm_section: dict | None) -> dict | None:
     return llm_section
 
 
+def secret_env_map(env_config: dict | None) -> dict:
+    """从 keys.yaml / mcp 段收集 ${VAR} 解析表。不读 OS 环境变量。"""
+    if not isinstance(env_config, dict):
+        return {}
+    mcp = env_config.get("mcp") or {}
+    env_map = {}
+    if not isinstance(mcp, dict):
+        return env_map
+    for key, value in mcp.items():
+        if str(key).startswith("_"):
+            continue
+        if isinstance(value, dict) and "value" in value:
+            raw = value.get("value")
+            env_map[str(key)] = "" if raw is None else str(raw)
+        elif isinstance(value, str):
+            env_map[str(key)] = value
+    return env_map
+
+
+def resolve_config_secret(value: str, env_config: dict | None) -> str:
+    """把 api_key / base_url 里的 ${VAR} 解析成 keys.yaml 中的值。
+
+    解析失败时保留 ${VAR} 字面量，调用方据此跳过该 provider。
+    """
+    text = str(value or "").strip()
+    if "${" not in text:
+        return text
+    from . import placeholder
+    resolved, _ = placeholder.resolve_str(text, secret_env_map(env_config))
+    return str(resolved or "").strip()
+
+
 def validate_default_llm(env_config: dict) -> str | None:
     """校验"默认 LLM 源"配置的一致性（Codex/Claude 同步的前置条件）。
 
