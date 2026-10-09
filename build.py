@@ -371,6 +371,7 @@ def report() -> None:
         print(f"  可执行:  {exe.relative_to(PROJECT_ROOT)}")
         installer = list(INSTALLER_OUT_DIR.glob("AgentBuddy-Setup-*.exe")) if INSTALLER_OUT_DIR.exists() else []
         if installer:
+            installer.sort(key=lambda p: p.stat().st_mtime, reverse=True)
             print(f"  安装包:  {installer[0].relative_to(PROJECT_ROOT)}")
         else:
             print("  分发:    压缩 dist\\AgentBuddy 为 .zip，或用 Inno Setup 做 .exe 安装包")
