@@ -29,7 +29,7 @@ const LEGACY_LS_AUTOSYNC = 'myagent.autoSync'
 const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'Agents', label: 'Agents', desc: '通用 agents 配置' },
   { key: 'CherryStudio', label: 'Cherry Studio', desc: 'Data/Skills + agents.db' },
-  { key: 'Claude', label: 'Claude', desc: '.claude/settings.json + rules' },
+  { key: 'Claude', label: 'Claude Code', desc: '.claude/settings.json + rules' },
   { key: 'CodeBuddy', label: 'CodeBuddy CN', desc: '~/.codebuddy/mcp.json + models.json' },
   { key: 'Codex', label: 'Codex', desc: '.codex/config.toml + rules' },
   { key: 'Cursor', label: 'Cursor', desc: '.cursor/rules + .cursor/mcp.json' },
@@ -47,7 +47,7 @@ const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'TraeSoloCN', label: 'Trae Work CN', desc: '.trae-solo-cn/rules' },
   { key: 'WorkBuddy', label: 'WorkBuddy CN', desc: '.workbuddy/rules + models.json' },
   { key: 'ZCode', label: 'ZCode', desc: '.zcode/zcode.json' },
-  { key: 'Hermes', label: 'Hermes', desc: '~/.hermes/config.yaml + .ade-hermes/mcp' },
+  { key: 'Hermes', label: 'Hermes Agent', desc: '~/.hermes/config.yaml + .ade-hermes/mcp' },
   { key: 'Pi', label: 'Pi', desc: '~/.pi/agent/models.json + settings.json' },
   { key: 'CommandCode', label: 'Command Code', desc: '~/.commandcode/rules + mcp' },
 ]

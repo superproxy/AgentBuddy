@@ -85,7 +85,7 @@ const actionHint = computed(() => {
   if (currentScope.value.kind === 'rules') return '将同步 Rules 到支持的 IDE'
   if (currentScope.value.kind === 'hooks') return '将同步 Hooks 到支持的 IDE'
   if (currentScope.value.kind === 'memory') return '将同步记忆到支持的 IDE'
-  return `将同步 ${currentScope.value.label} 配置到 ${selectedIdes.value.length} 个 IDE`
+  return `将 ${currentScope.value.label} 同步到 ${selectedIdes.value.length} 个 AIDE`
 })
 
 /** LLM/MCP/Skills/插件需勾选 IDE；命令/Subagent 走专用 API */
@@ -116,8 +116,12 @@ const AVATAR_COLORS: Record<string, string> = {
 function avatarStyle(key: string) {
   return AVATAR_COLORS[key] || 'linear-gradient(135deg, #86909c, #4e5969)'
 }
-function avatarText(label: string) {
-  return label.charAt(0).toUpperCase()
+function avatarText(key: string) {
+  return displayAideLabel(key).charAt(0).toUpperCase()
+}
+
+function displayAideLabel(ide: { key: string; label: string }) {
+  return ideStore.displayLabelForKey(ide.key) || ide.label
 }
 
 function isSelected(key: string) {
@@ -282,6 +286,9 @@ async function syncCurrentScope() {
 
 onMounted(() => {
   document.addEventListener('mousedown', onDocClick)
+  if (!ideStore.ideDetects.length && !ideStore.ideDetecting) {
+    void ideStore.loadIdeDetect({ silent: true })
+  }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', onDocClick)
@@ -307,7 +314,7 @@ onBeforeUnmount(() => {
           class="avatar"
           :style="{ background: avatarStyle(ide.key) }"
         >
-          {{ avatarText(ide.label) }}
+          {{ avatarText(ide.key) }}
         </div>
         <div v-if="previewExtra > 0" class="avatar more">+{{ previewExtra }}</div>
       </div>
@@ -360,9 +367,7 @@ onBeforeUnmount(() => {
         :style="popoverStyle"
       >
         <div class="pop-head">
-          <span class="pop-title">
-            同步 {{ currentScope?.label }} 配置到 IDE
-          </span>
+          <span class="pop-title">同步到 AIDE</span>
           <div class="pop-actions">
             <a @click="selectAll">全选</a>
             <a @click="clearAll">清空</a>
@@ -404,11 +409,11 @@ onBeforeUnmount(() => {
             <span
               class="av"
               :style="{ background: avatarStyle(ide.key) }"
-            >{{ avatarText(ide.label) }}</span>
-            <span class="name">{{ ide.label }}</span>
+            >{{ avatarText(ide.key) }}</span>
+            <span class="name">{{ displayAideLabel(ide) }}</span>
             <span v-if="isCn(ide.key)" class="tag">CN</span>
           </div>
-          <div v-if="!filteredIdes.length" class="pop-empty">暂无已安装 IDE</div>
+          <div v-if="!filteredIdes.length" class="pop-empty">暂无已安装 AIDE</div>
         </div>
       </div>
     </Teleport>

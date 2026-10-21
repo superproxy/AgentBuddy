@@ -6443,28 +6443,46 @@ def list_llm_env_vars():
     return jsonify({"ok": True, "names": names, "count": len(names)})
 
 
-def _resolve_api_key(raw: str) -> str:
-    """解析 api_key 字段中的环境变量引用。
+def _header_safe_secret(value: str, field: str = "api_key") -> tuple[str | None, str | None]:
+    """HTTP 请求头只能 latin-1；含中文时会触发 UnicodeEncodeError。"""
+    text = str(value or "")
+    try:
+        text.encode("latin-1")
+    except UnicodeEncodeError:
+        return None, (
+            f"{field} 含非 ASCII 字符，无法用于 HTTP 请求头。"
+            "请检查是否误填中文说明，或 ${变量:-默认值} 解析到了中文默认值。"
+        )
+    return text, None
 
-    支持两种语法（统一期保留兼容）：
-      - ${VAR_NAME}  （新语法，与 mcp/placeholder/IDE 同步一致，推荐）
-      - env:VAR_NAME （旧语法，向后兼容）
-    从 OS 环境变量读取实际值；未设置时返回空串。
-    """
+
+def _resolve_api_key(raw: str) -> str:
+    """解析 api_key：与 IDE 同步一致，优先 keys.yaml，再回退 OS 环境变量。"""
     if not raw:
         return ""
     s = raw.strip()
-    # 新语法：${VAR_NAME}
-    m = re.fullmatch(r"\$\{(\w+)\}", s)
-    if m:
-        return os.environ.get(m.group(1), "")
-    # 旧语法：env:VAR_NAME（向后兼容）
-    if s.startswith("env:"):
+    try:
+        from agentctl.lib.llm import load_split_env_config, resolve_config_secret
+
+        env_config = load_split_env_config(PROJECT_ROOT, silent=True)
+        resolved = resolve_config_secret(s, env_config)
+    except Exception:
+        resolved = s
+
+    if resolved.startswith("${"):
+        m = re.fullmatch(r"\$\{(\w+)\}", s)
+        if m:
+            resolved = os.environ.get(m.group(1), "") or resolved
+    if not resolved and s.startswith("env:"):
         var_name = s[4:].strip()
-        if not var_name:
-            return ""
-        return os.environ.get(var_name, "")
-    return s
+        if var_name:
+            resolved = os.environ.get(var_name, "")
+
+    if resolved.startswith("${"):
+        return ""
+    if "${" not in s:
+        return resolved if resolved else s
+    return resolved
 
 
 @app.route("/api/llm/verify", methods=["POST"])
@@ -6473,7 +6491,7 @@ def verify_llm():
 
     Body: {base_url, api_key, protocol?}
     调 base_url + /models（OpenAI 兼容），成功返回 model 列表。
-    api_key 支持 ${VAR_NAME} 或 env:VAR_NAME 引用形式（后者向后兼容）。
+    api_key 支持 ${VAR_NAME}、${VAR:-default} 或 env:VAR_NAME（后者向后兼容）。
     """
     body = request.get_json(force=True)
     base_url = (body.get("base_url") or "").rstrip("/")
@@ -6486,6 +6504,9 @@ def verify_llm():
         is_ref = api_key_raw.strip().startswith(("env:", "${"))
         hint = "（api_key 为环境变量引用但未设置）" if is_ref else ""
         return jsonify({"ok": False, "error": f"api_key 无效{hint}"}), 400
+    api_key, header_err = _header_safe_secret(api_key)
+    if header_err:
+        return jsonify({"ok": False, "error": header_err}), 400
     try:
         import requests as _req
         # 统一拼接 /models：兼容 base_url 已含 /v1、/api/v3 或其他路径的情况

@@ -348,23 +348,34 @@ export const useIdeStore = defineStore('ide', () => {
     }
   }
 
-  async function loadIdeDetect() {
+  async function loadIdeDetect(opts?: { silent?: boolean }) {
     if (ideDetecting.value) return
     ideDetecting.value = true
+    const silent = !!opts?.silent
     try {
       const r = await api<{ ok: boolean; ides?: IdeDetect[]; stats?: any; error?: string }>('/api/ide/detect')
       if (!r.ok) {
-        ui.toast('IDE 检测失败: ' + (r.error || ''), 'err')
+        if (!silent) ui.toast('IDE 检测失败: ' + (r.error || ''), 'err')
         return
       }
       ideDetects.value = r.ides || []
       ideDetectStats.value = r.stats || {}
       sinkNotInstalledIdes()
-      ui.toast(`检测完成: ${ideDetectStats.value.installed}/${ideDetectStats.value.total} 已安装`, 'ok')
+      if (!silent) {
+        ui.toast(`检测完成: ${ideDetectStats.value.installed}/${ideDetectStats.value.total} 已安装`, 'ok')
+      }
       loadIdeInstallInfo()
     } finally {
       ideDetecting.value = false
     }
+  }
+
+  /** 与 AIDE 管理页卡片标题一致（优先 detect 的 label） */
+  function displayLabelForKey(key: string): string {
+    const detected = ideDetects.value.find((d) => d.key === key)
+    if (detected?.label) return detected.label
+    const fromSync = sync.ideList.find((i) => i.key === key)
+    return fromSync?.label || key
   }
 
   /** 按 installed 状态对 ideList 做 stable 分区：已安装在前，未安装在后 */
@@ -704,6 +715,7 @@ export const useIdeStore = defineStore('ide', () => {
     brandGroups,
     // 函数
     loadIdeDetect,
+    displayLabelForKey,
     sinkNotInstalledIdes,
     loadIdeSessions,
     toggleIdeSessions,
