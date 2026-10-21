@@ -7,8 +7,10 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import { api } from '../api/client'
+import { runSse } from '../api/sse'
 import { useUiStore } from './ui'
 import { useSyncStore } from './sync'
+import { compareBrandName, sortByIdeLabel } from '../utils/ideSort'
 
 // ===== 类型 =====
 export interface IdeDetect {
@@ -165,25 +167,13 @@ export const useIdeStore = defineStore('ide', () => {
 
   // ===== computed =====
   /** 已安装 IDE，按 sync.ideList 的用户自定义顺序排序（支持拖拽排序） */
-  const installedIdes = computed(() => {
-    const installed = ideDetects.value.filter((i) => i.installed)
-    const order = sync.ideList.map((i) => i.key)
-    return installed.sort((a, b) => {
-      const ia = order.indexOf(a.key)
-      const ib = order.indexOf(b.key)
-      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
-    })
-  })
-  /** 未安装 IDE，同样按 sync.ideList 顺序排序 */
-  const notInstalledIdes = computed(() => {
-    const notInstalled = ideDetects.value.filter((i) => !i.installed)
-    const order = sync.ideList.map((i) => i.key)
-    return notInstalled.sort((a, b) => {
-      const ia = order.indexOf(a.key)
-      const ib = order.indexOf(b.key)
-      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib)
-    })
-  })
+  const installedIdes = computed(() =>
+    sortByIdeLabel(ideDetects.value.filter((i) => i.installed)),
+  )
+  /** 未安装 IDE，按名称字母序 */
+  const notInstalledIdes = computed(() =>
+    sortByIdeLabel(ideDetects.value.filter((i) => !i.installed)),
+  )
   /** 有会话目录的已安装 IDE（用于右侧会话面板的 IDE 选择器） */
   const sessionableIdes = computed(() => ideDetects.value.filter((i) => i.installed && i.sessions_dir))
   const shareTargetIdes = computed(() => {
@@ -290,7 +280,7 @@ export const useIdeStore = defineStore('ide', () => {
           // 同 form 内去重（一个 IDE 可能出现在多个 form 中？不，每个 IDE 只出现在自己的 forms 列表中）
           // 但多个 IDE 可能映射到同 form（如 KimiCLI + KimiCode 都在 Kimi/code/cli）
           // 直接列出即可
-          formList.push({ form: f, items: fItems })
+          formList.push({ form: f, items: sortByIdeLabel(fItems) })
         }
         catList.push({ category: cat, forms: formList })
       }
@@ -306,7 +296,7 @@ export const useIdeStore = defineStore('ide', () => {
       })
     }
 
-    return groups
+    return groups.sort((a, b) => compareBrandName(a.brand, b.brand))
   })
 
   // ===== 函数 =====
@@ -360,6 +350,7 @@ export const useIdeStore = defineStore('ide', () => {
       }
       ideDetects.value = r.ides || []
       ideDetectStats.value = r.stats || {}
+      sync.mergeIdeEntriesFromDetect(r.ides || [])
       sinkNotInstalledIdes()
       if (!silent) {
         ui.toast(`检测完成: ${ideDetectStats.value.installed}/${ideDetectStats.value.total} 已安装`, 'ok')
@@ -378,19 +369,10 @@ export const useIdeStore = defineStore('ide', () => {
     return fromSync?.label || key
   }
 
-  /** 按 installed 状态对 ideList 做 stable 分区：已安装在前，未安装在后 */
+  /** detect 完成后：同步栏 AIDE 列表按名称字母序 */
   function sinkNotInstalledIdes() {
     if (!ideDetects.value.length) return
-    const installedSet = new Set(ideDetects.value.filter((i) => i.installed).map((i) => i.key))
-    const installed = sync.ideList.filter((i) => installedSet.has(i.key))
-    const notInstalled = sync.ideList.filter((i) => !installedSet.has(i.key))
-    if (installed.length + notInstalled.length !== sync.ideList.length) return
-    const newOrder = [...installed, ...notInstalled]
-    const changed = newOrder.some((ide, idx) => ide.key !== sync.ideList[idx]?.key)
-    if (changed) {
-      sync.ideList.splice(0, sync.ideList.length, ...newOrder)
-      sync.saveIdeOrder()
-    }
+    sync.sortIdeListByLabel()
   }
 
   async function loadIdeSessions(ideKey: string) {
@@ -574,43 +556,42 @@ export const useIdeStore = defineStore('ide', () => {
   async function syncIdeConfig(ideKey: string) {
     if (ideSyncing.value) return
     ideSyncing.value = ideKey
+    const aideName = displayLabelForKey(ideKey)
+    ui.clearLog()
+    let syncError = ''
+    let exitCode: number | null = null
     try {
-      const resp = await fetch(
+      await runSse(
         `/api/sync?ide=${encodeURIComponent(ideKey)}&scope=llm,mcp,skill,rules`,
-        { method: 'GET', headers: { Accept: 'text/event-stream' } },
-      )
-      if (!resp.ok) {
-        ui.toast(`同步 ${ideKey} 配置请求失败 (HTTP ${resp.status})`, 'err')
-        return
-      }
-      const reader = resp.body!.getReader()
-      const decoder = new TextDecoder()
-      let lastLine = ''
-      let ok = true
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const text = decoder.decode(value, { stream: true })
-        const lines = (lastLine + text).split('\n')
-        lastLine = lines.pop() || ''
-        for (const line of lines) {
-          if (!line.startsWith('data:')) continue
-          const payload = line.slice(5).trim()
-          if (!payload) continue
-          try {
-            const obj = JSON.parse(payload)
-            if (obj.error) ok = false
-          } catch {
-            /* 非 JSON payload，忽略 */
+        (line) => {
+          ui.appendLog(line)
+          const exitMatch = line.match(/^\[EXIT\]\s+returncode=(-?\d+)/)
+          if (exitMatch) {
+            exitCode = Number(exitMatch[1])
+            if (exitCode !== 0) syncError = line
           }
-        }
-      }
-      ui.toast(
-        ok ? `同步 ${ideKey} 配置完成` : `同步 ${ideKey} 配置完成（含警告）`,
-        ok ? 'ok' : 'warn',
+          if (
+            line.startsWith('[ERROR]') ||
+            line.startsWith('[TIMEOUT]') ||
+            line.includes('[FAILED]')
+          ) {
+            syncError = line
+          }
+        },
+        {
+          onError: () => {
+            if (exitCode === 0) return
+            if (!syncError) syncError = '连接中断'
+          },
+        },
       )
+      if (syncError) {
+        ui.toast(`同步 ${aideName} 配置失败: ${syncError}`, 'err')
+      } else {
+        ui.toast(`同步 ${aideName} 配置完成`, 'ok')
+      }
     } catch (e: any) {
-      ui.toast(`同步 ${ideKey} 配置失败: ${e?.message || e}`, 'err')
+      ui.toast(`同步 ${aideName} 配置失败: ${e?.message || e}`, 'err')
     } finally {
       ideSyncing.value = ''
     }

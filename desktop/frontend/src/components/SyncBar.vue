@@ -8,6 +8,7 @@ import { useCmdStore } from '../stores/cmd'
 import { useSubagentStore } from '../stores/subagent'
 import { runSse } from '../api/sse'
 import { api, llmApi } from '../api/client'
+import { isCnAideKey } from '../constants/cnAide'
 
 const props = defineProps<{ tab: string }>()
 const sync = useSyncStore()
@@ -16,7 +17,7 @@ const cmdStore = useCmdStore()
 const subagentStore = useSubagentStore()
 const ui = useUiStore()
 const { ideList, syncTargetIdes, autoSync, syncing } = storeToRefs(sync)
-const { installedIdes } = storeToRefs(ideStore)
+const { installedIdes, ideDetecting, ideDetects } = storeToRefs(ideStore)
 const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
 type FilterMode = 'all' | 'selected' | 'cn'
@@ -27,8 +28,6 @@ const filterMode = ref<FilterMode>('all')
 const popoverOpen = ref(false)
 const popoverRef = ref<HTMLElement | null>(null)
 const triggerRef = ref<HTMLElement | null>(null)
-
-const CN_IDE_KEYS = new Set(['QoderCN', 'TraeCN', 'TraeSoloCN'])
 
 /** tab → 同步范围；含 LLM/MCP/Skills + 命令/Subagent/插件 */
 const SCOPE_META: Record<string, { key: string; label: string; kind: ScopeKind }> = {
@@ -57,25 +56,48 @@ const visible = computed(
 /** 「全部」= AIDE 管理页已检测到的已安装 IDE/CLI */
 const installedKeySet = computed(() => new Set(installedIdes.value.map((i) => i.key)))
 const installedIdeList = computed(() => {
+  // v3.22.1 起依赖 detect；未完成时 fromDetect 为空 → 弹层无可选项、长期「0 个目标」
+  if (!ideDetects.value.length || ideDetecting.value) {
+    return ideList.value
+  }
   const fromDetect = ideList.value.filter((ide) => installedKeySet.value.has(ide.key))
   if (fromDetect.length) return fromDetect
   return []
 })
 
+/** 持久化目标 key（与 ui-state.ideSyncTargets 一致，用于计数/同步） */
+const targetCount = computed(() => syncTargetIdes.value.length)
+
+/** 头像预览：ideList 未命中时仍用 detect 名称展示 */
+const previewTargets = computed(() =>
+  syncTargetIdes.value.map((key) => {
+    const fromList = ideList.value.find((i) => i.key === key)
+    return fromList ?? { key, label: ideStore.displayLabelForKey(key) }
+  }),
+)
+const previewIdes = computed(() => previewTargets.value.slice(0, 3))
+const previewExtra = computed(() => Math.max(0, previewTargets.value.length - 3))
+
 const selectedIdes = computed(() =>
   ideList.value.filter((ide) => syncTargetIdes.value.includes(ide.key)),
 )
-const previewIdes = computed(() => selectedIdes.value.slice(0, 3))
-const previewExtra = computed(() => Math.max(0, selectedIdes.value.length - 3))
+
+function sortIdesForBar(list: { key: string; label: string }[]) {
+  return [...list].sort((a, b) => {
+    const la = ideStore.displayLabelForKey(a.key) || a.label || a.key
+    const lb = ideStore.displayLabelForKey(b.key) || b.label || b.key
+    return la.localeCompare(lb, 'zh-CN', { sensitivity: 'base' })
+  })
+}
 
 const filteredIdes = computed(() => {
   if (filterMode.value === 'selected') {
-    return ideList.value.filter((ide) => syncTargetIdes.value.includes(ide.key))
+    return sortIdesForBar(ideList.value.filter((ide) => syncTargetIdes.value.includes(ide.key)))
   }
   if (filterMode.value === 'cn') {
-    return installedIdeList.value.filter((ide) => CN_IDE_KEYS.has(ide.key))
+    return sortIdesForBar(installedIdeList.value.filter((ide) => isCnAideKey(ide.key)))
   }
-  return installedIdeList.value
+  return sortIdesForBar(installedIdeList.value)
 })
 
 const actionHint = computed(() => {
@@ -85,17 +107,11 @@ const actionHint = computed(() => {
   if (currentScope.value.kind === 'rules') return '将同步 Rules 到支持的 IDE'
   if (currentScope.value.kind === 'hooks') return '将同步 Hooks 到支持的 IDE'
   if (currentScope.value.kind === 'memory') return '将同步记忆到支持的 IDE'
-  return `将 ${currentScope.value.label} 同步到 ${selectedIdes.value.length} 个 AIDE`
+  return `将 ${currentScope.value.label} 同步到 ${targetCount.value} 个 AIDE`
 })
 
 /** LLM/MCP/Skills/插件需勾选 IDE；命令/Subagent 走专用 API */
 const needsIdeTargets = computed(() => currentScope.value?.kind === 'init-ide')
-
-const canSync = computed(() => {
-  if (syncing.value || !currentScope.value) return false
-  if (needsIdeTargets.value) return syncTargetIdes.value.length > 0
-  return true
-})
 
 const execCountLabel = computed(() => {
   if (!currentScope.value) return '—'
@@ -117,7 +133,9 @@ function avatarStyle(key: string) {
   return AVATAR_COLORS[key] || 'linear-gradient(135deg, #86909c, #4e5969)'
 }
 function avatarText(key: string) {
-  return displayAideLabel(key).charAt(0).toUpperCase()
+  const label = (ideStore.displayLabelForKey(key) || key || '?').trim()
+  const ch = label.charAt(0)
+  return ch ? ch.toUpperCase() : '?'
 }
 
 function displayAideLabel(ide: { key: string; label: string }) {
@@ -128,28 +146,33 @@ function isSelected(key: string) {
   return syncTargetIdes.value.includes(key)
 }
 function isCn(key: string) {
-  return CN_IDE_KEYS.has(key)
+  return isCnAideKey(key)
 }
 function toggleIde(key: string) {
   const idx = syncTargetIdes.value.indexOf(key)
   if (idx >= 0) syncTargetIdes.value.splice(idx, 1)
   else syncTargetIdes.value.push(key)
 }
-function selectAll() {
+function selectAll(e?: Event) {
+  e?.preventDefault()
+  e?.stopPropagation()
   const keys = filteredIdes.value.map((i) => i.key)
+  if (!keys.length) {
+    ui.toast('暂无可选 AIDE，请稍候检测完成或前往 AIDE 管理页', 'warn')
+    return
+  }
   const set = new Set(syncTargetIdes.value)
   keys.forEach((k) => set.add(k))
   syncTargetIdes.value = [...set]
 }
-function clearAll() {
+function clearAll(e?: Event) {
+  e?.preventDefault()
+  e?.stopPropagation()
   syncTargetIdes.value = []
 }
 
-function togglePopover() {
-  if (!popoverOpen.value) {
-    // 打开前先计算位置
-    nextTick(() => updatePopoverStyle())
-  }
+function togglePopover(e?: MouseEvent) {
+  e?.stopPropagation()
   popoverOpen.value = !popoverOpen.value
   if (popoverOpen.value) {
     nextTick(() => updatePopoverStyle())
@@ -191,8 +214,12 @@ function setAutoSync(v: boolean) {
 async function validateDefaultLlmSelection(targetIdes: string[]): Promise<boolean> {
   if (!targetIdes.some((ide) => ide === 'Codex' || ide === 'Claude')) return true
 
-  const response = await llmApi.fetch()
-  const config = response.data as Record<string, any>
+  const response = await llmApi.fetch() as { ok?: boolean; data?: Record<string, any>; error?: string }
+  if (response.ok === false) {
+    ui.toast('读取 LLM 配置失败: ' + (response.error || ''), 'err')
+    return false
+  }
+  const config = (response.data || {}) as Record<string, any>
   const llm = config.llm && typeof config.llm === 'object' ? config.llm : {}
   const gatewayEnabled = Boolean(config.proxy?.gateway?.enabled)
   const activeProvider = typeof llm._active_provider === 'string' ? llm._active_provider.trim() : ''
@@ -265,20 +292,32 @@ async function syncCurrentScope() {
     } else {
       for (const ide of syncTargetIdes.value) {
         let syncError = ''
+        let exitCode: number | null = null
         await runSse(
           '/api/sync?ide=' + encodeURIComponent(ide) + '&scope=' + meta.key,
           (line) => {
             ui.appendLog(line)
-            const exitMatch = line.match(/^\[EXIT\]\s+returncode=(\d+)/)
-            if (exitMatch && exitMatch[1] !== '0') syncError = line
+            const exitMatch = line.match(/^\[EXIT\]\s+returncode=(-?\d+)/)
+            if (exitMatch) {
+              exitCode = Number(exitMatch[1])
+              if (exitCode !== 0) syncError = line
+            }
             if (line.startsWith('[ERROR]') || line.startsWith('[TIMEOUT]')) syncError = line
           },
-          { onError: () => { syncError = '连接中断' } },
+          {
+            onError: () => {
+              // 浏览器常在 [EXIT]0 之后、最后的 [DONE] 之前触发 onerror，不能当失败
+              if (exitCode === 0) return
+              if (!syncError) syncError = '连接中断'
+            },
+          },
         )
-        if (syncError) throw new Error(`${ide}: ${syncError}`)
+        if (syncError) throw new Error(`${displayAideLabel({ key: ide, label: ide })}: ${syncError}`)
       }
       ui.toast('同步完成')
     }
+  } catch (error: any) {
+    ui.toast('同步失败: ' + (error?.message || String(error)), 'err')
   } finally {
     syncing.value = false
   }
@@ -304,24 +343,24 @@ onBeforeUnmount(() => {
       v-if="needsIdeTargets"
       class="target-trigger"
       ref="triggerRef"
-      @click="togglePopover"
+      @click.stop="togglePopover"
       :title="actionHint"
     >
-      <div class="avatars" v-if="selectedIdes.length">
-        <div
-          v-for="ide in previewIdes"
-          :key="ide.key"
-          class="avatar"
-          :style="{ background: avatarStyle(ide.key) }"
-        >
-          {{ avatarText(ide.key) }}
-        </div>
-        <div v-if="previewExtra > 0" class="avatar more">+{{ previewExtra }}</div>
+      <div class="avatars">
+        <template v-if="targetCount > 0">
+          <div
+            v-for="ide in previewIdes"
+            :key="ide.key"
+            class="avatar"
+            :style="{ background: avatarStyle(ide.key) }"
+          >
+            {{ avatarText(ide.key) }}
+          </div>
+          <div v-if="previewExtra > 0" class="avatar more">+{{ previewExtra }}</div>
+        </template>
+        <div v-else class="avatar empty" aria-hidden="true">0</div>
       </div>
-      <div class="avatars" v-else>
-        <div class="avatar empty">?</div>
-      </div>
-      <span class="label">{{ selectedIdes.length }} 个目标</span>
+      <span class="label">{{ targetCount }} 个目标</span>
       <svg class="caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M3 5l3 3 3-3" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
@@ -335,9 +374,17 @@ onBeforeUnmount(() => {
     <!-- 同步按钮 + 自动开关 -->
     <div class="sync-combo" :class="{ auto: autoSync }">
       <button
+        type="button"
         class="sync-cta"
-        :disabled="!canSync || autoSync"
-        :title="autoSync ? '自动模式下，保存即触发同步' : '点击立即同步'"
+        :class="{ 'is-zero': targetCount === 0 && needsIdeTargets }"
+        :disabled="autoSync || syncing"
+        :title="
+          autoSync
+            ? '自动模式下，保存即触发同步'
+            : targetCount === 0 && needsIdeTargets
+              ? '请先点击左侧选择同步目标'
+              : '点击立即同步'
+        "
         @click="syncCurrentScope"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -369,8 +416,8 @@ onBeforeUnmount(() => {
         <div class="pop-head">
           <span class="pop-title">同步到 AIDE</span>
           <div class="pop-actions">
-            <a @click="selectAll">全选</a>
-            <a @click="clearAll">清空</a>
+            <button type="button" class="pop-link" @click="selectAll">全选</button>
+            <button type="button" class="pop-link" @click="clearAll">清空</button>
           </div>
         </div>
         <div class="pop-filter">
@@ -398,7 +445,7 @@ onBeforeUnmount(() => {
             :key="ide.key"
             class="pop-item"
             :class="{ selected: isSelected(ide.key) }"
-            @click="toggleIde(ide.key)"
+            @click.stop="toggleIde(ide.key)"
             draggable="true"
             @dragstart="onIdeDragStart($event, ide.key)"
             @dragover.prevent="onIdeDragOver($event, ide.key)"
@@ -413,7 +460,9 @@ onBeforeUnmount(() => {
             <span class="name">{{ displayAideLabel(ide) }}</span>
             <span v-if="isCn(ide.key)" class="tag">CN</span>
           </div>
-          <div v-if="!filteredIdes.length" class="pop-empty">暂无已安装 AIDE</div>
+          <div v-if="!filteredIdes.length" class="pop-empty">
+            {{ ideDetecting ? '正在检测 AIDE…' : '暂无已安装 AIDE，请先在 AIDE 管理页检测' }}
+          </div>
         </div>
       </div>
     </Teleport>
@@ -583,6 +632,10 @@ onBeforeUnmount(() => {
   min-width: 14px;
   text-align: center;
 }
+.sync-combo .sync-cta.is-zero:not(:disabled) {
+  background: var(--primary);
+  opacity: 1;
+}
 
 /* 自动开关 */
 .auto-toggle {
@@ -678,14 +731,17 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
 }
-.pop-actions a {
+.pop-actions .pop-link {
   font-size: 11px;
   color: var(--primary);
-  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
   cursor: pointer;
   user-select: none;
+  font-family: inherit;
 }
-.pop-actions a:hover {
+.pop-actions .pop-link:hover {
   text-decoration: underline;
 }
 

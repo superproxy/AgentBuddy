@@ -72,9 +72,10 @@ function onBrandDragEnd() {
 // 品牌 chip 选项（列出所有品牌）
 const brandChipOptions = computed(() => {
   const chips: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部 AIDE' }]
-  for (const bg of brandGroups.value) {
-    chips.push({ key: bg.brand, label: bg.brand })
-  }
+  const brands = brandGroups.value
+    .map((bg) => ({ key: bg.brand, label: bg.brand }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN', { sensitivity: 'base' }))
+  chips.push(...brands)
   return chips
 })
 
@@ -157,19 +158,9 @@ const filteredBrandGroups = computed(() => {
       )
     )
   }
-  // 排序：搜索时或显示全部品牌时，按用户自定义顺序
-  if ((kw || activeBrandChip.value === 'all') && brandOrder.favoriteKeys.length > 0) {
-    return [...groups].sort((a, b) => {
-      const ia = brandOrder.favoriteKeys.indexOf(a.brand)
-      const ib = brandOrder.favoriteKeys.indexOf(b.brand)
-      // 常用品牌按自定义顺序排前，非常用品牌保持原序
-      if (ia >= 0 && ib >= 0) return ia - ib
-      if (ia >= 0) return -1
-      if (ib >= 0) return 1
-      return 0
-    })
-  }
-  return groups
+  return [...groups].sort((a, b) =>
+    a.brand.localeCompare(b.brand, 'zh-CN', { sensitivity: 'base' }),
+  )
 })
 
 // 品牌元数据（前端本地常量，与 stores/ide.ts 同步）

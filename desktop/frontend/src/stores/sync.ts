@@ -13,6 +13,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, watch } from 'vue'
 import { api } from '../api/client'
+import { compareIdeLabel, sortByIdeLabel } from '../utils/ideSort'
 
 export interface IdeItem {
   key: string
@@ -32,7 +33,10 @@ const DEFAULT_IDE_LIST: IdeItem[] = [
   { key: 'Claude', label: 'Claude Code', desc: '.claude/settings.json + rules' },
   { key: 'CodeBuddy', label: 'CodeBuddy CN', desc: '~/.codebuddy/mcp.json + models.json' },
   { key: 'Codex', label: 'Codex', desc: '.codex/config.toml + rules' },
+  { key: 'Copilot', label: 'GitHub Copilot', desc: 'Copilot CLI / App + rules + mcp' },
+  { key: 'Cline', label: 'Cline', desc: '~/.cline/ mcp.json + rules + skills' },
   { key: 'Cursor', label: 'Cursor', desc: '.cursor/rules + .cursor/mcp.json' },
+  { key: 'DeepSeek', label: 'DeepSeek Harness', desc: '~/.dsh LLM + MCP + skills + AGENTS.md' },
   { key: 'IDEA', label: 'IDEA', desc: 'IDEA 配置' },
   { key: 'KimiCLI', label: 'Kimi CLI', desc: '~/.kimi/mcp.json + rules' },
   { key: 'KimiCode', label: 'Kimi Code', desc: '~/.kimi-code/mcp.json + rules' },
@@ -84,7 +88,7 @@ function clearLegacyLs() {
 }
 
 export const useSyncStore = defineStore('sync', () => {
-  const ideList = ref<IdeItem[]>(DEFAULT_IDE_LIST.map((i) => ({ ...i })))
+  const ideList = ref<IdeItem[]>(sortByIdeLabel(DEFAULT_IDE_LIST.map((i) => ({ ...i }))))
   const dragIdeKey = ref('')
   const dragOverIdeKey = ref('')
   const syncScopes = reactive({ llm: true, mcp: true, skill: true, rules: true })
@@ -124,6 +128,31 @@ export const useSyncStore = defineStore('sync', () => {
   // ===== IDE 拖拽排序 + 持久化 =====
   function saveIdeOrder() {
     persist({ ideOrder: ideList.value.map((i) => i.key) })
+  }
+
+  /** 同步栏 / 列表统一按 AIDE 名称字母序 */
+  function sortIdeListByLabel() {
+    ideList.value.sort(compareIdeLabel)
+    saveIdeOrder()
+  }
+
+  /** detect 中有、但前端默认列表未收录的 AIDE（如 DeepSeek Harness）补进同步栏 */
+  function mergeIdeEntriesFromDetect(
+    detects: { key: string; label?: string; config_paths?: string[] }[],
+  ) {
+    const known = new Set(ideList.value.map((i) => i.key))
+    let added = false
+    for (const d of detects) {
+      if (!d?.key || known.has(d.key)) continue
+      ideList.value.push({
+        key: d.key,
+        label: d.label || d.key,
+        desc: d.config_paths?.length ? d.config_paths.join(', ') : '',
+      })
+      known.add(d.key)
+      added = true
+    }
+    if (added) sortIdeListByLabel()
   }
 
   function applyIdeOrder(order: string[]) {
@@ -167,7 +196,7 @@ export const useSyncStore = defineStore('sync', () => {
     }
     const [moved] = list.splice(fromIdx, 1)
     list.splice(toIdx, 0, moved)
-    saveIdeOrder()
+    sortIdeListByLabel()
     dragIdeKey.value = ''
     dragOverIdeKey.value = ''
   }
@@ -224,6 +253,7 @@ export const useSyncStore = defineStore('sync', () => {
     if (Array.isArray(state.ideOrder)) {
       applyIdeOrder(state.ideOrder)
     }
+    sortIdeListByLabel()
     loaded.value = true
   }
 
@@ -244,5 +274,7 @@ export const useSyncStore = defineStore('sync', () => {
     onIdeDrop,
     onIdeDragEnd,
     loadFromBackend,
+    mergeIdeEntriesFromDetect,
+    sortIdeListByLabel,
   }
 })
