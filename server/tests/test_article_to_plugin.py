@@ -446,6 +446,9 @@ class TestPackageSkillMd(unittest.TestCase):
             names = set(zf.namelist())
             self.assertIn("skills/code-review-prompt/SKILL.md", names)
             md = zf.read("skills/code-review-prompt/SKILL.md").decode("utf-8")
+            self.assertTrue(md.startswith("---\n"), md[:80])
+            self.assertIn("name: code-review-prompt", md)
+            self.assertIn("description:", md)
             self.assertIn("# code-review-prompt", md)
             self.assertIn("先读 diff，再按规范逐条检查。", md)
             self.assertIn("github.com/acme/repo", md)
@@ -459,6 +462,8 @@ class TestPackageSkillMd(unittest.TestCase):
             names = set(zf.namelist())
             self.assertIn("skills/plain-skill/SKILL.md", names)
             md = zf.read("skills/plain-skill/SKILL.md").decode("utf-8")
+            self.assertTrue(md.startswith("---\n"))
+            self.assertIn("name: plain-skill", md)
             self.assertIn("# plain-skill", md)
             self.assertIn("无 body 的 skill", md)
 

@@ -466,25 +466,41 @@ def generate_config(meta: PluginMeta) -> dict[str, Any]:
 
 
 def _skill_markdown(skill: dict) -> str:
-    """生成写入 zip 的 SKILL.md。完整文档原样保留，否则用 description 补一份。"""
+    """生成写入 zip 的 SKILL.md（Cursor / Claude Code 规范：YAML frontmatter + 正文）。"""
     name = str(skill.get("name") or "").strip()
     body = str(skill.get("body") or "").strip()
-    desc = str(skill.get("description") or "").strip()
+    desc = truncate_description(str(skill.get("description") or ""))
     source = str(skill.get("source") or "").strip()
+    version = str(skill.get("version") or "").strip()
     if not name:
         return ""
-    if body.startswith("---") or body.startswith("#"):
+    if body.startswith("---"):
         return body if body.endswith("\n") else body + "\n"
-    content = body or desc
-    if not content:
+
+    skill_name = sanitize_name(name)
+    if not desc:
+        first_line = (body.split("\n", 1)[0] if body else "").strip().lstrip("#").strip()
+        desc = truncate_description(first_line or skill_name)
+
+    md_body_parts: list[str] = []
+    if body:
+        if body.lstrip().startswith("#"):
+            md_body_parts.append(body)
+        else:
+            md_body_parts.extend([f"# {name}", "", body])
+    elif desc:
+        md_body_parts.extend([f"# {name}", "", desc])
+    else:
         return ""
-    lines = [f"# {name}"]
-    if desc and content != desc:
-        lines += ["", desc]
+
     if source:
-        lines += ["", f"> 来源：{source}"]
-    lines += ["", content, ""]
-    return "\n".join(lines)
+        md_body_parts.extend(["", f"> 来源：{source}"])
+
+    fm: dict[str, Any] = {"name": skill_name, "description": desc or skill_name}
+    if version and version not in ("", "1.0.0"):
+        fm["version"] = version
+    fm_text = yaml.dump(fm, allow_unicode=True, default_flow_style=False, sort_keys=False).strip()
+    return f"---\n{fm_text}\n---\n\n" + "\n".join(md_body_parts).strip() + "\n"
 
 
 def package_config(cfg: dict[str, Any], mode: str, output_dir: Path) -> Path:
