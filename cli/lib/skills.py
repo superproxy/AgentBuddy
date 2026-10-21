@@ -270,6 +270,35 @@ def sync_enabled_from_sources(skill_yaml_path: Path) -> int:
     return added
 
 
+def ensure_skill_md_frontmatter(skill_dir: Path, fallback_name: str | None = None) -> bool:
+    """若 SKILL.md 缺少 YAML frontmatter，补全 name/description（Cursor/Claude 规范）。"""
+    md_path = skill_dir / "SKILL.md"
+    if not md_path.is_file():
+        return False
+    text = md_path.read_text(encoding="utf-8")
+    if text.lstrip().startswith("---"):
+        return False
+    display_name = (fallback_name or skill_dir.name).strip()
+    fm_name = re.sub(r"[^a-z0-9-]+", "-", display_name.lower()).strip("-") or skill_dir.name
+    body = text.strip()
+    first_line = body.split("\n", 1)[0].strip().lstrip("#").strip()
+    desc = (first_line or fm_name)[:500]
+    import yaml as _yaml
+
+    fm_text = _yaml.dump(
+        {"name": fm_name, "description": desc},
+        allow_unicode=True,
+        default_flow_style=False,
+        sort_keys=False,
+    ).strip()
+    if body.lstrip().startswith("#"):
+        new_text = f"---\n{fm_text}\n---\n\n{body}\n"
+    else:
+        new_text = f"---\n{fm_text}\n---\n\n# {display_name}\n\n{body}\n"
+    md_path.write_text(new_text, encoding="utf-8")
+    return True
+
+
 def enable_skill(skill_yaml_path: Path, skill_name: str) -> bool:
     """启用技能，返回是否新增。"""
     data = load_skill_yaml(skill_yaml_path)

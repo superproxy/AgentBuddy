@@ -218,6 +218,7 @@ def _load_script_module(module_name: str, file_path: Path):
 from agentctl.lib.config_io import load_env_config_file, save_env_config_file
 from agentctl.lib.skills import (
     build_install_command, parse_shorthand, enable_skill, disable_skill,
+    ensure_skill_md_frontmatter,
     get_enabled_skills, list_remote_skills, ensure_npx_yes,
     record_skill_source, remove_skill_source, remove_skill_reference,
     get_skill_sources, get_skill_references, check_skill_updates,
@@ -4103,6 +4104,19 @@ def export_selected_plugins():
                      mimetype="application/zip")
 
 
+def _zip_entry_is_plugin_manifest(arc: str) -> bool:
+    """zip 根目录下的 plugin 清单（含服务端 crawler 包的 plugin.yaml）。"""
+    p = Path(arc)
+    if len(p.parts) != 1:
+        return False
+    base = p.name.lower()
+    return (
+        base.endswith(".plugin.yaml")
+        or base.endswith(".plugin.yml")
+        or base in ("plugin.yaml", "plugin.yml")
+    )
+
+
 def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
     """从 zip 导入插件配置 + skills + llm/subagents/rules/commands/hooks。
 
@@ -4141,7 +4155,7 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             name = info.filename
             if "__MACOSX" in name or Path(name).name.startswith("."):
                 continue
-            if name.endswith(".plugin.yaml") or name.endswith(".plugin.yml"):
+            if _zip_entry_is_plugin_manifest(name):
                 plugin_entries.append((name, zf.read(name)))
             elif name.startswith("skills/"):
                 parts = Path(name).parts
@@ -4181,13 +4195,22 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
             if not isinstance(data, dict) or not data.get("name"):
                 skipped.append({"file": fname, "reason": "无效插件配置（缺少 name）"})
                 continue
-            out_path = CONFIG_PLUGINS_DIR / fname
+            plugin_name = str(data.get("name") or "").strip()
+            if fname.lower() in ("plugin.yaml", "plugin.yml"):
+                safe = "".join(
+                    c for c in (plugin_name or Path(fname).stem)
+                    if c.isalnum() or c in ("-", "_")
+                )
+                out_fname = f"{safe or 'plugin'}.plugin.yaml"
+            else:
+                out_fname = fname
+            out_path = CONFIG_PLUGINS_DIR / out_fname
             if out_path.exists() and not overwrite:
-                skipped.append({"file": fname, "reason": "已存在"})
+                skipped.append({"file": out_fname, "reason": "已存在"})
                 continue
             CONFIG_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(content)
-            imported_plugins.append({"file": fname, "name": data["name"]})
+            imported_plugins.append({"file": out_fname, "name": data["name"]})
             # 注册到已安装清单（让 sync 时 refresh_mcp_json 合并该插件的 mcpServers）
             try:
                 add_to_installed(PROJECT_ROOT, data["name"])
@@ -4247,7 +4270,15 @@ def _import_plugin_zip(buf: io.BytesIO, overwrite: bool) -> tuple:
                 dst = target.joinpath(*rel_parts)
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(zf.read(arc))
+            ensure_skill_md_frontmatter(target, skill_name)
             imported_skills.append(skill_name)
+
+        # 导入的技能默认加入启用清单，便于 sync 后 IDE 直接可用
+        for skill_name in imported_skills:
+            try:
+                enable_skill(SKILL_YAML, skill_name)
+            except Exception:
+                pass
 
         # 导入 llm.yaml（合并到 config/llm/llm.yaml）
         # 自动迁移：api_key 中的 env:VAR_NAME → ${VAR_NAME}（统一环境变量引用语法）

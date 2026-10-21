@@ -526,7 +526,10 @@ def package_config(cfg: dict[str, Any], mode: str, output_dir: Path) -> Path:
             if env_vars:
                 split_cfg["keys_file"] = "keys.yaml"
                 zf.writestr("keys.yaml", yaml.dump({"mcp": env_vars}, allow_unicode=True, sort_keys=False))
-            zf.writestr("plugin.yaml", yaml.dump(split_cfg, allow_unicode=True, sort_keys=False))
+            zf.writestr(
+                f"{plugin_name}.plugin.yaml",
+                yaml.dump(split_cfg, allow_unicode=True, sort_keys=False),
+            )
 
         # 每个 skill 都写入 skills/<name>/SKILL.md。
         # 已抓到的完整 SKILL.md（frontmatter 或一级标题）原样落入包内；
