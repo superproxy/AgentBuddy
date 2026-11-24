@@ -159,7 +159,7 @@ class OpenWorkerTarget(IdeTarget):
             print(f"{COLOR_YELLOW}[!] OpenWorker: llm.yaml 无带 api_key 的协议，跳过 secrets 同步{COLOR_RESET}")
             return
 
-        # secrets.json：合并已有（保留 GUI 手动配置的其他 profile）
+        # secrets.json：按当前设定替换飞翼写入的槽位，保留 GUI 手动配置的其他 profile
         secrets_file = ow_dir / "secrets.json"
         existing = {}
         if secrets_file.exists():
@@ -167,6 +167,11 @@ class OpenWorkerTarget(IdeTarget):
                 existing = json.loads(secrets_file.read_text(encoding="utf-8"))
             except Exception:
                 existing = {}
+            if not isinstance(existing, dict):
+                existing = {}
+        for key in ("provider:openai", "provider:anthropic"):
+            if key not in profiles:
+                existing.pop(key, None)
         existing.update(profiles)
         secrets_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
                                 encoding="utf-8")

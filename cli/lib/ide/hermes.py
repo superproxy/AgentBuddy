@@ -52,10 +52,11 @@ def _hermes_model_section(pi_providers: dict, env_config: dict | None) -> dict:
 
 def generate_hermes_llm(env_config: dict | None, config_file: Path, force: bool,
                         ide_protocols: list[str] | None = None) -> None:
-    """合并写入 ~/.hermes/config.yaml 的 model 与 providers。
+    """按当前设定写入 ~/.hermes/config.yaml 的 model 与 providers。
 
-    只更新 model 的 provider/default/base_url/api_key/api_mode，以及本次同步的
-    providers 项；其余配置（auxiliary、terminal 等）保留。
+    更新 model 的 provider/default/base_url/api_key/api_mode，并用当前 LLM
+    设定整体替换 providers（去掉已不再同步的旧项）；其余配置（auxiliary、
+    terminal 等）保留。
     """
     if not env_config:
         print(f"{COLOR_YELLOW}[!] llm.yaml not found, skip Hermes config.yaml{COLOR_RESET}")
@@ -80,17 +81,15 @@ def generate_hermes_llm(env_config: dict | None, config_file: Path, force: bool,
         except (OSError, yaml.YAMLError):
             existing = {}
 
+    # 按当前设定覆盖 model 的 LLM 字段，并用当前 providers 整体替换，不留旧项
     model = existing.get("model")
     if not isinstance(model, dict):
         model = {}
+    for key in ("provider", "default", "base_url", "api_key", "api_mode"):
+        model.pop(key, None)
     model.update(_hermes_model_section(pi_providers, env_config))
     existing["model"] = model
-
-    providers = existing.get("providers")
-    if not isinstance(providers, dict):
-        providers = {}
-    providers.update(_hermes_providers(pi_providers))
-    existing["providers"] = providers
+    existing["providers"] = _hermes_providers(pi_providers)
 
     config_file.parent.mkdir(parents=True, exist_ok=True)
     config_file.write_text(

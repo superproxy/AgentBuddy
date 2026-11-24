@@ -17,6 +17,7 @@ const cmdStore = useCmdStore()
 const subagentStore = useSubagentStore()
 const ui = useUiStore()
 const { ideList, syncTargetIdes, autoSync, syncing } = storeToRefs(sync)
+const clearingLlm = ref(false)
 const { installedIdes, ideDetecting, ideDetects } = storeToRefs(ideStore)
 const { onIdeDragStart, onIdeDragOver, onIdeDrop, onIdeDragEnd } = sync
 
@@ -323,6 +324,53 @@ async function syncCurrentScope() {
   }
 }
 
+async function clearSyncedLlm() {
+  if (syncing.value || clearingLlm.value) return
+  if (!syncTargetIdes.value.length) {
+    ui.toast('请先选择要清除的 IDE', 'warn')
+    return
+  }
+  const labels = syncTargetIdes.value
+    .map((key) => ideStore.displayLabelForKey(key) || key)
+    .join('、')
+  const ok = await ui.askConfirm({
+    title: '清除已同步的 LLM 设置？',
+    message: `将去掉飞翼写入以下 AIDE 的 LLM 配置：${labels}`,
+    detail: '不会修改飞翼自己的 llm.yaml，也不会删除这些 AIDE 里的 MCP 或 Skills。此操作不可撤销。',
+    confirmText: '清除',
+    cancelText: '取消',
+    tone: 'danger',
+  })
+  if (!ok) return
+  clearingLlm.value = true
+  try {
+    const r = await api<{
+      ok: boolean
+      error?: string
+      cleared_count?: number
+      ides?: { key: string; cleared?: string[]; skipped?: boolean; hint?: string }[]
+    }>('/api/llm/clear-sync', {
+      method: 'POST',
+      body: JSON.stringify({ ides: syncTargetIdes.value }),
+    })
+    if (!r.ok) {
+      ui.toast(r.error || '清除失败', 'err')
+      return
+    }
+    const skipped = (r.ides || []).filter((i) => i.skipped)
+    const done = (r.ides || []).filter((i) => !i.skipped)
+    const parts: string[] = []
+    if (r.cleared_count) parts.push(`已清除 ${r.cleared_count} 处`)
+    else if (done.length) parts.push(`已处理 ${done.length} 个 AIDE`)
+    if (skipped.length) parts.push(`${skipped.length} 个无需清除`)
+    ui.toast(parts.join('，') || '没有找到可清除的 LLM 设置')
+  } catch (error: any) {
+    ui.toast('清除失败: ' + (error?.message || String(error)), 'err')
+  } finally {
+    clearingLlm.value = false
+  }
+}
+
 onMounted(() => {
   document.addEventListener('mousedown', onDocClick)
   if (!ideStore.ideDetects.length && !ideStore.ideDetecting) {
@@ -377,7 +425,7 @@ onBeforeUnmount(() => {
         type="button"
         class="sync-cta"
         :class="{ 'is-zero': targetCount === 0 && needsIdeTargets }"
-        :disabled="autoSync || syncing"
+        :disabled="autoSync || syncing || clearingLlm"
         :title="
           autoSync
             ? '自动模式下，保存即触发同步'
@@ -404,6 +452,16 @@ onBeforeUnmount(() => {
         <span class="auto-label">{{ autoSync ? '已自动' : '自动' }}</span>
       </button>
     </div>
+    <button
+      v-if="currentScope && currentScope.key === 'llm'"
+      type="button"
+      class="clear-llm-btn"
+      :disabled="syncing || clearingLlm"
+      title="只清除飞翼写入所选 AIDE 的 LLM 配置，不改 llm.yaml"
+      @click="clearSyncedLlm"
+    >
+      {{ clearingLlm ? '清除中…' : '清除设置' }}
+    </button>
 
     <!-- 目标 IDE 下拉浮层 -->
     <Teleport to="body">
@@ -623,6 +681,25 @@ onBeforeUnmount(() => {
 .sync-combo .sync-cta svg {
   width: 12px;
   height: 12px;
+}
+.clear-llm-btn {
+  margin-left: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--ink-500, #6b7280);
+  font-size: 11px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.clear-llm-btn:hover:not(:disabled) {
+  background: rgba(127, 29, 29, 0.06);
+  color: #b91c1c;
+}
+.clear-llm-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .sync-combo .sync-cta .count {
   background: rgba(255, 255, 255, 0.25);

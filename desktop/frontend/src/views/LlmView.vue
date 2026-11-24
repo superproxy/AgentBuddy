@@ -76,31 +76,6 @@ function availableModelsFor(pn: string, proto: string): string[] {
   return Object.keys(models)
 }
 
-async function syncToIde() {
-  ui.clearLog()
-  ui.toast('正在同步到 IDE...')
-  try {
-    const resp = await fetch('/api/sync?ide=All&scope=llm,mcp', { method: 'GET', headers: { Accept: 'text/event-stream' } })
-    if (!resp.ok) { ui.toast('同步失败', 'err'); return }
-    const reader = resp.body!.getReader()
-    const decoder = new TextDecoder()
-    let buf = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const lines = buf.split('\n')
-      buf = lines.pop() || ''
-      for (const line of lines) {
-        if (line.startsWith('data: ')) ui.appendLog(line.slice(6))
-      }
-    }
-    ui.toast('LLM 配置已同步到所有 IDE')
-  } catch (e) {
-    ui.toast('同步失败: ' + String(e), 'err')
-  }
-}
-
 async function toggleProxyRun() {
   if (proxyRunning.value) {
     await stopProxyServer()

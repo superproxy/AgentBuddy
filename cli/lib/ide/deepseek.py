@@ -187,10 +187,11 @@ def _write_yaml_file(file_path: Path, data: dict) -> None:
 
 
 def _merge_llm_to_settings(settings_file: Path, providers: dict, force: bool) -> None:
-    """合并 llm-pi-ai.providers 到 settings.yaml。
+    """写入 llm-pi-ai.providers 到 settings.yaml。
 
-    只更新 llm-pi-ai.providers 段，保留用户已有的其他配置。
-    force=True 时覆盖已有 provider，否则保留用户手动添加的。
+    只改 llm-pi-ai.providers 段，保留用户已有的其他配置。
+    force=True 时按当前设定整体替换 providers（去掉已不再同步的旧项）；
+    否则只补充缺失的 provider，不覆盖用户手动添加的。
     """
     existing = _read_yaml_file(settings_file)
 
@@ -202,14 +203,17 @@ def _merge_llm_to_settings(settings_file: Path, providers: dict, force: bool) ->
     if not isinstance(existing_providers, dict):
         existing_providers = {}
 
-    # 合并 providers
     updated = False
-    for route_name, profile in providers.items():
-        if route_name in existing_providers and not force:
-            # 非 force 模式跳过已存在的（保留用户手动配置）
-            continue
-        existing_providers[route_name] = profile
+    if force:
+        existing_providers = dict(providers)
         updated = True
+    else:
+        for route_name, profile in providers.items():
+            if route_name in existing_providers:
+                # 非 force 模式跳过已存在的（保留用户手动配置）
+                continue
+            existing_providers[route_name] = profile
+            updated = True
 
     if not updated and not existing_providers:
         return

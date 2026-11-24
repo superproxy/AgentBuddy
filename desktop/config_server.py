@@ -5113,10 +5113,11 @@ def install_plugin_sse():
 # ============================================================
 @app.route("/api/sync", methods=["POST"])
 def sync_silent():
-    """静默同步：generate + sync，返回 JSON（保存后自动触发）。"""
+    """静默同步：只同步栏里勾选的 IDE。没勾选时只 generate，不写入全部 IDE。"""
     try:
-        result = subprocess.run(
-            _script_run_cmd("agentctl", ["sync", "--ide", "All", "--force", "--scope", "llm,mcp"]),
+        targets = _selected_sync_ides()
+        gen = subprocess.run(
+            _script_run_cmd("agentctl", ["generate"]),
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
@@ -5124,11 +5125,69 @@ def sync_silent():
             errors="ignore",
             timeout=60,
         )
+        chunks = [gen.stdout or "", gen.stderr or ""]
+        if gen.returncode != 0:
+            detail = (gen.stderr or gen.stdout or "").strip()[-1000:]
+            return jsonify({"ok": False, "error": detail or "generate 失败", "ides": []}), 500
+        synced: list[str] = []
+        for ide in targets:
+            result = subprocess.run(
+                _script_run_cmd("agentctl", ["sync", "--ide", ide, "--force", "--scope", "llm,mcp"]),
+                cwd=str(PROJECT_ROOT),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                timeout=60,
+            )
+            chunks.append(result.stdout or "")
+            chunks.append(result.stderr or "")
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "").strip()[-1000:]
+                return jsonify({
+                    "ok": False,
+                    "error": f"{ide} 同步失败: {detail}",
+                    "ides": synced,
+                    "stdout": "".join(chunks)[-2000:],
+                }), 500
+            synced.append(ide)
         return jsonify({
-            "ok": result.returncode == 0,
-            "stdout": result.stdout[-2000:],
-            "stderr": result.stderr[-1000:],
+            "ok": True,
+            "ides": synced,
+            "generated": True,
+            "stdout": "".join(chunks)[-2000:],
         })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/llm/clear-sync", methods=["POST"])
+def clear_llm_sync():
+    """清除勾选（或请求体指定）AIDE 上由飞翼写入的 LLM 设置，不改 llm.yaml，不动 MCP/Skills。"""
+    body = request.get_json(force=True, silent=True) or {}
+    raw = body.get("ides") if "ides" in body else body.get("ide")
+    if raw is None:
+        raw = _selected_sync_ides()
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return jsonify({"ok": False, "error": "ides 必须是数组"}), 400
+    from agentctl.lib.ide import IDE_REGISTRY
+    names: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if name == "All":
+            return jsonify({"ok": False, "error": "清除不支持 All，请显式勾选目标 AIDE"}), 400
+        if name in IDE_REGISTRY and name not in names:
+            names.append(name)
+    if not names:
+        return jsonify({"ok": False, "error": "请先选择要清除的 IDE"}), 400
+    from agentctl.lib.ide.clear_llm import clear_llm_for_ides
+    try:
+        result = clear_llm_for_ides(PROJECT_ROOT, names)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

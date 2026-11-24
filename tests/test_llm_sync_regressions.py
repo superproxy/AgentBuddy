@@ -451,3 +451,164 @@ def test_hermes_generate_llm_merges_model_and_keeps_other_config(tmp_path):
     assert data["model"]["api_mode"] == "chat_completions"
     assert data["providers"]["volcengine"]["models"] == ["deepseek-v4", "other"]
 
+
+
+def test_hermes_generate_llm_replaces_stale_providers(tmp_path):
+    import yaml
+    from agentctl.lib.ide.hermes import generate_hermes_llm
+
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        "\n".join([
+            "terminal:",
+            "  backend: local",
+            "providers:",
+            "  stale:",
+            "    api_key: leftover",
+            "    models: [old]",
+            "  volcengine:",
+            "    api_key: old-key",
+            "    models: [obsolete]",
+        ])
+        + "\n",
+        encoding="utf-8",
+    )
+    env = {
+        "llm": {
+            "_active_provider": "volcengine",
+            "_active_model": "deepseek-v4",
+            "volcengine": {
+                "_enabled": True,
+                "openai": {
+                    "base_url": "https://ark.example/api/v3",
+                    "api_key": "sk-now",
+                    "models": {"deepseek-v4": {"name": "DeepSeek V4"}},
+                },
+            },
+        },
+        "proxy": {"gateway": {"enabled": False}},
+    }
+    generate_hermes_llm(env, config, force=True, ide_protocols=["openaiv1"])
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    assert data["terminal"]["backend"] == "local"
+    assert set(data["providers"]) == {"volcengine"}
+    assert data["providers"]["volcengine"]["api_key"] == "sk-now"
+    assert data["providers"]["volcengine"]["models"] == ["deepseek-v4"]
+    assert data["model"]["default"] == "deepseek-v4"
+
+
+def test_openworker_init_llm_replaces_stale_profile(tmp_path, monkeypatch):
+    import yaml
+    from agentctl.lib.ide.openworker import OpenWorkerTarget
+
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setenv("COWORKER_STATE_DIR", str(state))
+    secrets = state / "secrets.json"
+    secrets.write_text(json.dumps({
+        "provider:openai": {"type": "openaiv1", "api_key": "sk-old", "model": "old"},
+        "provider:anthropic": {"type": "anthropic", "api_key": "sk-a"},
+        "provider:manual": {"api_key": "keep-me"},
+    }), encoding="utf-8")
+    (state / "config.toml").write_text('model = "old-model"\n', encoding="utf-8")
+
+    proj = tmp_path / "proj"
+    llm_dir = proj / "config" / "llm"
+    llm_dir.mkdir(parents=True)
+    llm_dir.joinpath("llm.yaml").write_text(
+        yaml.safe_dump({
+            "llm": {
+                "_active_provider": "openai",
+                "_active_model": "gpt-5",
+                "openai": {
+                    "_enabled": True,
+                    "openaiv1": {
+                        "base_url": "https://api.openai.com/v1",
+                        "api_key": "sk-now",
+                        "models": {"gpt-5": {"name": "GPT-5"}},
+                    },
+                },
+            },
+        }, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    OpenWorkerTarget(proj, force=True).init_llm([])
+    data = json.loads(secrets.read_text(encoding="utf-8"))
+    assert "provider:anthropic" not in data
+    assert data["provider:manual"]["api_key"] == "keep-me"
+    assert data["provider:openai"]["api_key"] == "sk-now"
+    assert data["provider:openai"]["model"] == "gpt-5"
+    text = (state / "config.toml").read_text(encoding="utf-8")
+    assert 'model = "gpt-5"' in text
+
+
+def test_deepseek_force_replaces_stale_providers(tmp_path):
+    from agentctl.lib.ide.deepseek import _merge_llm_to_settings
+    import yaml
+
+    settings = tmp_path / "settings.yaml"
+    settings.write_text(
+        "\n".join([
+            "other: kept",
+            "llm-pi-ai:",
+            "  providers:",
+            "    stale:",
+            "      apiKeyEnv: STALE_API_KEY",
+            "    deepseek:",
+            "      apiKeyEnv: OLD_KEY",
+        ])
+        + "\n",
+        encoding="utf-8",
+    )
+    _merge_llm_to_settings(settings, {
+        "deepseek": {"apiKeyEnv": "DEEPSEEK_API_KEY", "api": "openai-completions"},
+    }, force=True)
+    data = yaml.safe_load(settings.read_text(encoding="utf-8"))
+    assert data["other"] == "kept"
+    assert set(data["llm-pi-ai"]["providers"]) == {"deepseek"}
+    assert data["llm-pi-ai"]["providers"]["deepseek"]["apiKeyEnv"] == "DEEPSEEK_API_KEY"
+
+
+
+def test_zcode_force_replaces_stale_custom_providers(tmp_path, monkeypatch):
+    import yaml
+    from agentctl.lib.ide import zcode as zcode_mod
+    from agentctl.lib.ide.zcode import ZCodeTarget
+
+    home = tmp_path / "home"
+    v2 = home / ".zcode" / "v2"
+    v2.mkdir(parents=True)
+    (v2 / "config.json").write_text(json.dumps({
+        "theme": "dark",
+        "provider": {
+            "custom:old-openai": {"name": "stale", "source": "custom"},
+            "builtin": {"name": "keep"},
+        },
+    }), encoding="utf-8")
+    monkeypatch.setattr(zcode_mod.Path, "home", staticmethod(lambda: home))
+
+    proj = tmp_path / "proj"
+    llm_dir = proj / "config" / "llm"
+    llm_dir.mkdir(parents=True)
+    llm_dir.joinpath("llm.yaml").write_text(
+        yaml.safe_dump({
+            "llm": {
+                "deepseek": {
+                    "_enabled": True,
+                    "openaiv1": {
+                        "api_key": "sk-now",
+                        "base_url": "https://api.deepseek.com/v1",
+                        "models": {"deepseek-chat": {"name": "DeepSeek Chat"}},
+                    },
+                },
+            },
+        }, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    ZCodeTarget(proj, force=True).init_llm([proj / "config" / "rules"])
+    data = json.loads((v2 / "config.json").read_text(encoding="utf-8"))
+    assert data["theme"] == "dark"
+    assert data["provider"]["builtin"]["name"] == "keep"
+    assert "custom:old-openai" not in data["provider"]
+    assert "custom:deepseek-openaiv1" in data["provider"]
+    assert data["provider"]["custom:deepseek-openaiv1"]["options"]["apiKey"] == "sk-now"

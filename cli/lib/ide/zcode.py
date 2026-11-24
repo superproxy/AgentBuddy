@@ -111,7 +111,8 @@ class ZCodeTarget(IdeTarget):
 
         从 llm.yaml 读 provider/protocol/model，转换为 ZCode provider：
             {provider: {"custom:<p>-<proto>": {name, kind, options:{apiKey,baseURL}, models}}}
-        合并已有 v2/config.json，force 时覆盖同 key，否则新增。
+        合并已有 v2/config.json：force 时按当前设定替换 custom:* 槽位
+        （去掉已不再同步的旧项），非 force 时只新增缺失 key。
         """
         from ..config_io import load_env_config_file
         first = source_rules_dirs[0] if isinstance(source_rules_dirs, list) else source_rules_dirs
@@ -175,6 +176,11 @@ class ZCodeTarget(IdeTarget):
         providers = existing.get("provider", {})
         if not isinstance(providers, dict):
             providers = {}
+        if self.force:
+            # 按当前设定清空飞翼写入的 custom:*，再写入现有模型，避免只追加留下旧值
+            for key in list(providers.keys()):
+                if str(key).startswith("custom:"):
+                    del providers[key]
         for key, prov in new_providers.items():
             if self.force or key not in providers:
                 providers[key] = prov
