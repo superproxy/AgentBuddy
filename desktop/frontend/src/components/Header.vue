@@ -893,7 +893,7 @@ onBeforeUnmount(() => {
             <input
               v-model="serverUrlInput"
               type="text"
-              placeholder="http://123.60.75.27:5001"
+              placeholder="http://linkagent.icu:5001"
               style="width: 100%; padding: 8px 12px; border: 1px solid var(--border-base); border-radius: 8px; font-size: 14px; background: var(--bg-input); color: var(--text-primary);"
               @keyup.enter="saveServerUrl"
             >

@@ -205,7 +205,7 @@ agentctl plugin publish ./qwen-mm-plugins-plugin.zip \
   "publish": true,                    // 构建后是否发布
   "tags": ["vision", "ocr"],
   "scope": "public",
-  "server_url": "http://123.60.75.27:5001"  // 远程市场地址
+  "server_url": "http://linkagent.icu:5001"  // 远程市场地址
 }
 
 // 响应
