@@ -148,7 +148,7 @@ jobs:
           name: windows-dist
           path: |
             dist/installer/AgentBuddy-*
-            dist/installer/agentctl-*
+            dist/installer/agentctl-*-windows.zip
 
   release:
     needs: [build-macos, build-windows]
@@ -162,12 +162,29 @@ jobs:
         with:
           path: artifacts
 
+      # py3-none-any.whl / sdist are identical across OS jobs; keep one copy only
+      - name: Dedupe release assets by filename
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          shopt -s nullglob
+          for f in artifacts/macos-dist/* artifacts/windows-dist/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            dest="release-assets/$base"
+            if [ -e "$dest" ]; then
+              echo "skip duplicate: $base (from $f)"
+              continue
+            fi
+            cp -v "$f" "$dest"
+          done
+          echo "=== release-assets ==="
+          ls -la release-assets/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: AgentBuddy ${{ github.ref_name }}
           generate_release_notes: true
-          files: |
-            artifacts/macos-dist/*
-            artifacts/windows-dist/*
+          files: release-assets/*
