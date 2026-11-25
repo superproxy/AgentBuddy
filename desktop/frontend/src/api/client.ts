@@ -9,7 +9,7 @@
  */
 
 const SERVER_URL_KEY = 'agentbuddy-server-url'
-const DEFAULT_SERVER_URL = 'http://linkagent.icu:5001'
+const DEFAULT_SERVER_URL = 'https://linkagent.icu'
 const TOKEN_KEY = 'agentbuddy-token'
 
 /** 获取远程 server 地址（marketplace + AI 生成服务） */

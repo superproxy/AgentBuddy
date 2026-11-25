@@ -10,7 +10,7 @@ from typing import Any
 
 from .logging import info, warn, error, hint
 
-DEFAULT_SERVER_URL = "http://linkagent.icu:5001"
+DEFAULT_SERVER_URL = "https://linkagent.icu"
 
 _AUTH_DIR = Path.home() / ".agentbuddy"
 _AUTH_FILE = _AUTH_DIR / "auth.json"
