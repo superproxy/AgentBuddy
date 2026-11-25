@@ -395,10 +395,17 @@ async function testServerUrl() {
   if (!url) { serverUrlMsg.value = '请输入地址'; return }
   serverUrlTesting.value = true
   serverUrlMsg.value = ''
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
   try {
-    const resp = await fetch(url + '/api/health', { timeout: 5000 } as any)
+    const resp = await fetch(url + '/api/marketplace', { signal: controller.signal })
+    const ct = (resp.headers.get('content-type') || '').toLowerCase()
+    if (!resp.ok || !ct.includes('application/json')) {
+      serverUrlMsg.value = '✗ 返回异常'
+      return
+    }
     const d = await resp.json()
-    if (d.ok) {
+    if (d && Array.isArray(d.data)) {
       serverUrlMsg.value = '✓ 连接成功'
     } else {
       serverUrlMsg.value = '✗ 返回异常'
@@ -406,6 +413,7 @@ async function testServerUrl() {
   } catch {
     serverUrlMsg.value = '✗ 连接失败'
   } finally {
+    clearTimeout(timer)
     serverUrlTesting.value = false
   }
 }
