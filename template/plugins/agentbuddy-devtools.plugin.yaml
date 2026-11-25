@@ -1,0 +1,18 @@
+name: agentbuddy-devtools
+version: 1.0.0
+description: AgentBuddy / 飞翼开发者工具技能：用 CLI（agentctl）与本机桌面 HTTP API 查询、同步、清除各 IDE 的
+  LLM/MCP/Skills 配置，并做完整性验证。
+author: AgentBuddy
+defaultEnabled: true
+license: MIT
+keywords:
+- agentbuddy
+- cli
+- api
+- devtools
+- feiyi
+skills:
+- name: agentbuddy-cli
+  description: 用 agentctl 查询/同步/清除 IDE 的 LLM/MCP/Skills，并验证替换而非追加
+- name: agentbuddy-api
+  description: 用本机桌面 HTTP API 做同等查询/同步/清除与完整性验证
