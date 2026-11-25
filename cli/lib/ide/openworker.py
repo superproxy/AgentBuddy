@@ -19,6 +19,7 @@ from pathlib import Path
 from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
 from ..mcp import copy_file_safe
 from ..skills import copy_skills_safe, write_skills_index
+from ..llm import iter_enabled_models
 from .base import IdeTarget
 
 
@@ -36,12 +37,8 @@ def openworker_state_dir() -> Path:
 
 
 def _first_model(models) -> str:
-    """取 models dict 的第一个可用 model id（跳过 ~ 前缀禁用标记）。"""
-    if not isinstance(models, dict):
-        return ""
-    for mid in models:
-        if str(mid).startswith("~"):
-            continue
+    """取 models dict 的第一个可用（已启用）model id。"""
+    for mid, _meta in iter_enabled_models(models):
         return str(mid)
     return ""
 

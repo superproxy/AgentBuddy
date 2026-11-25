@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..logging import COLOR_CYAN, COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
 from ..mcp import copy_dir_safe, copy_file_safe
-from ..llm import load_split_env_config, resolve_config_secret
+from ..llm import load_split_env_config, resolve_config_secret, iter_enabled_models
 from ..skills import copy_skills_safe, write_skills_index
 from .base import IdeTarget
 
@@ -42,14 +42,8 @@ def _usable_secret(value, env_config: dict | None) -> str:
 
 
 def _enabled_models(models_dict) -> list[dict]:
-    if not isinstance(models_dict, dict):
-        return []
     models = []
-    for model_id, meta in models_dict.items():
-        if str(model_id).startswith("~"):
-            continue
-        if isinstance(meta, dict) and meta.get("_enabled", True) is False:
-            continue
+    for model_id, meta in iter_enabled_models(models_dict):
         name = str(meta.get("name", "")).strip() if isinstance(meta, dict) else str(meta).strip()
         models.append({"id": model_id, "name": name or model_id})
     return models

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
 from ..skills import copy_skills_safe, write_skills_index
+from ..llm import iter_enabled_models
 from .base import IdeTarget
 
 
@@ -144,7 +145,7 @@ class ZCodeTarget(IdeTarget):
                 key = f"custom:{provider_name}-{protocol}"
                 kind = "anthropic" if protocol == "anthropic" else "openai-compatible"
                 models = {}
-                for model_id, model_cfg in (cfg.get("models") or {}).items():
+                for model_id, model_cfg in iter_enabled_models(cfg.get("models") or {}):
                     m_name = (model_cfg.get("name") if isinstance(model_cfg, dict) else None) or model_id
                     models[model_id] = {
                         "name": m_name,

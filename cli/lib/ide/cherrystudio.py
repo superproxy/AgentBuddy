@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RED, COLOR_RESET
 from ..skills import copy_skills_safe
+from ..llm import iter_enabled_models
 from .base import IdeTarget
 
 
@@ -164,7 +165,7 @@ class CherryStudioTarget(IdeTarget):
                 # Cherry Studio Provider 结构：type 决定兼容协议
                 ptype = "anthropic" if protocol == "anthropic" else "openai"
                 models = []
-                for model_id, model_cfg in (cfg.get("models") or {}).items():
+                for model_id, model_cfg in iter_enabled_models(cfg.get("models") or {}):
                     m_name = (model_cfg.get("name") if isinstance(model_cfg, dict) else None) or model_id
                     models.append({
                         "id": model_id,

@@ -9,7 +9,7 @@ from pathlib import Path
 from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
 from ..mcp import copy_dir_safe, copy_file_safe, _resolve_placeholders, _collect_placeholders
 from ..skills import copy_skills_safe, write_skills_index
-from ..llm import load_split_env_config
+from ..llm import load_split_env_config, iter_enabled_models
 from .base import IdeTarget
 
 
@@ -64,7 +64,7 @@ def _generate_claude_settings(template_file: Path, target_file: Path,
                     mapping = protocol_env_map.get(protocol_name, {})
                     models_dict = protocol_value.get("models", {})
                     if isinstance(models_dict, dict) and models_dict:
-                        default_model = next(iter(models_dict.keys()), "")
+                        default_model = next((mid for mid, _meta in iter_enabled_models(models_dict)), "")
                         std_model_key = mapping.get("model")
                         if std_model_key and default_model:
                             env_map[std_model_key] = default_model

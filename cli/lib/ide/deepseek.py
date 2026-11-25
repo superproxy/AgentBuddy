@@ -24,7 +24,7 @@ from ..logging import (
     COLOR_CYAN, COLOR_GREEN, COLOR_YELLOW, COLOR_DARKGRAY, COLOR_RESET,
 )
 from ..skills import copy_skills_safe, write_skills_index
-from ..llm import load_split_env_config
+from ..llm import load_split_env_config, iter_enabled_models
 from .base import IdeTarget
 
 
@@ -126,9 +126,7 @@ def _build_pi_ai_providers(env_config: dict | None,
 
             # 构建 models 列表
             models_list = []
-            for model_id, model_meta in models_dict.items():
-                if model_id.startswith("~"):
-                    continue
+            for model_id, model_meta in iter_enabled_models(models_dict):
                 if isinstance(model_meta, dict):
                     model_name = str(model_meta.get("name", "")).strip() or model_id
                 else:

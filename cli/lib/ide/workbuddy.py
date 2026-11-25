@@ -15,7 +15,7 @@ from pathlib import Path
 from ..logging import COLOR_YELLOW, COLOR_GREEN, COLOR_RESET
 from ..mcp import copy_dir_safe, copy_file_safe
 from ..skills import copy_skills_safe, write_skills_index
-from ..llm import load_split_env_config
+from ..llm import load_split_env_config, iter_enabled_models
 from .base import IdeTarget
 
 
@@ -41,7 +41,7 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
     遍历 llm.<provider>.<protocol>.models，展开为 WorkBuddy 官方格式 {"models": [...]}。
     - 跳过 _ 前缀键（元数据）和 proxy 段
     - 跳过 _enabled === false 的 provider（未启用）
-    - 跳过 ~ 前缀 model id（禁用标记）
+    - 只写入当前选中（启用）的模型：跳过模型级 _enabled === false 与 ~ 前缀 id
     - api_key 为空的协议自动剪枝
     - 同一 model_id 去重
     - ide_protocols 指定时只同步这些协议的模型
@@ -94,9 +94,7 @@ def generate_workbuddy_models(env_config: dict | None, target_file: Path, force:
             models_dict = protocol_value.get("models", {})
             if not isinstance(models_dict, dict):
                 continue
-            for model_id, model_meta in models_dict.items():
-                if model_id.startswith("~"):
-                    continue
+            for model_id, model_meta in iter_enabled_models(models_dict):
                 # 按 model_id 去重（优先 active provider / 优先 openai 协议），避免重复
                 if model_id in seen:
                     continue

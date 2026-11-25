@@ -43,6 +43,29 @@ PROTOCOL_ENV_MAP = {
 DIRECT_FIELD_KEYS = {"base_url", "api_key", "models"}
 
 
+def is_model_enabled(model_id, model_meta) -> bool:
+    """当前设定中该模型是否被选中（启用）。
+
+    - id 以 ~ 开头视为禁用标记
+    - 模型级 _enabled 显式为 False 则跳过
+    - 缺失 _enabled 视为启用（与 flatten_env_config / Pi 一致）
+    """
+    if str(model_id).startswith("~"):
+        return False
+    if isinstance(model_meta, dict) and model_meta.get("_enabled") is False:
+        return False
+    return True
+
+
+def iter_enabled_models(models_dict):
+    """遍历当前选中（启用）的模型，未启用的不会出现。"""
+    if not isinstance(models_dict, dict):
+        return
+    for model_id, model_meta in models_dict.items():
+        if is_model_enabled(model_id, model_meta):
+            yield model_id, model_meta
+
+
 def normalize_provider_enabled(llm_section: dict | None) -> dict | None:
     """归一化 llm 段各 provider 的 _enabled 字段（与前端 enabledProviderNames 一致）。
 
